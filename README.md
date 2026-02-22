@@ -4,7 +4,7 @@ A peer-to-peer file sharing and real-time chat application built with **WebRTC**
 
 ## Features
 
-- **P2P File Transfer** — Send files of any size directly between devices via WebRTC data channels
+- **P2P File Transfer** — Send files of upto 500MB directly between devices via WebRTC data channels
 - **P2P Chat** — Real-time encrypted messaging alongside file transfers
 - **No File Size Limits** — Since nothing is stored on the server, there are no caps
 - **End-to-End Encrypted** — WebRTC uses DTLS encryption for all data channels
