@@ -914,6 +914,30 @@ const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB limit
 const ICE_SERVERS = [
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
+  {
+    urls: 'stun:stun.relay.metered.ca:80',
+  },
+  {
+    urls: 'turn:global.relay.metered.ca:80',
+    username: 'bf9a8ea3ca75197c263cb946',
+    credential: 'Z9oX9oE+QeZcjJ79',
+  },
+  {
+    urls: 'turn:global.relay.metered.ca:80?transport=tcp',
+    username: 'bf9a8ea3ca75197c263cb946',
+    credential: 'Z9oX9oE+QeZcjJ79',
+  },
+  {
+    urls: 'turn:global.relay.metered.ca:443',
+    username: 'bf9a8ea3ca75197c263cb946',
+    credential: 'Z9oX9oE+QeZcjJ79',
+  },
+  {
+    urls: 'turns:global.relay.metered.ca:443?transport=tcp',
+    username: 'bf9a8ea3ca75197c263cb946',
+    credential: 'Z9oX9oE+QeZcjJ79'
+',
+  },
 ];
 
 // ═══════════════════════════════════════════
