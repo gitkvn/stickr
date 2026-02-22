@@ -10,6 +10,40 @@ const wss = new WebSocket.Server({ server });
 
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Health check endpoint — keeps Railway from sleeping
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    rooms: rooms.size,
+    uptime: Math.floor(process.uptime()),
+  });
+});
+
+// Self-ping every 4 minutes to prevent Railway cold starts
+const SELF_PING_INTERVAL = 4 * 60 * 1000;
+let selfPingTimer = null;
+
+function startSelfPing() {
+  const appUrl = process.env.RAILWAY_PUBLIC_DOMAIN
+    ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}/health`
+    : null;
+
+  if (!appUrl) {
+    console.log('No RAILWAY_PUBLIC_DOMAIN set — skipping self-ping');
+    return;
+  }
+
+  selfPingTimer = setInterval(async () => {
+    try {
+      await fetch(appUrl);
+    } catch (e) {
+      // silent fail — server will just cold start if ping fails
+    }
+  }, SELF_PING_INTERVAL);
+
+  console.log(`Self-ping active: ${appUrl} every ${SELF_PING_INTERVAL / 1000}s`);
+}
+
 // Room management
 const rooms = new Map(); // roomId -> { host: ws, peers: Map<peerId, ws> }
 
@@ -117,4 +151,5 @@ function generateRoomId() {
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`Stickr server running on http://localhost:${PORT}`);
+  startSelfPing();
 });
