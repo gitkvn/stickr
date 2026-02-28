@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
 <title>Stickr — P2P File Sharing & Chat</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Space+Grotesk:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
@@ -765,6 +765,7 @@ header {
   display: none;
   border-bottom: 1px solid var(--border);
   background: var(--bg-secondary);
+  align-items: center;
 }
 
 .mobile-tabs button {
@@ -786,14 +787,33 @@ header {
   border-bottom-color: var(--accent);
 }
 
+.mobile-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-right: 12px;
+  flex-shrink: 0;
+}
+
+.room-code-mini {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--accent-bright);
+  cursor: pointer;
+}
+
 @media (max-width: 860px) {
   .mobile-tabs {
     display: flex;
   }
+  /* Hide main header in room view to save space on mobile */
+  body.in-room header {
+    display: none;
+  }
   .room-layout {
     grid-template-columns: 1fr;
     grid-template-rows: 1fr;
-    height: calc(100vh - 65px - 46px);
+    height: calc(100dvh - 46px);
   }
   .file-panel {
     display: none;
@@ -808,6 +828,24 @@ header {
   .chat-panel.mobile-active {
     display: flex;
   }
+  /* Hide duplicate panel header on mobile — tabs already show which panel */
+  .chat-panel .panel-header {
+    display: none;
+  }
+  .file-panel .panel-header .connection-status {
+    display: flex;
+  }
+  /* Fix chat input area padding and safe area for browser bars */
+  .chat-input-area {
+    padding: 12px 16px;
+    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  }
+  .chat-messages {
+    padding: 16px;
+  }
+  .chat-msg {
+    max-width: 80%;
+  }
 }
 
 @media (max-width: 600px) {
@@ -818,6 +856,21 @@ header {
   .panel-header { padding: 12px 16px; }
   .drop-zone-container { padding: 16px; }
   .drop-zone { padding: 32px 16px; }
+  .chat-input-area {
+    padding: 10px 12px;
+    padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+    gap: 8px;
+  }
+  .chat-input {
+    padding: 10px 14px;
+    font-size: 16px; /* prevents iOS zoom on focus */
+  }
+  .chat-send {
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    font-size: 16px;
+  }
 }
 </style>
 </head>
@@ -884,6 +937,10 @@ header {
     <div class="mobile-tabs" id="mobile-tabs">
       <button class="active" onclick="switchMobileTab('files')">📁 Files</button>
       <button onclick="switchMobileTab('chat')">💬 Chat</button>
+      <div class="mobile-status" id="mobile-status">
+        <div class="status-dot" id="mobile-status-dot"></div>
+        <span class="room-code-mini" id="mobile-room-code" onclick="copyRoomCode()"></span>
+      </div>
     </div>
     <div class="room-layout">
       <!-- File Panel -->
@@ -1417,13 +1474,17 @@ function updateFileStatus(id, status) {
 function updateStatus(state) {
   const dot = document.getElementById('status-dot');
   const text = document.getElementById('status-text');
+  const mobileDot = document.getElementById('mobile-status-dot');
   dot.className = 'status-dot';
+  if (mobileDot) mobileDot.className = 'status-dot';
 
   if (state === 'connected') {
     dot.classList.add('connected');
+    if (mobileDot) mobileDot.classList.add('connected');
     text.textContent = 'Connected';
   } else if (state === 'waiting') {
     dot.classList.add('waiting');
+    if (mobileDot) mobileDot.classList.add('waiting');
     text.textContent = 'Waiting for peer...';
   } else {
     text.textContent = 'Disconnected';
@@ -1437,6 +1498,7 @@ function updatePeerCount() {
 function showRoomView() {
   document.getElementById('home-view').classList.remove('active');
   document.getElementById('room-view').classList.add('active');
+  document.body.classList.add('in-room');
 
   updateStatus('waiting');
 
@@ -1448,6 +1510,10 @@ function showRoomView() {
   // Room code display
   document.getElementById('room-code-display').style.display = 'flex';
   document.getElementById('room-code-text').textContent = roomId;
+
+  // Mobile room code
+  const mobileCode = document.getElementById('mobile-room-code');
+  if (mobileCode) mobileCode.textContent = roomId;
 
   // Push hash
   if (!location.hash) {
@@ -1491,6 +1557,7 @@ function goHome() {
 
   document.getElementById('room-view').classList.remove('active');
   document.getElementById('home-view').classList.add('active');
+  document.body.classList.remove('in-room');
   history.pushState(null, '', location.pathname);
 
   // Reset room state
@@ -1706,6 +1773,25 @@ window.addEventListener('load', () => {
     })();
   }
 });
+
+// Mobile keyboard handling — adjust layout when keyboard opens/closes
+if ('visualViewport' in window) {
+  window.visualViewport.addEventListener('resize', () => {
+    if (window.innerWidth <= 860) {
+      const roomLayout = document.querySelector('.room-layout');
+      const mobileTabsHeight = 46;
+      const headerHeight = 65;
+      if (roomLayout) {
+        roomLayout.style.height = `${window.visualViewport.height - headerHeight - mobileTabsHeight}px`;
+      }
+      // Scroll chat to bottom when keyboard opens
+      const msgs = document.getElementById('chat-messages');
+      if (msgs) {
+        setTimeout(() => { msgs.scrollTop = msgs.scrollHeight; }, 100);
+      }
+    }
+  });
+}
 
 // Close modal on overlay click
 document.getElementById('join-modal').addEventListener('click', (e) => {
