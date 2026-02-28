@@ -37,7 +37,6 @@
   --radius-lg: 20px;
   --shadow: 0 4px 30px rgba(0,0,0,0.3);
   --shadow-glow: 0 0 40px var(--accent-glow);
-  --app-height: 100vh;
 }
 
 html { scroll-behavior: smooth; }
@@ -46,7 +45,7 @@ body {
   font-family: var(--font-body);
   background: var(--bg-primary);
   color: var(--text-primary);
-  min-height: var(--app-height);
+  min-height: 100vh;
   overflow-x: hidden;
   line-height: 1.6;
 }
@@ -87,7 +86,7 @@ body::before {
 .app-container {
   position: relative;
   z-index: 1;
-  min-height: var(--app-height);
+  min-height: 100vh;
   display: flex;
   flex-direction: column;
 }
@@ -383,7 +382,7 @@ header {
   display: grid;
   grid-template-columns: 1fr 380px;
   flex: 1;
-  height: calc(var(--app-height) - 65px);
+  height: calc(100vh - 65px);
   overflow: hidden;
 }
 
@@ -819,13 +818,13 @@ header {
     display: none;
   }
   body.in-room .room-view {
-    height: var(--app-height);
-    min-height: 0;
+    height: 100vh; /* fallback */
+    height: 100dvh;
   }
   .room-layout {
     grid-template-columns: 1fr;
     grid-template-rows: 1fr;
-    height: 100%;
+    height: auto;
     flex: 1;
     min-height: 0;
   }
@@ -842,9 +841,6 @@ header {
   }
   .chat-panel.mobile-active {
     display: flex;
-    min-height: 0;
-  }
-  .chat-panel.mobile-active .chat-messages {
     min-height: 0;
   }
   /* Hide duplicate panel header on mobile — tabs already show which panel */
@@ -1794,36 +1790,16 @@ window.addEventListener('load', () => {
 });
 
 // Mobile keyboard handling — scroll chat when keyboard opens/closes
-function syncViewportHeight() {
-  const nextHeight = window.visualViewport ? window.visualViewport.height : window.innerHeight;
-  document.documentElement.style.setProperty('--app-height', `${Math.round(nextHeight)}px`);
-}
-
-function keepChatAnchored() {
-  if (window.innerWidth <= 860) {
-    const msgs = document.getElementById('chat-messages');
-    if (msgs) {
-      setTimeout(() => { msgs.scrollTop = msgs.scrollHeight; }, 100);
-    }
-  }
-}
-
-syncViewportHeight();
-window.addEventListener('resize', () => {
-  syncViewportHeight();
-  keepChatAnchored();
-});
-window.addEventListener('orientationchange', () => {
-  syncViewportHeight();
-  keepChatAnchored();
-});
-
 if ('visualViewport' in window) {
   window.visualViewport.addEventListener('resize', () => {
-    syncViewportHeight();
-    keepChatAnchored();
+    if (window.innerWidth <= 860) {
+      // Scroll chat to bottom when keyboard opens
+      const msgs = document.getElementById('chat-messages');
+      if (msgs) {
+        setTimeout(() => { msgs.scrollTop = msgs.scrollHeight; }, 100);
+      }
+    }
   });
-  window.visualViewport.addEventListener('scroll', syncViewportHeight);
 }
 
 // Close modal on overlay click
