@@ -1610,7 +1610,7 @@ function showRoomView() {
   updateStatus('waiting');
 
   // Update share link
-  const link = `${location.origin}#${roomId}`;
+  const link = `${location.origin}/#${roomId}`;
   document.getElementById('share-link').value = link;
   document.getElementById('share-bar').style.display = 'flex';
 
@@ -1862,27 +1862,26 @@ document.getElementById('room-code-input').addEventListener('keydown', (e) => {
 window.addEventListener('load', () => {
   const hash = location.hash.slice(1);
   if (hash && hash.length === 6) {
-    (async () => {
+    // Show room view immediately so user sees something happening
+    roomId = hash;
+    isHost = false;
+    showRoomView();
+    updateStatus('connecting');
+
+    (async function tryConnect(attempt) {
       try {
         await connectWS();
-        roomId = hash;
-        isHost = false;
         ws.send(JSON.stringify({ type: 'join-room', roomId: hash }));
       } catch (err) {
-        updateStatus('retrying');
-        setTimeout(async () => {
-          try {
-            await connectWS();
-            roomId = hash;
-            isHost = false;
-            ws.send(JSON.stringify({ type: 'join-room', roomId: hash }));
-          } catch (err2) {
-            showToast('Server is unavailable. Please refresh to try again.');
-            updateStatus('disconnected');
-          }
-        }, 3000);
+        if (attempt < 3) {
+          updateStatus('retrying');
+          setTimeout(() => tryConnect(attempt + 1), 2000);
+        } else {
+          showToast('Could not connect. Please refresh to try again.');
+          updateStatus('disconnected');
+        }
       }
-    })();
+    })(1);
   }
 });
 
