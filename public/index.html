@@ -822,14 +822,28 @@ header {
 @media (max-width: 860px) {
   .mobile-tabs {
     display: flex;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 10;
+    padding-top: env(safe-area-inset-top, 0px);
   }
   /* Hide main header in room view to save space on mobile */
   body.in-room header {
     display: none;
   }
-  body.in-room .room-view {
-    height: 100vh; /* fallback */
-    height: 100dvh;
+  body.in-room .app-container {
+    height: 100%;
+  }
+  body.in-room .room-view.active {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    flex-direction: column;
   }
   .room-layout {
     grid-template-columns: 1fr;
@@ -837,6 +851,8 @@ header {
     height: auto;
     flex: 1;
     min-height: 0;
+    /* offset for fixed tab bar */
+    margin-top: calc(46px + env(safe-area-inset-top, 0px));
   }
   .file-panel {
     display: none;
@@ -864,9 +880,12 @@ header {
   .chat-input-area {
     padding: 12px 16px;
     padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    flex-shrink: 0;
   }
   .chat-messages {
     padding: 16px;
+    flex: 1;
+    min-height: 0;
   }
   .chat-msg {
     max-width: 80%;
@@ -1583,6 +1602,10 @@ function goHome() {
   document.getElementById('room-view').classList.remove('active');
   document.getElementById('home-view').classList.add('active');
   document.body.classList.remove('in-room');
+  // Reset any inline styles from mobile keyboard handling
+  const roomView = document.getElementById('room-view');
+  roomView.style.height = '';
+  roomView.style.top = '';
   history.pushState(null, '', location.pathname);
 
   // Reset room state
@@ -1799,14 +1822,30 @@ window.addEventListener('load', () => {
   }
 });
 
-// Mobile keyboard handling — scroll chat when keyboard opens/closes
+// Mobile keyboard handling — resize room view when keyboard opens/closes
 if ('visualViewport' in window) {
   window.visualViewport.addEventListener('resize', () => {
-    if (window.innerWidth <= 860) {
-      // Scroll chat to bottom when keyboard opens
+    if (window.innerWidth <= 860 && document.body.classList.contains('in-room')) {
+      const roomView = document.getElementById('room-view');
+      if (roomView) {
+        // Set the room view height to the visual viewport height
+        // This shrinks it when the keyboard opens
+        roomView.style.height = `${window.visualViewport.height}px`;
+        roomView.style.top = `${window.visualViewport.offsetTop}px`;
+      }
+      // Scroll chat to bottom
       const msgs = document.getElementById('chat-messages');
       if (msgs) {
-        setTimeout(() => { msgs.scrollTop = msgs.scrollHeight; }, 100);
+        setTimeout(() => { msgs.scrollTop = msgs.scrollHeight; }, 50);
+      }
+    }
+  });
+
+  window.visualViewport.addEventListener('scroll', () => {
+    if (window.innerWidth <= 860 && document.body.classList.contains('in-room')) {
+      const roomView = document.getElementById('room-view');
+      if (roomView) {
+        roomView.style.top = `${window.visualViewport.offsetTop}px`;
       }
     }
   });
