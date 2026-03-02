@@ -144,7 +144,7 @@ a:hover {
   <p>Our signaling server facilitates the initial connection between two devices. During this process, your IP address is temporarily visible to our server for the duration of the WebSocket connection. This is how all internet connections work — it's not something we log or store. Once the peer-to-peer connection is established, the signaling server is no longer involved.</p>
 
   <h2>TURN relay</h2>
-  <p>In some cases (roughly 10–20% of connections), a direct peer-to-peer connection isn't possible due to network restrictions. In these cases, data is relayed through TURN servers provided by <a href="https://www.metered.ca" target="_blank" rel="noopener">Metered</a>. The relayed data remains encrypted via DTLS — the relay server cannot read the contents of your files or messages. Metered's privacy policy applies to their infrastructure.</p>
+  <p>In some cases (roughly 10–20% of connections), a direct peer-to-peer connection isn't possible due to network restrictions. In these cases, data is relayed through <a href="https://developers.cloudflare.com/realtime/turn/" target="_blank" rel="noopener">Cloudflare's TURN service</a>, which runs on their global network. The relayed data remains encrypted via DTLS — the relay server cannot read the contents of your files or messages. TURN credentials are ephemeral (short-lived) and generated fresh for each session. Cloudflare's privacy policy applies to their infrastructure.</p>
 
   <h2>Encryption</h2>
   <p>All data transferred through Stickr is encrypted using DTLS (Datagram Transport Layer Security), which is built into WebRTC. This encryption is applied automatically to every file transfer and chat message. Neither our signaling server nor any relay server can decrypt your data.</p>
@@ -159,11 +159,4 @@ a:hover {
   <p>If we ever change how Stickr handles data, we'll update this page. Given that privacy is the core principle behind Stickr, any changes would be toward collecting less, not more.</p>
 
   <h2>Contact</h2>
-  <p>Questions about this policy? Reach out at <a href="mailto:privacy@getstickr.in">privacy@getstickr.in</a>.</p>
-
-  <div class="footer">
-    <p>Stickr — Peer-to-peer file sharing & encrypted chat.</p>
-  </div>
-</div>
-</body>
-</html>
+  <p>Questions about this policy? Reach out at <a href="/cdn-cgi/l/email-protection#ff8f8d96899e9c86bf989a8b8c8b969c948dd19691"><span class="__cf_email__" data-cfemail="e292908b9483819ba285879691968b818990cc8b8c">[email&#160;protected]</
