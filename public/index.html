@@ -872,6 +872,12 @@ header {
   body.in-room .app-container {
     height: 100%;
   }
+  body.in-room {
+    overflow: hidden;
+    position: fixed;
+    width: 100%;
+    height: 100%;
+  }
   body.in-room .room-view.active {
     position: fixed;
     top: 0;
@@ -880,6 +886,7 @@ header {
     bottom: 0;
     display: flex;
     flex-direction: column;
+    z-index: 5;
   }
   .room-layout {
     grid-template-columns: 1fr;
@@ -904,6 +911,8 @@ header {
   .chat-panel.mobile-active {
     display: flex;
     min-height: 0;
+    /* Critical: prevent browser from scrolling the whole page */
+    overflow: hidden;
   }
   /* Hide duplicate panel header on mobile — tabs already show which panel */
   .chat-panel .panel-header {
@@ -912,16 +921,21 @@ header {
   .file-panel .panel-header .connection-status {
     display: flex;
   }
-  /* Fix chat input area padding and safe area for browser bars */
-  .chat-input-area {
-    padding: 12px 16px;
-    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
-    flex-shrink: 0;
-  }
+  /* Chat messages — scrollable area between tab bar and input */
   .chat-messages {
     padding: 16px;
     flex: 1;
     min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  /* Chat input — stays at bottom */
+  .chat-input-area {
+    padding: 12px 16px;
+    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    flex-shrink: 0;
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border);
   }
   .chat-msg {
     max-width: 80%;
@@ -1872,34 +1886,49 @@ window.addEventListener('load', () => {
   }
 });
 
-// Mobile keyboard handling — resize room view when keyboard opens/closes
+// Mobile keyboard handling
+// When keyboard opens, shrink the room view to fit the visible area
+// This keeps tab bar at top, input at bottom, messages scrollable in between
 if ('visualViewport' in window) {
-  window.visualViewport.addEventListener('resize', () => {
-    if (window.innerWidth <= 860 && document.body.classList.contains('in-room')) {
-      const roomView = document.getElementById('room-view');
-      if (roomView) {
-        // Set the room view height to the visual viewport height
-        // This shrinks it when the keyboard opens
-        roomView.style.height = `${window.visualViewport.height}px`;
-        roomView.style.top = `${window.visualViewport.offsetTop}px`;
-      }
-      // Scroll chat to bottom
+  const onViewportResize = () => {
+    if (window.innerWidth > 860 || !document.body.classList.contains('in-room')) return;
+
+    const roomView = document.getElementById('room-view');
+    const chatPanel = document.querySelector('.chat-panel.mobile-active');
+    if (!roomView) return;
+
+    // visualViewport.height = visible area (shrinks when keyboard opens)
+    const vh = window.visualViewport.height;
+    const offsetTop = window.visualViewport.offsetTop;
+
+    roomView.style.height = vh + 'px';
+    roomView.style.top = offsetTop + 'px';
+
+    // Scroll chat to bottom so latest messages are visible
+    if (chatPanel) {
       const msgs = document.getElementById('chat-messages');
       if (msgs) {
-        setTimeout(() => { msgs.scrollTop = msgs.scrollHeight; }, 50);
+        requestAnimationFrame(() => { msgs.scrollTop = msgs.scrollHeight; });
       }
     }
-  });
+  };
 
-  window.visualViewport.addEventListener('scroll', () => {
-    if (window.innerWidth <= 860 && document.body.classList.contains('in-room')) {
-      const roomView = document.getElementById('room-view');
-      if (roomView) {
-        roomView.style.top = `${window.visualViewport.offsetTop}px`;
-      }
-    }
-  });
+  window.visualViewport.addEventListener('resize', onViewportResize);
+  window.visualViewport.addEventListener('scroll', onViewportResize);
 }
+
+// Prevent page scroll when chat input is focused on mobile
+document.getElementById('chat-input').addEventListener('focus', () => {
+  if (window.innerWidth <= 860) {
+    // Small delay to let the keyboard open first
+    setTimeout(() => {
+      window.scrollTo(0, 0);
+      document.body.scrollTop = 0;
+      const msgs = document.getElementById('chat-messages');
+      if (msgs) msgs.scrollTop = msgs.scrollHeight;
+    }, 300);
+  }
+});
 
 // Close modal on overlay click
 document.getElementById('join-modal').addEventListener('click', (e) => {
