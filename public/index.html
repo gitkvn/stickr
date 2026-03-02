@@ -1214,8 +1214,9 @@ function handleSignalingMessage(msg) {
 // WEBRTC
 // ═══════════════════════════════════════════
 const CONNECTION_TIMEOUT = 15000; // 15 seconds to connect before retrying
+const MAX_CONNECTION_RETRIES = 3;
 
-function createPeerConnection(remotePeerId, initiator) {
+function createPeerConnection(remotePeerId, initiator, retryCount = 0) {
   const pc = new RTCPeerConnection({
     iceServers: ICE_SERVERS,
     iceCandidatePoolSize: 4,  // pre-gather candidates for faster connection
@@ -1223,15 +1224,21 @@ function createPeerConnection(remotePeerId, initiator) {
   const peerObj = { pc, dataChannel: null, chatChannel: null, connectionTimer: null };
   peers.set(remotePeerId, peerObj);
 
-  // Start connection timeout
+  // Start connection timeout — capped retries
   peerObj.connectionTimer = setTimeout(() => {
     if (pc.connectionState !== 'connected') {
-      console.log('Connection timeout — retrying...');
-      updateStatus('retrying');
-      addSystemMessage('Connection slow — retrying...');
       pc.close();
       peers.delete(remotePeerId);
-      createPeerConnection(remotePeerId, initiator);
+      if (retryCount < MAX_CONNECTION_RETRIES) {
+        console.log(`Connection timeout — retry ${retryCount + 1}/${MAX_CONNECTION_RETRIES}`);
+        updateStatus('retrying');
+        addSystemMessage('Connection slow — retrying...');
+        createPeerConnection(remotePeerId, initiator, retryCount + 1);
+      } else {
+        console.log('Connection failed after max retries');
+        updateStatus('disconnected');
+        addSystemMessage('Could not establish P2P connection. Try refreshing both devices.');
+      }
     }
   }, CONNECTION_TIMEOUT);
 
@@ -1642,8 +1649,9 @@ function switchMobileTab(tab) {
 }
 
 function goHome() {
-  // Clean up connections
+  // Clean up connections and cancel pending timers
   for (const [, peer] of peers) {
+    clearTimeout(peer.connectionTimer);
     peer.pc.close();
   }
   peers.clear();
