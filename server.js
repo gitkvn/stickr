@@ -10,6 +10,53 @@ const wss = new WebSocket.Server({ server });
 
 app.use(express.static(path.join(__dirname, 'public')));
 
+// ICE servers endpoint — generates ephemeral TURN credentials from Cloudflare
+app.get('/api/ice-servers', async (req, res) => {
+  const TURN_KEY_ID = process.env.TURN_KEY_ID;
+  const TURN_KEY_API_TOKEN = process.env.TURN_KEY_API_TOKEN;
+
+  if (!TURN_KEY_ID || !TURN_KEY_API_TOKEN) {
+    // Fallback to STUN-only if TURN credentials aren't configured
+    console.warn('TURN credentials not configured — returning STUN-only');
+    return res.json({
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+      ]
+    });
+  }
+
+  try {
+    const response = await fetch(
+      `https://rtc.live.cloudflare.com/v1/turn/keys/${TURN_KEY_ID}/credentials/generate-ice-servers`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${TURN_KEY_API_TOKEN}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ ttl: 86400 }), // 24 hour expiry
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`Cloudflare API returned ${response.status}`);
+    }
+
+    const data = await response.json();
+    res.json(data);
+  } catch (err) {
+    console.error('Failed to fetch TURN credentials:', err.message);
+    // Fallback to STUN-only
+    res.json({
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+      ]
+    });
+  }
+});
+
 // Health check endpoint — keeps Railway from sleeping
 app.get('/health', (req, res) => {
   res.status(200).json({
