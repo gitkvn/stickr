@@ -509,6 +509,42 @@ header {
 
 .file-input { display: none; }
 
+.mobile-file-btn {
+  display: none;
+  width: 100%;
+  padding: 14px;
+  margin-top: 12px;
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 600;
+  background: var(--gradient-1);
+  color: white;
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.mobile-file-btn:hover {
+  transform: scale(1.02);
+  box-shadow: 0 0 20px var(--accent-glow);
+}
+
+@media (max-width: 860px) {
+  .mobile-file-btn {
+    display: block;
+  }
+  .drop-zone {
+    padding: 24px 16px;
+  }
+  .drop-zone h3 {
+    font-size: 15px;
+  }
+  .drop-zone p {
+    font-size: 12px;
+  }
+}
+
 /* ─── File List ─── */
 .file-list {
   margin-top: 20px;
@@ -1003,6 +1039,9 @@ header {
             <h3>Drop files here</h3>
             <p>or click to browse — up to 500 MB per file</p>
           </div>
+          <button class="mobile-file-btn" onclick="document.getElementById('file-input').click()">
+            📎 Select Files
+          </button>
           <div class="file-list" id="file-list"></div>
         </div>
         <div class="share-bar" id="share-bar" style="display:none">
@@ -1140,12 +1179,14 @@ function handleSignalingMessage(msg) {
       myPeerId = msg.peerId;
       roomId = msg.roomId;
       showRoomView();
+      updateStatus('peer-found');
       // Peer initiates WebRTC connection to host
       createPeerConnection(msg.hostId, true);
       break;
 
     case 'peer-joined':
       // Host receives new peer
+      updateStatus('peer-found');
       createPeerConnection(msg.peerId, false);
       break;
 
@@ -1191,6 +1232,7 @@ function createPeerConnection(remotePeerId, initiator) {
   peerObj.connectionTimer = setTimeout(() => {
     if (pc.connectionState !== 'connected') {
       console.log('Connection timeout — retrying...');
+      updateStatus('retrying');
       addSystemMessage('Connection slow — retrying...');
       pc.close();
       peers.delete(remotePeerId);
@@ -1233,6 +1275,7 @@ function createPeerConnection(remotePeerId, initiator) {
     setupChatChannel(chatChannel);
 
     pc.createOffer().then(offer => {
+      updateStatus('negotiating');
       pc.setLocalDescription(offer);
       sendSignal(remotePeerId, { type: 'offer', sdp: offer });
     });
@@ -1259,6 +1302,7 @@ async function handleRTCSignal(from, signal) {
   const pc = peer.pc;
 
   if (signal.type === 'offer') {
+    updateStatus('negotiating');
     await pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
@@ -1522,17 +1566,22 @@ function updateStatus(state) {
   dot.className = 'status-dot';
   if (mobileDot) mobileDot.className = 'status-dot';
 
-  if (state === 'connected') {
-    dot.classList.add('connected');
-    if (mobileDot) mobileDot.classList.add('connected');
-    text.textContent = 'Connected';
-  } else if (state === 'waiting') {
-    dot.classList.add('waiting');
-    if (mobileDot) mobileDot.classList.add('waiting');
-    text.textContent = 'Waiting for peer...';
-  } else {
-    text.textContent = 'Disconnected';
+  const states = {
+    'connecting':    { dot: 'waiting', text: 'Connecting to server...' },
+    'waiting':       { dot: 'waiting', text: 'Waiting for peer...' },
+    'peer-found':    { dot: 'waiting', text: 'Peer found — establishing link...' },
+    'negotiating':   { dot: 'waiting', text: 'Setting up secure connection...' },
+    'connected':     { dot: 'connected', text: 'Connected' },
+    'disconnected':  { dot: '', text: 'Disconnected' },
+    'retrying':      { dot: 'waiting', text: 'Retrying connection...' },
+  };
+
+  const s = states[state] || states['disconnected'];
+  if (s.dot) {
+    dot.classList.add(s.dot);
+    if (mobileDot) mobileDot.classList.add(s.dot);
   }
+  text.textContent = s.text;
 }
 
 function updatePeerCount() {
@@ -1637,13 +1686,12 @@ function hideJoinModal() {
 // ─── Actions ───
 async function createRoom() {
   try {
-    showToastInfo('Connecting to server...');
+    updateStatus('connecting');
     await connectWS();
     ws.send(JSON.stringify({ type: 'create-room' }));
     isHost = true;
   } catch (err) {
-    showToast('Failed to connect — retrying...');
-    // Retry once after a short delay
+    updateStatus('retrying');
     setTimeout(async () => {
       try {
         await connectWS();
@@ -1651,6 +1699,7 @@ async function createRoom() {
         isHost = true;
       } catch (err2) {
         showToast('Server is unavailable. Please try again in a moment.');
+        updateStatus('disconnected');
       }
     }, 2000);
   }
@@ -1664,13 +1713,13 @@ async function joinRoom() {
   }
   hideJoinModal();
   try {
-    showToastInfo('Connecting to server...');
+    updateStatus('connecting');
     await connectWS();
     roomId = code;
     isHost = false;
     ws.send(JSON.stringify({ type: 'join-room', roomId: code }));
   } catch (err) {
-    showToast('Failed to connect — retrying...');
+    updateStatus('retrying');
     setTimeout(async () => {
       try {
         await connectWS();
@@ -1679,6 +1728,7 @@ async function joinRoom() {
         ws.send(JSON.stringify({ type: 'join-room', roomId: code }));
       } catch (err2) {
         showToast('Server is unavailable. Please try again in a moment.');
+        updateStatus('disconnected');
       }
     }, 2000);
   }
@@ -1805,8 +1855,7 @@ window.addEventListener('load', () => {
         isHost = false;
         ws.send(JSON.stringify({ type: 'join-room', roomId: hash }));
       } catch (err) {
-        showToastInfo('Connecting...');
-        // Retry once — handles Railway cold start
+        updateStatus('retrying');
         setTimeout(async () => {
           try {
             await connectWS();
@@ -1815,6 +1864,7 @@ window.addEventListener('load', () => {
             ws.send(JSON.stringify({ type: 'join-room', roomId: hash }));
           } catch (err2) {
             showToast('Server is unavailable. Please refresh to try again.');
+            updateStatus('disconnected');
           }
         }, 3000);
       }
