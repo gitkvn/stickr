@@ -1221,7 +1221,7 @@ function createPeerConnection(remotePeerId, initiator, retryCount = 0) {
     iceServers: ICE_SERVERS,
     iceCandidatePoolSize: 4,  // pre-gather candidates for faster connection
   });
-  const peerObj = { pc, dataChannel: null, chatChannel: null, connectionTimer: null };
+  const peerObj = { pc, dataChannel: null, chatChannel: null, connectionTimer: null, iceCandidateQueue: [], remoteDescriptionSet: false };
   peers.set(remotePeerId, peerObj);
 
   // Start connection timeout — capped retries
@@ -1303,17 +1303,41 @@ async function handleRTCSignal(from, signal) {
 
   const pc = peer.pc;
 
-  if (signal.type === 'offer') {
-    updateStatus('negotiating');
-    await pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
-    const answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
-    sendSignal(from, { type: 'answer', sdp: answer });
-  } else if (signal.type === 'answer') {
-    await pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
-  } else if (signal.type === 'ice-candidate') {
-    await pc.addIceCandidate(new RTCIceCandidate(signal.candidate));
+  try {
+    if (signal.type === 'offer') {
+      updateStatus('negotiating');
+      await pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
+      peer.remoteDescriptionSet = true;
+      await flushIceCandidateQueue(peer);
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      sendSignal(from, { type: 'answer', sdp: answer });
+    } else if (signal.type === 'answer') {
+      await pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
+      peer.remoteDescriptionSet = true;
+      await flushIceCandidateQueue(peer);
+    } else if (signal.type === 'ice-candidate') {
+      if (peer.remoteDescriptionSet) {
+        await pc.addIceCandidate(new RTCIceCandidate(signal.candidate));
+      } else {
+        // Queue candidate until remote description is set
+        peer.iceCandidateQueue.push(signal.candidate);
+      }
+    }
+  } catch (err) {
+    console.error('Signaling error:', err.message);
   }
+}
+
+async function flushIceCandidateQueue(peer) {
+  for (const candidate of peer.iceCandidateQueue) {
+    try {
+      await peer.pc.addIceCandidate(new RTCIceCandidate(candidate));
+    } catch (err) {
+      console.warn('Failed to add queued ICE candidate:', err.message);
+    }
+  }
+  peer.iceCandidateQueue = [];
 }
 
 // ═══════════════════════════════════════════
