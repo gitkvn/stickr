@@ -1181,8 +1181,9 @@ function handleSignalingMessage(msg) {
         peer.pc.close();
         peers.delete(msg.peerId);
       }
-      addSystemMessage('A peer disconnected');
-      updatePeerCount();
+      addSystemMessage('Peer disconnected');
+      updateStatus('disconnected');
+      disableChat();
       break;
 
     case 'error':
@@ -1439,6 +1440,12 @@ function enableChat() {
   const msgs = document.getElementById('chat-messages');
   const empty = msgs.querySelector('.empty-chat');
   if (empty) empty.remove();
+}
+
+function disableChat() {
+  document.getElementById('chat-input').disabled = true;
+  document.getElementById('chat-send').disabled = true;
+  document.getElementById('chat-input').placeholder = 'Peer disconnected';
 }
 
 // ═══════════════════════════════════════════
