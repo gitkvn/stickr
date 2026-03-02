@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Privacy — Stickr</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta name="description" content="Stickr's privacy policy. We don't track you, store your files, or collect personal data.">
+<meta name="theme-color" content="#0a0a0f">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Space+Grotesk:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg-primary: #0a0a0f;
+  --bg-secondary: #12121a;
+  --bg-tertiary: #1a1a2e;
+  --border: rgba(255,255,255,0.06);
+  --text-primary: #f0f0f0;
+  --text-secondary: #b0b0b8;
+  --text-muted: #6b6b78;
+  --accent: #6c5ce7;
+  --accent-bright: #a78bfa;
+  --font-display: 'Outfit', sans-serif;
+  --font-body: 'Space Grotesk', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+body {
+  font-family: var(--font-body);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  min-height: 100vh;
+  line-height: 1.7;
+}
+
+.container {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 40px 24px 80px;
+}
+
+.back-link {
+  display: inline-block;
+  color: var(--accent-bright);
+  text-decoration: none;
+  font-size: 14px;
+  margin-bottom: 32px;
+  transition: opacity 0.2s;
+}
+
+.back-link:hover { opacity: 0.8; }
+
+h1 {
+  font-family: var(--font-display);
+  font-size: 32px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.updated {
+  font-size: 13px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  margin-bottom: 40px;
+}
+
+h2 {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--accent-bright);
+  margin-top: 36px;
+  margin-bottom: 12px;
+}
+
+p {
+  color: var(--text-secondary);
+  font-size: 15px;
+  margin-bottom: 16px;
+}
+
+.tldr {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px 24px;
+  margin-bottom: 36px;
+}
+
+.tldr-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--accent-bright);
+  margin-bottom: 8px;
+}
+
+.tldr p {
+  color: var(--text-primary);
+  margin-bottom: 0;
+  font-size: 15px;
+}
+
+a {
+  color: var(--accent-bright);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+.footer {
+  margin-top: 48px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--text-muted);
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <a href="/" class="back-link">← Back to Stickr</a>
+
+  <h1>Privacy Policy</h1>
+  <p class="updated">Last updated: March 2, 2026</p>
+
+  <div class="tldr">
+    <div class="tldr-label">TL;DR</div>
+    <p>Stickr doesn't track you, doesn't store your files, doesn't read your messages, and doesn't require an account. Your data goes directly from your device to the recipient's device.</p>
+  </div>
+
+  <h2>How Stickr works</h2>
+  <p>Stickr uses WebRTC to create direct, encrypted connections between browsers. When you share a file or send a message, the data travels directly from your device to the recipient's device. Our server's only role is to help the two devices find each other — it never sees, stores, or processes your files or messages.</p>
+
+  <h2>What we don't collect</h2>
+  <p>We don't collect personal information. There are no accounts, no email addresses, no names, and no passwords. We don't use cookies. We don't use analytics or tracking scripts. We don't store your files on any server. We don't store or have access to your chat messages. We don't share any data with third parties.</p>
+
+  <h2>What our server handles</h2>
+  <p>Our signaling server facilitates the initial connection between two devices. During this process, your IP address is temporarily visible to our server for the duration of the WebSocket connection. This is how all internet connections work — it's not something we log or store. Once the peer-to-peer connection is established, the signaling server is no longer involved.</p>
+
+  <h2>TURN relay</h2>
+  <p>In some cases (roughly 10–20% of connections), a direct peer-to-peer connection isn't possible due to network restrictions. In these cases, data is relayed through TURN servers provided by <a href="https://www.metered.ca" target="_blank" rel="noopener">Metered</a>. The relayed data remains encrypted via DTLS — the relay server cannot read the contents of your files or messages. Metered's privacy policy applies to their infrastructure.</p>
+
+  <h2>Encryption</h2>
+  <p>All data transferred through Stickr is encrypted using DTLS (Datagram Transport Layer Security), which is built into WebRTC. This encryption is applied automatically to every file transfer and chat message. Neither our signaling server nor any relay server can decrypt your data.</p>
+
+  <h2>Data retention</h2>
+  <p>There is nothing to retain. Files and messages exist only in the browsers of the sender and recipient during an active session. When the session ends, the data exists only on the devices where it was sent or received. Our server retains no record of what was shared, who shared it, or when.</p>
+
+  <h2>Room codes</h2>
+  <p>Room codes are randomly generated 6-character identifiers used to connect two devices. They exist only in server memory for the duration of the session and are discarded when the room is closed. They are not logged or stored persistently.</p>
+
+  <h2>Changes to this policy</h2>
+  <p>If we ever change how Stickr handles data, we'll update this page. Given that privacy is the core principle behind Stickr, any changes would be toward collecting less, not more.</p>
+
+  <h2>Contact</h2>
+  <p>Questions about this policy? Reach out at <a href="mailto:privacy@getstickr.in">privacy@getstickr.in</a>.</p>
+
+  <div class="footer">
+    <p>Stickr — Peer-to-peer file sharing & encrypted chat.</p>
+  </div>
+</div>
+</body>
+</html>

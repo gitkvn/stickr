@@ -807,6 +807,29 @@ header {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 
+/* ─── Footer ─── */
+.site-footer {
+  padding: 24px 20px 32px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-muted);
+  opacity: 0.6;
+}
+
+.site-footer a {
+  color: var(--text-secondary);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.site-footer a:hover {
+  color: var(--accent-bright);
+}
+
+.footer-sep {
+  margin: 0 8px;
+}
+
 /* ─── Responsive ─── */
 /* ─── Mobile Tab Bar ─── */
 .mobile-tabs {
@@ -986,9 +1009,13 @@ header {
         <p>Send large files reliably, no sign-up needed</p>
       </div>
     </div>
-  </div>
 
-  <!-- ═══ ROOM VIEW ═══ -->
+    <footer class="site-footer">
+      <a href="/privacy.html">Privacy</a>
+      <span class="footer-sep">·</span>
+      <span class="footer-note">No tracking. No cookies. No accounts.</span>
+    </footer>
+  </div>
   <div id="room-view" class="view room-view">
     <div class="mobile-tabs" id="mobile-tabs">
       <button class="active" onclick="switchMobileTab('files')">📁 Files</button>
