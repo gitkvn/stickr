@@ -353,7 +353,7 @@ header {
 /* ─── Features ─── */
 .features {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: 1fr 1fr;
   gap: 16px;
   max-width: 700px;
   width: 100%;
@@ -931,7 +931,7 @@ header {
 @media (max-width: 600px) {
   header { padding: 14px 16px; }
   .hero h1 { letter-spacing: -1px; }
-  .features { grid-template-columns: 1fr 1fr; }
+  .features { grid-template-columns: 1fr; }
   .share-bar { flex-wrap: wrap; }
   .panel-header { padding: 12px 16px; }
   .drop-zone-container { padding: 16px; }
