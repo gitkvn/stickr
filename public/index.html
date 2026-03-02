@@ -381,7 +381,6 @@ header {
 .room-view {
   flex: 1;
   flex-direction: column;
-  overflow: hidden;
 }
 
 .room-view.active {
@@ -858,10 +857,8 @@ header {
 @media (max-width: 860px) {
   .mobile-tabs {
     display: flex;
-    position: fixed;
+    position: sticky;
     top: 0;
-    left: 0;
-    right: 0;
     z-index: 10;
     padding-top: env(safe-area-inset-top, 0px);
   }
@@ -869,33 +866,10 @@ header {
   body.in-room header {
     display: none;
   }
-  body.in-room .app-container {
-    height: 100%;
-  }
-  body.in-room {
-    overflow: hidden;
-    position: fixed;
-    width: 100%;
-    height: 100%;
-  }
-  body.in-room .room-view.active {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    display: flex;
-    flex-direction: column;
-    z-index: 5;
-  }
   .room-layout {
     grid-template-columns: 1fr;
     grid-template-rows: 1fr;
-    height: auto;
-    flex: 1;
-    min-height: 0;
-    /* offset for fixed tab bar */
-    margin-top: calc(46px + env(safe-area-inset-top, 0px));
+    height: calc(100vh - 46px - env(safe-area-inset-top, 0px));
   }
   .file-panel {
     display: none;
@@ -906,13 +880,9 @@ header {
   }
   .file-panel.mobile-active {
     display: flex;
-    min-height: 0;
   }
   .chat-panel.mobile-active {
     display: flex;
-    min-height: 0;
-    /* Critical: prevent browser from scrolling the whole page */
-    overflow: hidden;
   }
   /* Hide duplicate panel header on mobile — tabs already show which panel */
   .chat-panel .panel-header {
@@ -921,21 +891,13 @@ header {
   .file-panel .panel-header .connection-status {
     display: flex;
   }
-  /* Chat messages — scrollable area between tab bar and input */
   .chat-messages {
     padding: 16px;
-    flex: 1;
-    min-height: 0;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
   }
-  /* Chat input — stays at bottom */
   .chat-input-area {
     padding: 12px 16px;
     padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
     flex-shrink: 0;
-    background: var(--bg-secondary);
-    border-top: 1px solid var(--border);
   }
   .chat-msg {
     max-width: 80%;
@@ -1665,10 +1627,6 @@ function goHome() {
   document.getElementById('room-view').classList.remove('active');
   document.getElementById('home-view').classList.add('active');
   document.body.classList.remove('in-room');
-  // Reset any inline styles from mobile keyboard handling
-  const roomView = document.getElementById('room-view');
-  roomView.style.height = '';
-  roomView.style.top = '';
   history.pushState(null, '', location.pathname);
 
   // Reset room state
@@ -1882,50 +1840,6 @@ window.addEventListener('load', () => {
         }
       }
     })(1);
-  }
-});
-
-// Mobile keyboard handling
-// When keyboard opens, shrink the room view to fit the visible area
-// This keeps tab bar at top, input at bottom, messages scrollable in between
-if ('visualViewport' in window) {
-  const onViewportResize = () => {
-    if (window.innerWidth > 860 || !document.body.classList.contains('in-room')) return;
-
-    const roomView = document.getElementById('room-view');
-    const chatPanel = document.querySelector('.chat-panel.mobile-active');
-    if (!roomView) return;
-
-    // visualViewport.height = visible area (shrinks when keyboard opens)
-    const vh = window.visualViewport.height;
-    const offsetTop = window.visualViewport.offsetTop;
-
-    roomView.style.height = vh + 'px';
-    roomView.style.top = offsetTop + 'px';
-
-    // Scroll chat to bottom so latest messages are visible
-    if (chatPanel) {
-      const msgs = document.getElementById('chat-messages');
-      if (msgs) {
-        requestAnimationFrame(() => { msgs.scrollTop = msgs.scrollHeight; });
-      }
-    }
-  };
-
-  window.visualViewport.addEventListener('resize', onViewportResize);
-  window.visualViewport.addEventListener('scroll', onViewportResize);
-}
-
-// Prevent page scroll when chat input is focused on mobile
-document.getElementById('chat-input').addEventListener('focus', () => {
-  if (window.innerWidth <= 860) {
-    // Small delay to let the keyboard open first
-    setTimeout(() => {
-      window.scrollTo(0, 0);
-      document.body.scrollTop = 0;
-      const msgs = document.getElementById('chat-messages');
-      if (msgs) msgs.scrollTop = msgs.scrollHeight;
-    }, 300);
   }
 });
 
