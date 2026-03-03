@@ -614,6 +614,8 @@ header {
   font-family: var(--font-mono);
   color: var(--text-muted);
   flex-shrink: 0;
+  min-width: 90px;
+  text-align: right;
 }
 .file-status.complete { color: var(--success); }
 .file-status.sending { color: var(--accent-bright); }
@@ -1350,7 +1352,7 @@ let myPeerId = null;
 let roomId = null;
 let isHost = false;
 const peers = new Map();       // peerId -> { pc, dataChannel, chatChannel }
-const CHUNK_SIZE = 64 * 1024;  // 64KB chunks
+const CHUNK_SIZE = 128 * 1024; // 128KB chunks
 const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB limit
 
 // Session stats
@@ -1773,6 +1775,9 @@ function setupFileChannel(channel, remotePeerId) {
           mimeType: msg.mimeType,
           chunks: [],
           received: 0,
+          startTime: Date.now(),
+          lastSpeedUpdate: Date.now(),
+          lastSpeedBytes: 0,
         };
         currentReceivingFileId = msg.id;
         addFileItem(msg.id, msg.name, msg.size, 'receiving');
@@ -1797,7 +1802,19 @@ function setupFileChannel(channel, remotePeerId) {
         file.chunks.push(e.data);
         file.received += e.data.byteLength;
         const pct = Math.round((file.received / file.size) * 100);
-        updateFileProgress(currentReceivingFileId, pct);
+        const now = Date.now();
+
+        // Update speed every 500ms
+        if (now - file.lastSpeedUpdate >= 500) {
+          const elapsed = (now - file.lastSpeedUpdate) / 1000;
+          const bytesInInterval = file.received - file.lastSpeedBytes;
+          const speed = bytesInInterval / elapsed;
+          updateFileProgress(currentReceivingFileId, pct, speed);
+          file.lastSpeedUpdate = now;
+          file.lastSpeedBytes = file.received;
+        } else {
+          updateFileProgress(currentReceivingFileId, pct);
+        }
       }
     }
   };
@@ -1821,33 +1838,63 @@ async function sendFile(file) {
       mimeType: file.type,
     }));
 
-    // Send chunks
+    // Send chunks with smart backpressure
     const reader = file.stream().getReader();
     let sent = 0;
+    const startTime = Date.now();
+    let lastSpeedUpdate = startTime;
+    let lastSpeedBytes = 0;
+    const BUFFER_HIGH = 1024 * 1024; // 1MB buffer threshold
 
-    const sendChunks = async () => {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+    // Use bufferedAmountLowThreshold for efficient backpressure
+    ch.bufferedAmountLowThreshold = CHUNK_SIZE * 2;
 
-        // Split value into CHUNK_SIZE pieces
-        let offset = 0;
-        while (offset < value.byteLength) {
-          const chunk = value.slice(offset, offset + CHUNK_SIZE);
-          // Backpressure
-          while (ch.bufferedAmount > 4 * CHUNK_SIZE) {
-            await new Promise(r => setTimeout(r, 20));
-          }
-          ch.send(chunk);
-          sent += chunk.byteLength;
-          offset += chunk.byteLength;
-          const pct = Math.round((sent / file.size) * 100);
+    const waitForDrain = () => new Promise((resolve) => {
+      if (ch.bufferedAmount <= ch.bufferedAmountLowThreshold) {
+        resolve();
+      } else {
+        ch.onbufferedamountlow = () => {
+          ch.onbufferedamountlow = null;
+          resolve();
+        };
+        // Fallback timeout in case event doesn't fire
+        setTimeout(resolve, 100);
+      }
+    });
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      let offset = 0;
+      while (offset < value.byteLength) {
+        const chunk = value.slice(offset, offset + CHUNK_SIZE);
+
+        // Wait if buffer is full
+        if (ch.bufferedAmount > BUFFER_HIGH) {
+          await waitForDrain();
+        }
+
+        ch.send(chunk);
+        sent += chunk.byteLength;
+        offset += chunk.byteLength;
+
+        const pct = Math.round((sent / file.size) * 100);
+        const now = Date.now();
+
+        // Update speed every 500ms
+        if (now - lastSpeedUpdate >= 500) {
+          const elapsed = (now - lastSpeedUpdate) / 1000;
+          const bytesInInterval = sent - lastSpeedBytes;
+          const speed = bytesInInterval / elapsed;
+          updateFileProgress(fileId, pct, speed);
+          lastSpeedUpdate = now;
+          lastSpeedBytes = sent;
+        } else {
           updateFileProgress(fileId, pct);
         }
       }
-    };
-
-    await sendChunks();
+    }
 
     ch.send(JSON.stringify({ type: 'file-complete', id: fileId }));
     updateFileStatus(fileId, 'complete');
@@ -1996,13 +2043,26 @@ function addFileItem(id, name, size, status) {
   list.appendChild(div);
 }
 
-function updateFileProgress(id, pct) {
+function updateFileProgress(id, pct, speed) {
   const bar = document.getElementById(`progress-${id}`);
   if (bar) bar.style.width = pct + '%';
   const status = document.getElementById(`status-${id}`);
   if (status && !status.classList.contains('complete')) {
-    status.textContent = pct + '%';
+    if (speed !== undefined && speed > 0) {
+      status.textContent = `${pct}% · ${formatSpeed(speed)}`;
+    } else {
+      status.textContent = pct + '%';
+    }
   }
+}
+
+function formatSpeed(bytesPerSec) {
+  if (bytesPerSec >= 1024 * 1024) {
+    return (bytesPerSec / (1024 * 1024)).toFixed(1) + ' MB/s';
+  } else if (bytesPerSec >= 1024) {
+    return Math.round(bytesPerSec / 1024) + ' KB/s';
+  }
+  return Math.round(bytesPerSec) + ' B/s';
 }
 
 function updateFileStatus(id, status) {
