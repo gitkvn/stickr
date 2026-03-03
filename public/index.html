@@ -1356,6 +1356,8 @@ const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB limit
 // Session stats
 let sessionStartTime = null;
 let sessionStats = { filesSent: 0, filesReceived: 0, bytesSent: 0, bytesReceived: 0, messages: 0 };
+let hasEverConnectedPeer = false; // true once a peer WebRTC connection succeeds
+let isJoiningRoom = false; // true while actively trying to join a room
 
 let ICE_SERVERS = [
   { urls: 'stun:stun.l.google.com:19302' },
@@ -1541,6 +1543,7 @@ function handleSignalingMessage(msg) {
     case 'room-joined':
       myPeerId = msg.peerId;
       roomId = msg.roomId;
+      isJoiningRoom = false;
       showRoomView();
       updateStatus('peer-found');
       // Peer initiates WebRTC connection to host
@@ -1572,7 +1575,20 @@ function handleSignalingMessage(msg) {
 
     case 'error':
       if (msg.message === 'Room not found' || msg.message === 'Host is offline') {
-        showSessionEnded(msg.message === 'Room not found' ? 'This room has ended' : 'Host is no longer online', true);
+        if (hasEverConnectedPeer) {
+          // Had a connection before — session ended
+          showSessionEnded('Room is no longer available');
+        } else if (isJoiningRoom) {
+          // Was actively trying to join — room genuinely doesn't exist or host left
+          isJoiningRoom = false;
+          showSessionEnded(msg.message === 'Room not found' ? 'This room has ended' : 'Host is no longer online', true);
+        } else if (document.getElementById('room-view').classList.contains('active')) {
+          // Room view showing but not joining — stale link
+          showSessionEnded(msg.message === 'Room not found' ? 'This room has ended' : 'Host is no longer online', true);
+        } else {
+          // Not in room view — just toast (manual join from modal failed)
+          showToast(msg.message);
+        }
       } else {
         showToast(msg.message);
       }
@@ -1621,6 +1637,7 @@ function createPeerConnection(remotePeerId, initiator, retryCount = 0) {
   pc.onconnectionstatechange = () => {
     if (pc.connectionState === 'connected') {
       clearTimeout(peerObj.connectionTimer);
+      hasEverConnectedPeer = true;
       updateStatus('connected');
       addSystemMessage('Peer connected — you can now chat and share files!');
       enableChat();
@@ -2172,6 +2189,8 @@ function resetSessionState() {
   ws = null;
   sessionStartTime = null;
   sessionStats = { filesSent: 0, filesReceived: 0, bytesSent: 0, bytesReceived: 0, messages: 0 };
+  hasEverConnectedPeer = false;
+  isJoiningRoom = false;
 }
 
 function goHome() {
@@ -2197,6 +2216,8 @@ function goHome() {
   ws = null;
   sessionStartTime = null;
   sessionStats = { filesSent: 0, filesReceived: 0, bytesSent: 0, bytesReceived: 0, messages: 0 };
+  hasEverConnectedPeer = false;
+  isJoiningRoom = false;
 
   // Reset room UI
   document.getElementById('file-list').innerHTML = '';
@@ -2394,6 +2415,7 @@ window.addEventListener('load', () => {
     // Show room view immediately so user sees something happening
     roomId = hash;
     isHost = false;
+    isJoiningRoom = true;
     showRoomView();
     updateStatus('connecting');
 
