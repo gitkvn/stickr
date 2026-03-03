@@ -2,6 +2,7 @@ const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
 const { v4: uuidv4 } = require('uuid');
+const crypto = require('crypto');
 const path = require('path');
 
 const app = express();
@@ -10,14 +11,33 @@ const wss = new WebSocket.Server({ server });
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-// ICE servers endpoint — generates ephemeral TURN credentials from Cloudflare
-// Simple in-memory rate limiter: max 10 requests per IP per minute
-const iceRateLimit = new Map(); // ip -> { count, resetAt }
+// Session tokens - bind TURN creds to active WS sessions
+const sessionTokens = new Map();
+const SESSION_TOKEN_TTL = 2 * 60 * 60 * 1000;
+
+function generateSessionToken() {
+  return crypto.randomBytes(24).toString('hex');
+}
+
+// Clean up expired session tokens every 10 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [token, data] of sessionTokens) {
+    if (now - data.createdAt > SESSION_TOKEN_TTL) sessionTokens.delete(token);
+  }
+}, 10 * 60 * 1000);
+
+// ICE servers endpoint
+const iceRateLimit = new Map();
 const ICE_RATE_LIMIT = 10;
-const ICE_RATE_WINDOW = 60 * 1000; // 1 minute
+const ICE_RATE_WINDOW = 60 * 1000;
 
 app.get('/api/ice-servers', async (req, res) => {
-  // Rate limit check
+  const token = req.query.token;
+  if (!token || !sessionTokens.has(token)) {
+    return res.status(403).json({ error: 'Invalid or missing session token' });
+  }
+
   const ip = req.ip;
   const now = Date.now();
   let entry = iceRateLimit.get(ip);
@@ -27,15 +47,14 @@ app.get('/api/ice-servers', async (req, res) => {
   }
   entry.count++;
   if (entry.count > ICE_RATE_LIMIT) {
-    return res.status(429).json({ error: 'Too many requests — try again shortly' });
+    return res.status(429).json({ error: 'Too many requests' });
   }
 
   const TURN_KEY_ID = process.env.TURN_KEY_ID;
   const TURN_KEY_API_TOKEN = process.env.TURN_KEY_API_TOKEN;
 
   if (!TURN_KEY_ID || !TURN_KEY_API_TOKEN) {
-    // Fallback to STUN-only if TURN credentials aren't configured
-    console.warn('TURN credentials not configured — returning STUN-only');
+    console.warn('TURN credentials not configured - returning STUN-only');
     return res.json({
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
@@ -53,19 +72,14 @@ app.get('/api/ice-servers', async (req, res) => {
           'Authorization': `Bearer ${TURN_KEY_API_TOKEN}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ ttl: 3600 }), // 1 hour expiry
+        body: JSON.stringify({ ttl: 3600 }),
       }
     );
-
-    if (!response.ok) {
-      throw new Error(`Cloudflare API returned ${response.status}`);
-    }
-
+    if (!response.ok) throw new Error(`Cloudflare API returned ${response.status}`);
     const data = await response.json();
     res.json(data);
   } catch (err) {
     console.error('Failed to fetch TURN credentials:', err.message);
-    // Fallback to STUN-only
     res.json({
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
@@ -75,7 +89,6 @@ app.get('/api/ice-servers', async (req, res) => {
   }
 });
 
-// Clean up expired rate limit entries every 5 minutes
 setInterval(() => {
   const now = Date.now();
   for (const [ip, entry] of iceRateLimit) {
@@ -83,7 +96,7 @@ setInterval(() => {
   }
 }, 5 * 60 * 1000);
 
-// Health check endpoint — keeps Railway from sleeping
+// Health check
 app.get('/health', (req, res) => {
   res.status(200).json({
     status: 'ok',
@@ -92,7 +105,7 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Self-ping every 4 minutes to prevent Railway cold starts
+// Self-ping to prevent Railway cold starts
 const SELF_PING_INTERVAL = 4 * 60 * 1000;
 let selfPingTimer = null;
 
@@ -100,29 +113,47 @@ function startSelfPing() {
   const appUrl = process.env.RAILWAY_PUBLIC_DOMAIN
     ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}/health`
     : null;
-
-  if (!appUrl) {
-    console.log('No RAILWAY_PUBLIC_DOMAIN set — skipping self-ping');
-    return;
-  }
-
+  if (!appUrl) { console.log('No RAILWAY_PUBLIC_DOMAIN set - skipping self-ping'); return; }
   selfPingTimer = setInterval(async () => {
-    try {
-      await fetch(appUrl);
-    } catch (e) {
-      // silent fail — server will just cold start if ping fails
-    }
+    try { await fetch(appUrl); } catch (e) { /* silent */ }
   }, SELF_PING_INTERVAL);
-
   console.log(`Self-ping active: ${appUrl} every ${SELF_PING_INTERVAL / 1000}s`);
 }
 
 // Room management
-const rooms = new Map(); // roomId -> { host: ws, peers: Map<peerId, ws> }
+const rooms = new Map();
+
+// Clean up any existing room membership before re-create/re-join
+function cleanupExistingRoom(ws) {
+  if (!ws.roomId) return;
+  const room = rooms.get(ws.roomId);
+  if (!room) { ws.roomId = null; ws.role = null; return; }
+
+  if (ws.role === 'host') {
+    for (const [, peer] of room.peers) {
+      if (peer.readyState === WebSocket.OPEN) {
+        peer.send(JSON.stringify({ type: 'host-disconnected' }));
+      }
+    }
+    rooms.delete(ws.roomId);
+  } else {
+    room.peers.delete(ws.id);
+    if (room.host && room.host.readyState === WebSocket.OPEN) {
+      room.host.send(JSON.stringify({ type: 'peer-disconnected', peerId: ws.id }));
+    }
+  }
+  ws.roomId = null;
+  ws.role = null;
+}
 
 wss.on('connection', (ws) => {
   ws.id = uuidv4();
   ws.isAlive = true;
+
+  const sessionToken = generateSessionToken();
+  sessionTokens.set(sessionToken, { peerId: ws.id, createdAt: Date.now() });
+  ws.sessionToken = sessionToken;
+  ws.send(JSON.stringify({ type: 'session-token', token: sessionToken }));
 
   ws.on('pong', () => { ws.isAlive = true; });
 
@@ -132,6 +163,7 @@ wss.on('connection', (ws) => {
 
     switch (msg.type) {
       case 'create-room': {
+        cleanupExistingRoom(ws);
         const roomId = generateRoomId();
         rooms.set(roomId, { host: ws, hostId: ws.id, peers: new Map() });
         ws.roomId = roomId;
@@ -141,6 +173,7 @@ wss.on('connection', (ws) => {
       }
 
       case 'join-room': {
+        cleanupExistingRoom(ws);
         const room = rooms.get(msg.roomId);
         if (!room) {
           ws.send(JSON.stringify({ type: 'error', message: 'Room not found' }));
@@ -153,30 +186,19 @@ wss.on('connection', (ws) => {
         ws.roomId = msg.roomId;
         ws.role = 'peer';
         room.peers.set(ws.id, ws);
-
-        // Notify the peer they joined
         ws.send(JSON.stringify({ type: 'room-joined', roomId: msg.roomId, peerId: ws.id, hostId: room.hostId }));
-
-        // Notify host about new peer
         room.host.send(JSON.stringify({ type: 'peer-joined', peerId: ws.id }));
         break;
       }
 
       case 'signal': {
-        // Relay WebRTC signaling messages
         const room = rooms.get(ws.roomId);
         if (!room) return;
-
         const target = msg.to === room.hostId
           ? room.host
           : room.peers.get(msg.to);
-
         if (target && target.readyState === WebSocket.OPEN) {
-          target.send(JSON.stringify({
-            type: 'signal',
-            from: ws.id,
-            signal: msg.signal
-          }));
+          target.send(JSON.stringify({ type: 'signal', from: ws.id, signal: msg.signal }));
         }
         break;
       }
@@ -184,24 +206,8 @@ wss.on('connection', (ws) => {
   });
 
   ws.on('close', () => {
-    if (!ws.roomId) return;
-    const room = rooms.get(ws.roomId);
-    if (!room) return;
-
-    if (ws.role === 'host') {
-      // Notify all peers that host disconnected
-      for (const [, peer] of room.peers) {
-        if (peer.readyState === WebSocket.OPEN) {
-          peer.send(JSON.stringify({ type: 'host-disconnected' }));
-        }
-      }
-      rooms.delete(ws.roomId);
-    } else {
-      room.peers.delete(ws.id);
-      if (room.host && room.host.readyState === WebSocket.OPEN) {
-        room.host.send(JSON.stringify({ type: 'peer-disconnected', peerId: ws.id }));
-      }
-    }
+    if (ws.sessionToken) sessionTokens.delete(ws.sessionToken);
+    cleanupExistingRoom(ws);
   });
 });
 

@@ -1451,6 +1451,7 @@ header {
 // STATE
 // ═══════════════════════════════════════════
 let ws = null;
+let sessionToken = null;
 let myPeerId = null;
 let roomId = null;
 let isHost = false;
@@ -1617,7 +1618,8 @@ if ('serviceWorker' in navigator) {
 // Fetch ephemeral TURN credentials from our server
 async function fetchIceServers() {
   try {
-    const res = await fetch('/api/ice-servers');
+    const url = sessionToken ? '/api/ice-servers?token=' + sessionToken : '/api/ice-servers';
+    const res = await fetch(url);
     const data = await res.json();
     if (data.iceServers && data.iceServers.length > 0) {
       ICE_SERVERS = data.iceServers;
@@ -1636,7 +1638,6 @@ function connectWS() {
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
     ws = new WebSocket(`${proto}://${location.host}`);
 
-    // Timeout if WebSocket doesn't connect within 10 seconds
     const timeout = setTimeout(() => {
       ws.close();
       reject(new Error('Connection timed out'));
@@ -1644,7 +1645,7 @@ function connectWS() {
 
     ws.onopen = () => {
       clearTimeout(timeout);
-      resolve();
+      // Don't resolve yet - wait for session-token
     };
     ws.onerror = () => {
       clearTimeout(timeout);
@@ -1656,6 +1657,10 @@ function connectWS() {
     ws.onmessage = (e) => {
       const msg = JSON.parse(e.data);
       handleSignalingMessage(msg);
+      // Resolve after we get the session token (first message from server)
+      if (msg.type === 'session-token') {
+        resolve();
+      }
     };
   });
 }
@@ -1666,6 +1671,10 @@ function sendSignal(to, signal) {
 
 function handleSignalingMessage(msg) {
   switch (msg.type) {
+    case 'session-token':
+      sessionToken = msg.token;
+      break;
+
     case 'room-created':
       myPeerId = msg.peerId;
       roomId = msg.roomId;
@@ -1890,11 +1899,13 @@ async function flushIceCandidateQueue(peer) {
 // FILE TRANSFER
 // ═══════════════════════════════════════════
 let incomingFiles = {};
-let currentReceivingFileId = null;
 let activeSendAbort = new Map(); // fileId -> AbortController
 
 function setupFileChannel(channel, remotePeerId) {
   channel.binaryType = 'arraybuffer';
+
+  // Per-channel receive state — each peer's file channel tracks its own current file
+  let receivingFileId = null;
 
   channel.onmessage = (e) => {
     if (typeof e.data === 'string') {
@@ -1909,8 +1920,9 @@ function setupFileChannel(channel, remotePeerId) {
           startTime: Date.now(),
           lastSpeedUpdate: Date.now(),
           lastSpeedBytes: 0,
+          fromPeer: remotePeerId,
         };
-        currentReceivingFileId = msg.id;
+        receivingFileId = msg.id;
         addFileItem(msg.id, msg.name, msg.size, 'receiving');
       } else if (msg.type === 'file-complete') {
         const file = incomingFiles[msg.id];
@@ -1923,7 +1935,7 @@ function setupFileChannel(channel, remotePeerId) {
           sessionStats.filesReceived++;
           sessionStats.bytesReceived += file.size;
           delete incomingFiles[msg.id];
-          currentReceivingFileId = null;
+          if (receivingFileId === msg.id) receivingFileId = null;
         }
       } else if (msg.type === 'session-ended') {
         showSessionEnded('Peer ended the session');
@@ -1933,13 +1945,13 @@ function setupFileChannel(channel, remotePeerId) {
           const pct = Math.round((file.received / file.size) * 100);
           updateFileStatus(msg.id, 'cancelled', pct);
           delete incomingFiles[msg.id];
-          if (currentReceivingFileId === msg.id) currentReceivingFileId = null;
+          if (receivingFileId === msg.id) receivingFileId = null;
         }
       }
     } else {
-      // Binary chunk
-      if (currentReceivingFileId && incomingFiles[currentReceivingFileId]) {
-        const file = incomingFiles[currentReceivingFileId];
+      // Binary chunk — route to this channel's current file
+      if (receivingFileId && incomingFiles[receivingFileId]) {
+        const file = incomingFiles[receivingFileId];
         file.chunks.push(e.data);
         file.received += e.data.byteLength;
         const pct = Math.round((file.received / file.size) * 100);
@@ -1949,24 +1961,24 @@ function setupFileChannel(channel, remotePeerId) {
           const elapsed = (now - file.lastSpeedUpdate) / 1000;
           const bytesInInterval = file.received - file.lastSpeedBytes;
           const speed = bytesInInterval / elapsed;
-          updateFileProgress(currentReceivingFileId, pct, speed);
+          updateFileProgress(receivingFileId, pct, speed);
           file.lastSpeedUpdate = now;
           file.lastSpeedBytes = file.received;
         } else {
-          updateFileProgress(currentReceivingFileId, pct);
+          updateFileProgress(receivingFileId, pct);
         }
       }
     }
   };
 
   channel.onclose = () => {
-    // File channel closed — mark any in-progress transfers as interrupted
-    if (currentReceivingFileId && incomingFiles[currentReceivingFileId]) {
-      const file = incomingFiles[currentReceivingFileId];
+    // File channel closed — mark any in-progress transfer from this channel as interrupted
+    if (receivingFileId && incomingFiles[receivingFileId]) {
+      const file = incomingFiles[receivingFileId];
       const pct = Math.round((file.received / file.size) * 100);
-      updateFileStatus(currentReceivingFileId, 'interrupted', pct);
-      delete incomingFiles[currentReceivingFileId];
-      currentReceivingFileId = null;
+      updateFileStatus(receivingFileId, 'interrupted', pct);
+      delete incomingFiles[receivingFileId];
+      receivingFileId = null;
     }
   };
 }
@@ -2536,8 +2548,8 @@ function resetSessionState() {
   myPeerId = null;
   isHost = false;
   incomingFiles = {};
-  currentReceivingFileId = null;
   ws = null;
+  sessionToken = null;
   sessionStartTime = null;
   sessionStats = { filesSent: 0, filesReceived: 0, bytesSent: 0, bytesReceived: 0, messages: 0 };
   hasEverConnectedPeer = false;
@@ -2568,7 +2580,6 @@ function goHome() {
   myPeerId = null;
   isHost = false;
   incomingFiles = {};
-  currentReceivingFileId = null;
   ws = null;
   sessionStartTime = null;
   sessionStats = { filesSent: 0, filesReceived: 0, bytesSent: 0, bytesReceived: 0, messages: 0 };
@@ -2607,8 +2618,8 @@ function hideJoinModal() {
 async function createRoom() {
   try {
     updateStatus('connecting');
-    await fetchIceServers();
     await connectWS();
+    await fetchIceServers();
     ws.send(JSON.stringify({ type: 'create-room' }));
     isHost = true;
   } catch (err) {
@@ -2616,6 +2627,7 @@ async function createRoom() {
     setTimeout(async () => {
       try {
         await connectWS();
+        await fetchIceServers();
         ws.send(JSON.stringify({ type: 'create-room' }));
         isHost = true;
       } catch (err2) {
@@ -2635,8 +2647,8 @@ async function joinRoom() {
   hideJoinModal();
   try {
     updateStatus('connecting');
-    await fetchIceServers();
     await connectWS();
+    await fetchIceServers();
     roomId = code;
     isHost = false;
     ws.send(JSON.stringify({ type: 'join-room', roomId: code }));
@@ -2645,6 +2657,7 @@ async function joinRoom() {
     setTimeout(async () => {
       try {
         await connectWS();
+        await fetchIceServers();
         roomId = code;
         isHost = false;
         ws.send(JSON.stringify({ type: 'join-room', roomId: code }));
@@ -2792,8 +2805,8 @@ window.addEventListener('load', () => {
 
     (async function tryConnect(attempt) {
       try {
-        await fetchIceServers();
         await connectWS();
+        await fetchIceServers();
         ws.send(JSON.stringify({ type: 'join-room', roomId: hash }));
       } catch (err) {
         if (attempt < 3) {
