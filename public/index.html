@@ -619,6 +619,7 @@ header {
 }
 .file-status.complete { color: var(--success); }
 .file-status.sending { color: var(--accent-bright); }
+.file-status.interrupted { color: var(--danger); }
 
 /* ═══════════════════════════════════════════ */
 /* ─── Chat Panel ─── */
@@ -1794,9 +1795,11 @@ function setupFileChannel(channel, remotePeerId) {
           delete incomingFiles[msg.id];
           currentReceivingFileId = null;
         }
+      } else if (msg.type === 'session-ended') {
+        showSessionEnded('Peer ended the session');
       }
     } else {
-      // Binary chunk — append to the file we're currently receiving
+      // Binary chunk
       if (currentReceivingFileId && incomingFiles[currentReceivingFileId]) {
         const file = incomingFiles[currentReceivingFileId];
         file.chunks.push(e.data);
@@ -1804,7 +1807,6 @@ function setupFileChannel(channel, remotePeerId) {
         const pct = Math.round((file.received / file.size) * 100);
         const now = Date.now();
 
-        // Update speed every 500ms
         if (now - file.lastSpeedUpdate >= 500) {
           const elapsed = (now - file.lastSpeedUpdate) / 1000;
           const bytesInInterval = file.received - file.lastSpeedBytes;
@@ -1816,6 +1818,17 @@ function setupFileChannel(channel, remotePeerId) {
           updateFileProgress(currentReceivingFileId, pct);
         }
       }
+    }
+  };
+
+  channel.onclose = () => {
+    // File channel closed — mark any in-progress transfers as interrupted
+    if (currentReceivingFileId && incomingFiles[currentReceivingFileId]) {
+      const file = incomingFiles[currentReceivingFileId];
+      const pct = Math.round((file.received / file.size) * 100);
+      updateFileStatus(currentReceivingFileId, 'interrupted', pct);
+      delete incomingFiles[currentReceivingFileId];
+      currentReceivingFileId = null;
     }
   };
 }
@@ -1924,11 +1937,20 @@ function setupChatChannel(channel) {
         playChime('chat');
         sendNotification('New message', msg.text);
         sessionStats.messages++;
+      } else if (msg.type === 'session-ended') {
+        // Peer explicitly ended the session — show immediately, no grace period
+        showSessionEnded('Peer ended the session');
       }
     } catch {}
   };
 
   channel.onopen = () => enableChat();
+
+  channel.onclose = () => {
+    // Chat channel closed — if we haven't already shown session ended,
+    // disable chat and let the connection state handler deal with the rest
+    disableChat();
+  };
 }
 
 function sendChatMessage() {
@@ -2065,11 +2087,17 @@ function formatSpeed(bytesPerSec) {
   return Math.round(bytesPerSec) + ' B/s';
 }
 
-function updateFileStatus(id, status) {
+function updateFileStatus(id, status, pct) {
   const el = document.getElementById(`status-${id}`);
   if (el) {
     el.className = 'file-status ' + status;
-    el.textContent = status === 'complete' ? '✓ Done' : status;
+    if (status === 'complete') {
+      el.textContent = '✓ Done';
+    } else if (status === 'interrupted') {
+      el.textContent = pct !== undefined ? `✕ Failed at ${pct}%` : '✕ Failed';
+    } else {
+      el.textContent = status;
+    }
   }
   const bar = document.getElementById(`progress-${id}`);
   if (bar && status === 'complete') bar.style.width = '100%';
@@ -2188,16 +2216,28 @@ function handlePeerGone(who) {
 
 function endSession() {
   clearTimeout(peerGoneTimer);
-  // Close all peer connections
-  for (const [, peer] of peers) {
-    clearTimeout(peer.connectionTimer);
-    clearTimeout(peer.disconnectTimer);
-    peer.pc.close();
-  }
-  peers.clear();
-  if (ws) ws.close();
 
-  showSessionEnded('You ended the session');
+  // Send explicit end signal via data channels so receiver knows immediately
+  const endMsg = JSON.stringify({ type: 'session-ended' });
+  for (const [, peer] of peers) {
+    try {
+      if (peer.chatChannel && peer.chatChannel.readyState === 'open') {
+        peer.chatChannel.send(endMsg);
+      }
+    } catch {}
+  }
+
+  // Small delay to let the message send before closing everything
+  setTimeout(() => {
+    for (const [, peer] of peers) {
+      clearTimeout(peer.connectionTimer);
+      clearTimeout(peer.disconnectTimer);
+      peer.pc.close();
+    }
+    peers.clear();
+    if (ws) ws.close();
+    showSessionEnded('You ended the session');
+  }, 100);
 }
 
 function showSessionEnded(reason, isStaleRoom = false) {
