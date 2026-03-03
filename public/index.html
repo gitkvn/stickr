@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
 <title>Stickr — P2P File Sharing & Chat</title>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="manifest" href="/manifest.json">
+<link rel="apple-touch-icon" href="/icon-192.png">
 <meta name="description" content="Share files directly and chat privately. Peer-to-peer encrypted file sharing with no uploads, no storage, no sign-ups.">
 <meta name="theme-color" content="#0a0a0f">
 <meta property="og:title" content="Stickr — P2P File Sharing & Chat">
@@ -1143,6 +1145,83 @@ let ICE_SERVERS = [
   { urls: 'stun:stun1.l.google.com:19302' },
 ];
 
+// ═══════════════════════════════════════════
+// SOUND & NOTIFICATIONS
+// ═══════════════════════════════════════════
+let audioCtx = null;
+let notificationsEnabled = false;
+
+function getAudioContext() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  return audioCtx;
+}
+
+function playChime(type) {
+  try {
+    const ctx = getAudioContext();
+    if (ctx.state === 'suspended') ctx.resume();
+
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    if (type === 'file') {
+      // Two-tone rising chime for file received
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(587, ctx.currentTime);       // D5
+      osc.frequency.setValueAtTime(784, ctx.currentTime + 0.12); // G5
+      gain.gain.setValueAtTime(0.15, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.35);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.35);
+    } else {
+      // Single soft tone for chat message
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(660, ctx.currentTime); // E5
+      gain.gain.setValueAtTime(0.1, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.2);
+    }
+  } catch (err) {
+    // Audio not available — fail silently
+  }
+}
+
+function requestNotificationPermission() {
+  if ('Notification' in window && Notification.permission === 'default') {
+    Notification.requestPermission().then((perm) => {
+      notificationsEnabled = perm === 'granted';
+    });
+  } else if ('Notification' in window) {
+    notificationsEnabled = Notification.permission === 'granted';
+  }
+}
+
+function sendNotification(title, body) {
+  if (!notificationsEnabled || document.visibilityState === 'visible') return;
+  try {
+    new Notification(title, {
+      body,
+      icon: '/icon-192.png',
+      badge: '/icon-192.png',
+      tag: 'stickr-' + Date.now(),
+    });
+  } catch (err) {
+    // Notifications not supported — fail silently
+  }
+}
+
+// ═══════════════════════════════════════════
+// SERVICE WORKER (PWA)
+// ═══════════════════════════════════════════
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
+
 // Fetch ephemeral TURN credentials from our server
 async function fetchIceServers() {
   try {
@@ -1286,6 +1365,7 @@ function createPeerConnection(remotePeerId, initiator, retryCount = 0) {
       updateStatus('connected');
       addSystemMessage('Peer connected — you can now chat and share files!');
       enableChat();
+      requestNotificationPermission();
     } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
       clearTimeout(peerObj.connectionTimer);
       updateStatus('disconnected');
@@ -1410,6 +1490,8 @@ function setupFileChannel(channel, remotePeerId) {
           const blob = new Blob(file.chunks, { type: file.mimeType || 'application/octet-stream' });
           downloadBlob(blob, file.name);
           updateFileStatus(msg.id, 'complete');
+          playChime('file');
+          sendNotification('File received', file.name);
           delete incomingFiles[msg.id];
           currentReceivingFileId = null;
         }
@@ -1496,6 +1578,8 @@ function setupChatChannel(channel) {
       const msg = JSON.parse(e.data);
       if (msg.type === 'chat') {
         addChatMessage(msg.text, 'received', msg.time);
+        playChime('chat');
+        sendNotification('New message', msg.text);
       }
     } catch {}
   };
