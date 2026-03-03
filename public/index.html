@@ -620,6 +620,24 @@ header {
 .file-status.complete { color: var(--success); }
 .file-status.sending { color: var(--accent-bright); }
 .file-status.interrupted { color: var(--danger); }
+.file-status.cancelled { color: var(--danger); }
+.file-status.queued { color: var(--text-muted); }
+
+.file-cancel {
+  font-size: 14px;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 4px;
+  transition: color 0.2s, background 0.2s;
+  flex-shrink: 0;
+  line-height: 1;
+  margin-left: 4px;
+}
+.file-cancel:hover {
+  color: var(--danger);
+  background: rgba(255,107,107,0.1);
+}
 
 /* ═══════════════════════════════════════════ */
 /* ─── Chat Panel ─── */
@@ -1762,6 +1780,7 @@ async function flushIceCandidateQueue(peer) {
 // ═══════════════════════════════════════════
 let incomingFiles = {};
 let currentReceivingFileId = null;
+let activeSendAbort = new Map(); // fileId -> AbortController
 
 function setupFileChannel(channel, remotePeerId) {
   channel.binaryType = 'arraybuffer';
@@ -1797,6 +1816,14 @@ function setupFileChannel(channel, remotePeerId) {
         }
       } else if (msg.type === 'session-ended') {
         showSessionEnded('Peer ended the session');
+      } else if (msg.type === 'file-cancelled') {
+        const file = incomingFiles[msg.id];
+        if (file) {
+          const pct = Math.round((file.received / file.size) * 100);
+          updateFileStatus(msg.id, 'cancelled', pct);
+          delete incomingFiles[msg.id];
+          if (currentReceivingFileId === msg.id) currentReceivingFileId = null;
+        }
       }
     } else {
       // Binary chunk
@@ -1835,6 +1862,8 @@ function setupFileChannel(channel, remotePeerId) {
 
 async function sendFile(file) {
   const fileId = 'f-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6);
+  const abortCtrl = new AbortController();
+  activeSendAbort.set(fileId, abortCtrl);
 
   addFileItem(fileId, file.name, file.size, 'sending');
 
@@ -1851,62 +1880,107 @@ async function sendFile(file) {
       mimeType: file.type,
     }));
 
-    // Send chunks with smart backpressure
     const reader = file.stream().getReader();
     let sent = 0;
     const startTime = Date.now();
     let lastSpeedUpdate = startTime;
     let lastSpeedBytes = 0;
-    const BUFFER_HIGH = 1024 * 1024; // 1MB buffer threshold
+    let lastBufferCheck = Date.now();
+    let lastBufferAmount = 0;
+    const BUFFER_THRESHOLD = 256 * 1024; // 256KB — low enough for mobile
+    const STALL_TIMEOUT = 20000; // 20 seconds with no buffer drain = stalled
+    let aborted = false;
 
-    // Use bufferedAmountLowThreshold for efficient backpressure
-    ch.bufferedAmountLowThreshold = CHUNK_SIZE * 2;
-
-    const waitForDrain = () => new Promise((resolve) => {
-      if (ch.bufferedAmount <= ch.bufferedAmountLowThreshold) {
-        resolve();
-      } else {
-        ch.onbufferedamountlow = () => {
-          ch.onbufferedamountlow = null;
-          resolve();
-        };
-        // Fallback timeout in case event doesn't fire
-        setTimeout(resolve, 100);
-      }
-    });
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      let offset = 0;
-      while (offset < value.byteLength) {
-        const chunk = value.slice(offset, offset + CHUNK_SIZE);
-
-        // Wait if buffer is full
-        if (ch.bufferedAmount > BUFFER_HIGH) {
-          await waitForDrain();
+    try {
+      while (true) {
+        // Check abort
+        if (abortCtrl.signal.aborted) {
+          aborted = true;
+          reader.cancel();
+          break;
         }
 
-        ch.send(chunk);
-        sent += chunk.byteLength;
-        offset += chunk.byteLength;
+        const { done, value } = await reader.read();
+        if (done) break;
 
-        const pct = Math.round((sent / file.size) * 100);
-        const now = Date.now();
+        let offset = 0;
+        while (offset < value.byteLength) {
+          if (abortCtrl.signal.aborted) {
+            aborted = true;
+            break;
+          }
 
-        // Update speed every 500ms
-        if (now - lastSpeedUpdate >= 500) {
-          const elapsed = (now - lastSpeedUpdate) / 1000;
-          const bytesInInterval = sent - lastSpeedBytes;
-          const speed = bytesInInterval / elapsed;
-          updateFileProgress(fileId, pct, speed);
-          lastSpeedUpdate = now;
-          lastSpeedBytes = sent;
-        } else {
-          updateFileProgress(fileId, pct);
+          const chunk = value.slice(offset, offset + CHUNK_SIZE);
+
+          // Polling backpressure — wait until buffer drains below threshold
+          while (ch.bufferedAmount > BUFFER_THRESHOLD) {
+            if (abortCtrl.signal.aborted) { aborted = true; break; }
+
+            // Stall detection — if buffer hasn't decreased in 20s, connection is dead
+            const now = Date.now();
+            if (ch.bufferedAmount >= lastBufferAmount && now - lastBufferCheck > STALL_TIMEOUT) {
+              console.warn('Transfer stalled — buffer not draining');
+              abortCtrl.abort();
+              aborted = true;
+              break;
+            }
+            if (ch.bufferedAmount < lastBufferAmount) {
+              // Buffer is draining, reset stall timer
+              lastBufferCheck = now;
+              lastBufferAmount = ch.bufferedAmount;
+            }
+
+            // Adaptive wait — longer when buffer is very full, shorter when almost drained
+            const fillRatio = ch.bufferedAmount / BUFFER_THRESHOLD;
+            const waitMs = fillRatio > 3 ? 100 : fillRatio > 1.5 ? 50 : 20;
+            await new Promise(r => setTimeout(r, waitMs));
+          }
+
+          if (aborted) break;
+
+          ch.send(chunk);
+          sent += chunk.byteLength;
+          offset += chunk.byteLength;
+          lastBufferAmount = ch.bufferedAmount;
+          lastBufferCheck = Date.now();
+
+          // Calculate progress accounting for buffered data
+          const actualSent = Math.max(0, sent - ch.bufferedAmount);
+          const pct = Math.round((actualSent / file.size) * 100);
+          const now = Date.now();
+
+          if (now - lastSpeedUpdate >= 500) {
+            const elapsed = (now - lastSpeedUpdate) / 1000;
+            const bytesInInterval = actualSent - lastSpeedBytes;
+            const speed = Math.max(0, bytesInInterval / elapsed);
+            updateFileProgress(fileId, pct, speed);
+            lastSpeedUpdate = now;
+            lastSpeedBytes = actualSent;
+          } else {
+            updateFileProgress(fileId, pct);
+          }
         }
+
+        if (aborted) break;
       }
+    } catch (err) {
+      console.error('sendFile error:', err);
+      aborted = true;
+    }
+
+    if (aborted) {
+      // Tell receiver to discard partial file
+      try {
+        if (ch.readyState === 'open') {
+          ch.send(JSON.stringify({ type: 'file-cancelled', id: fileId }));
+        }
+      } catch {}
+
+      const pct = Math.round((sent / file.size) * 100);
+      const isStall = pct > 0 && abortCtrl.signal.aborted;
+      updateFileStatus(fileId, 'cancelled', pct);
+      activeSendAbort.delete(fileId);
+      return; // Skip remaining peers — transfer is done
     }
 
     ch.send(JSON.stringify({ type: 'file-complete', id: fileId }));
@@ -1914,6 +1988,13 @@ async function sendFile(file) {
     sessionStats.filesSent++;
     sessionStats.bytesSent += file.size;
   }
+
+  activeSendAbort.delete(fileId);
+}
+
+function cancelSend(fileId) {
+  const ctrl = activeSendAbort.get(fileId);
+  if (ctrl) ctrl.abort();
 }
 
 function downloadBlob(blob, filename) {
@@ -2053,6 +2134,7 @@ function addFileItem(id, name, size, status) {
   const div = document.createElement('div');
   div.className = 'file-item';
   div.id = `file-${id}`;
+  const cancelBtn = status === 'sending' ? `<span class="file-cancel" id="cancel-${id}" onclick="cancelSend('${id}')" title="Cancel transfer">✕</span>` : '';
   div.innerHTML = `
     <div class="file-type-icon">${getFileIcon(name)}</div>
     <div class="file-info">
@@ -2060,7 +2142,8 @@ function addFileItem(id, name, size, status) {
       <div class="file-size">${formatSize(size)}</div>
       <div class="file-progress"><div class="file-progress-bar" id="progress-${id}"></div></div>
     </div>
-    <div class="file-status ${status}" id="status-${id}">${status === 'sending' ? 'Sending...' : 'Receiving...'}</div>
+    <div class="file-status ${status}" id="status-${id}">${status === 'sending' ? 'Sending...' : status === 'queued' ? 'Queued' : 'Receiving...'}</div>
+    ${cancelBtn}
   `;
   list.appendChild(div);
 }
@@ -2095,12 +2178,20 @@ function updateFileStatus(id, status, pct) {
       el.textContent = '✓ Done';
     } else if (status === 'interrupted') {
       el.textContent = pct !== undefined ? `✕ Failed at ${pct}%` : '✕ Failed';
+    } else if (status === 'cancelled') {
+      el.textContent = pct !== undefined && pct > 0 ? `✕ Cancelled at ${pct}%` : '✕ Cancelled';
     } else {
       el.textContent = status;
     }
   }
   const bar = document.getElementById(`progress-${id}`);
   if (bar && status === 'complete') bar.style.width = '100%';
+
+  // Hide cancel button when transfer is no longer active
+  if (status === 'complete' || status === 'interrupted' || status === 'cancelled') {
+    const cancelBtn = document.getElementById(`cancel-${id}`);
+    if (cancelBtn) cancelBtn.remove();
+  }
 }
 
 function updateStatus(state) {
@@ -2340,6 +2431,9 @@ function resetSessionState() {
   sessionStats = { filesSent: 0, filesReceived: 0, bytesSent: 0, bytesReceived: 0, messages: 0 };
   hasEverConnectedPeer = false;
   isJoiningRoom = false;
+  // Abort any in-progress transfers
+  for (const [, ctrl] of activeSendAbort) ctrl.abort();
+  activeSendAbort.clear();
 }
 
 function goHome() {
@@ -2369,6 +2463,8 @@ function goHome() {
   sessionStats = { filesSent: 0, filesReceived: 0, bytesSent: 0, bytesReceived: 0, messages: 0 };
   hasEverConnectedPeer = false;
   isJoiningRoom = false;
+  for (const [, ctrl] of activeSendAbort) ctrl.abort();
+  activeSendAbort.clear();
 
   // Reset room UI
   document.getElementById('file-list').innerHTML = '';
@@ -2541,8 +2637,21 @@ function handleFiles(files) {
 }
 
 async function sendFilesSerially(files) {
-  for (const file of files) {
-    await sendFile(file);
+  // Show queued status for all files after the first
+  const queueIds = [];
+  for (let i = 1; i < files.length; i++) {
+    const qid = 'q-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6) + '-' + i;
+    addFileItem(qid, files[i].name, files[i].size, 'queued');
+    queueIds.push(qid);
+  }
+
+  for (let i = 0; i < files.length; i++) {
+    // Remove queued placeholder and send the real file
+    if (i > 0 && queueIds[i - 1]) {
+      const placeholder = document.getElementById(`file-${queueIds[i - 1]}`);
+      if (placeholder) placeholder.remove();
+    }
+    await sendFile(files[i]);
   }
 }
 
