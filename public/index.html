@@ -1585,8 +1585,7 @@ function sendNotification(title, body) {
 // ═══════════════════════════════════════════
 function initTheme() {
   const saved = localStorage.getItem('stickr-theme');
-  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-  const theme = saved || (prefersDark ? 'dark' : 'light');
+  const theme = saved || 'dark';
   applyTheme(theme);
 }
 
