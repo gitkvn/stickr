@@ -11,7 +11,25 @@ const wss = new WebSocket.Server({ server });
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ICE servers endpoint — generates ephemeral TURN credentials from Cloudflare
+// Simple in-memory rate limiter: max 10 requests per IP per minute
+const iceRateLimit = new Map(); // ip -> { count, resetAt }
+const ICE_RATE_LIMIT = 10;
+const ICE_RATE_WINDOW = 60 * 1000; // 1 minute
+
 app.get('/api/ice-servers', async (req, res) => {
+  // Rate limit check
+  const ip = req.ip;
+  const now = Date.now();
+  let entry = iceRateLimit.get(ip);
+  if (!entry || now > entry.resetAt) {
+    entry = { count: 0, resetAt: now + ICE_RATE_WINDOW };
+    iceRateLimit.set(ip, entry);
+  }
+  entry.count++;
+  if (entry.count > ICE_RATE_LIMIT) {
+    return res.status(429).json({ error: 'Too many requests — try again shortly' });
+  }
+
   const TURN_KEY_ID = process.env.TURN_KEY_ID;
   const TURN_KEY_API_TOKEN = process.env.TURN_KEY_API_TOKEN;
 
@@ -35,7 +53,7 @@ app.get('/api/ice-servers', async (req, res) => {
           'Authorization': `Bearer ${TURN_KEY_API_TOKEN}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ ttl: 86400 }), // 24 hour expiry
+        body: JSON.stringify({ ttl: 3600 }), // 1 hour expiry
       }
     );
 
@@ -56,6 +74,14 @@ app.get('/api/ice-servers', async (req, res) => {
     });
   }
 });
+
+// Clean up expired rate limit entries every 5 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, entry] of iceRateLimit) {
+    if (now > entry.resetAt) iceRateLimit.delete(ip);
+  }
+}, 5 * 60 * 1000);
 
 // Health check endpoint — keeps Railway from sleeping
 app.get('/health', (req, res) => {

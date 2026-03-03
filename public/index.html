@@ -1276,10 +1276,20 @@ function createPeerConnection(remotePeerId, initiator, retryCount = 0) {
     setupFileChannel(fileChannel, remotePeerId);
     setupChatChannel(chatChannel);
 
-    pc.createOffer().then(offer => {
-      updateStatus('negotiating');
-      pc.setLocalDescription(offer);
-      sendSignal(remotePeerId, { type: 'offer', sdp: offer });
+    pc.createOffer().then(async (offer) => {
+      try {
+        updateStatus('negotiating');
+        await pc.setLocalDescription(offer);
+        sendSignal(remotePeerId, { type: 'offer', sdp: offer });
+      } catch (err) {
+        console.error('Failed to set local description:', err.message);
+        updateStatus('disconnected');
+        addSystemMessage('Connection setup failed — try refreshing.');
+      }
+    }).catch((err) => {
+      console.error('Failed to create offer:', err.message);
+      updateStatus('disconnected');
+      addSystemMessage('Connection setup failed — try refreshing.');
     });
   } else {
     pc.ondatachannel = (e) => {
@@ -1686,7 +1696,15 @@ function goHome() {
   document.body.classList.remove('in-room');
   history.pushState(null, '', location.pathname);
 
-  // Reset room state
+  // Reset connection & transfer state
+  roomId = null;
+  myPeerId = null;
+  isHost = false;
+  incomingFiles = {};
+  currentReceivingFileId = null;
+  ws = null;
+
+  // Reset room UI
   document.getElementById('file-list').innerHTML = '';
   document.getElementById('chat-messages').innerHTML = `
     <div class="empty-chat">
