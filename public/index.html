@@ -784,6 +784,13 @@ header {
 .btn-copy:hover { border-color: var(--accent); }
 .btn-copy.copied { background: var(--success); border-color: var(--success); color: #0a0a0f; }
 
+.btn-qr {
+  font-size: 16px;
+  padding: 10px 12px;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
 /* ─── Error Toast ─── */
 .toast {
   position: fixed;
@@ -877,6 +884,16 @@ header {
   cursor: pointer;
 }
 
+.mobile-qr-btn {
+  font-size: 14px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: color 0.2s;
+}
+.mobile-qr-btn:hover { color: var(--accent-bright); }
+
 @media (max-width: 860px) {
   .mobile-tabs {
     display: flex;
@@ -952,6 +969,7 @@ header {
   }
 }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
 <body>
 
@@ -1023,6 +1041,7 @@ header {
       <div class="mobile-status" id="mobile-status">
         <div class="status-dot" id="mobile-status-dot"></div>
         <span class="room-code-mini" id="mobile-room-code" onclick="copyRoomCode()"></span>
+        <span class="mobile-qr-btn" onclick="showQrModal()">⣿</span>
       </div>
     </div>
     <div class="room-layout">
@@ -1051,6 +1070,7 @@ header {
           <span class="share-label">Share Link</span>
           <input class="share-link-input" id="share-link" readonly onclick="this.select()">
           <button class="btn-copy" id="copy-btn" onclick="copyLink()">Copy</button>
+          <button class="btn-copy btn-qr" id="qr-btn" onclick="showQrModal()" title="Show QR Code">⣿</button>
         </div>
       </div>
 
@@ -1089,6 +1109,18 @@ header {
       <button class="btn btn-secondary" onclick="hideJoinModal()">Cancel</button>
       <button class="btn btn-primary" onclick="joinRoom()">Connect</button>
     </div>
+  </div>
+</div>
+
+<!-- QR Modal -->
+<div class="modal-overlay" id="qr-modal">
+  <div class="modal" style="text-align:center">
+    <h2>Scan to Join</h2>
+    <p>Point a camera at this code to join the room instantly</p>
+    <canvas id="qr-canvas" style="margin:0 auto 20px; border-radius:12px; max-width:220px; display:none;"></canvas>
+    <div id="qr-container" style="margin:0 auto 20px; display:inline-block; border-radius:12px; overflow:hidden; background:#fff; padding:12px;"></div>
+    <div style="font-family:var(--font-mono); font-size:14px; color:var(--accent-bright); margin-bottom:20px; letter-spacing:3px;" id="qr-room-code"></div>
+    <button class="btn btn-secondary" onclick="hideQrModal()" style="width:100%; justify-content:center;">Close</button>
   </div>
 </div>
 
@@ -1925,6 +1957,36 @@ window.addEventListener('load', () => {
 document.getElementById('join-modal').addEventListener('click', (e) => {
   if (e.target.id === 'join-modal') hideJoinModal();
 });
+document.getElementById('qr-modal').addEventListener('click', (e) => {
+  if (e.target.id === 'qr-modal') hideQrModal();
+});
+
+// ─── QR Code ───
+let qrInstance = null;
+
+function showQrModal() {
+  const link = `${location.origin}/#${roomId}`;
+  const container = document.getElementById('qr-container');
+  const codeDisplay = document.getElementById('qr-room-code');
+
+  // Clear previous QR
+  container.innerHTML = '';
+  qrInstance = new QRCode(container, {
+    text: link,
+    width: 180,
+    height: 180,
+    colorDark: '#0a0a0f',
+    colorLight: '#ffffff',
+    correctLevel: QRCode.CorrectLevel.M,
+  });
+
+  codeDisplay.textContent = roomId;
+  document.getElementById('qr-modal').classList.add('active');
+}
+
+function hideQrModal() {
+  document.getElementById('qr-modal').classList.remove('active');
+}
 </script>
 </body>
 </html>
