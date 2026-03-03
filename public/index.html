@@ -1561,7 +1561,8 @@ function handleSignalingMessage(msg) {
       break;
 
     case 'host-disconnected':
-      showSessionEnded('Peer ended the session');
+      // Grace period — host WS closed, but give a moment in case of reconnect
+      handlePeerGone('host');
       break;
 
     case 'peer-disconnected':
@@ -1570,7 +1571,7 @@ function handleSignalingMessage(msg) {
         peer.pc.close();
         peers.delete(msg.peerId);
       }
-      showSessionEnded('Peer disconnected');
+      handlePeerGone('peer');
       break;
 
     case 'error':
@@ -1607,7 +1608,7 @@ function createPeerConnection(remotePeerId, initiator, retryCount = 0) {
     iceServers: ICE_SERVERS,
     iceCandidatePoolSize: 4,  // pre-gather candidates for faster connection
   });
-  const peerObj = { pc, dataChannel: null, chatChannel: null, connectionTimer: null, iceCandidateQueue: [], remoteDescriptionSet: false };
+  const peerObj = { pc, dataChannel: null, chatChannel: null, connectionTimer: null, disconnectTimer: null, iceCandidateQueue: [], remoteDescriptionSet: false };
   peers.set(remotePeerId, peerObj);
 
   // Start connection timeout — capped retries
@@ -1637,14 +1638,29 @@ function createPeerConnection(remotePeerId, initiator, retryCount = 0) {
   pc.onconnectionstatechange = () => {
     if (pc.connectionState === 'connected') {
       clearTimeout(peerObj.connectionTimer);
+      clearTimeout(peerObj.disconnectTimer);
       hasEverConnectedPeer = true;
       updateStatus('connected');
       addSystemMessage('Peer connected — you can now chat and share files!');
       enableChat();
       requestNotificationPermission();
-    } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+    } else if (pc.connectionState === 'disconnected') {
+      // Transient — WebRTC may recover on its own
       clearTimeout(peerObj.connectionTimer);
+      updateStatus('retrying');
+      peerObj.disconnectTimer = setTimeout(() => {
+        if (pc.connectionState !== 'connected') {
+          updateStatus('disconnected');
+          addSystemMessage('Connection lost — peer may have left.');
+          disableChat();
+        }
+      }, 10000);
+    } else if (pc.connectionState === 'failed') {
+      clearTimeout(peerObj.connectionTimer);
+      clearTimeout(peerObj.disconnectTimer);
       updateStatus('disconnected');
+      addSystemMessage('Connection lost.');
+      disableChat();
     }
   };
 
@@ -2081,10 +2097,41 @@ function switchMobileTab(tab) {
   }
 }
 
+// ═══════════════════════════════════════════
+// SESSION END HANDLING
+// ═══════════════════════════════════════════
+let peerGoneTimer = null;
+
+function handlePeerGone(who) {
+  // Server confirmed peer/host WebSocket closed.
+  // Show a warning but give a short grace period before showing ended screen,
+  // in case of brief network interruption.
+  disableChat();
+  updateStatus('disconnected');
+  addSystemMessage(who === 'host' ? 'Host disconnected — waiting to see if they reconnect...' : 'Peer disconnected — waiting to see if they reconnect...');
+
+  clearTimeout(peerGoneTimer);
+  peerGoneTimer = setTimeout(() => {
+    // If still no active peers, show session ended
+    let anyConnected = false;
+    for (const [, p] of peers) {
+      if (p.pc.connectionState === 'connected') {
+        anyConnected = true;
+        break;
+      }
+    }
+    if (!anyConnected) {
+      showSessionEnded(who === 'host' ? 'Host left the session' : 'Peer left the session');
+    }
+  }, 5000);
+}
+
 function endSession() {
+  clearTimeout(peerGoneTimer);
   // Close all peer connections
   for (const [, peer] of peers) {
     clearTimeout(peer.connectionTimer);
+    clearTimeout(peer.disconnectTimer);
     peer.pc.close();
   }
   peers.clear();
@@ -2094,9 +2141,11 @@ function endSession() {
 }
 
 function showSessionEnded(reason, isStaleRoom = false) {
+  clearTimeout(peerGoneTimer);
   // Clean up connections if not already done
   for (const [, peer] of peers) {
     clearTimeout(peer.connectionTimer);
+    clearTimeout(peer.disconnectTimer);
     try { peer.pc.close(); } catch {}
   }
   peers.clear();
@@ -2194,9 +2243,11 @@ function resetSessionState() {
 }
 
 function goHome() {
+  clearTimeout(peerGoneTimer);
   // Clean up connections and cancel pending timers
   for (const [, peer] of peers) {
     clearTimeout(peer.connectionTimer);
+    clearTimeout(peer.disconnectTimer);
     peer.pc.close();
   }
   peers.clear();
