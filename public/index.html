@@ -6,7 +6,7 @@
 <title>Stickr — P2P File Sharing & Chat</title>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="manifest" href="/manifest.json">
-<link rel="apple-touch-icon" href="/icon-192.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <meta name="description" content="Share files directly and chat privately. Peer-to-peer encrypted file sharing with no uploads, no storage, no sign-ups.">
 <meta name="theme-color" content="#0a0a0f">
 <meta property="og:title" content="Stickr — P2P File Sharing & Chat">
@@ -811,6 +811,90 @@ header {
 }
 .toast.show { transform: translateX(-50%) translateY(0); }
 
+/* ─── Notification Permission Banner ─── */
+#notif-banner {
+  position: fixed;
+  top: 80px;
+  left: 50%;
+  transform: translateX(-50%) translateY(-20px);
+  opacity: 0;
+  z-index: 300;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  pointer-events: none;
+  width: 90%;
+  max-width: 440px;
+}
+#notif-banner.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+  pointer-events: auto;
+}
+.notif-banner-content {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 14px;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+  backdrop-filter: blur(20px);
+}
+.notif-banner-icon {
+  font-size: 24px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.notif-banner-text {
+  flex: 1;
+  min-width: 0;
+}
+.notif-banner-text strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.notif-banner-text span {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+.notif-banner-actions {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+}
+.notif-btn-allow {
+  flex: 1;
+  padding: 10px 16px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  background: var(--gradient-1);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+.notif-btn-allow:hover { transform: translateY(-1px); }
+.notif-btn-dismiss {
+  flex: 1;
+  padding: 10px 16px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+.notif-btn-dismiss:hover { border-color: var(--accent); }
+
 /* ─── Scrollbar ─── */
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
@@ -1192,12 +1276,53 @@ function playChime(type) {
 }
 
 function requestNotificationPermission() {
-  if ('Notification' in window && Notification.permission === 'default') {
-    Notification.requestPermission().then((perm) => {
-      notificationsEnabled = perm === 'granted';
-    });
-  } else if ('Notification' in window) {
-    notificationsEnabled = Notification.permission === 'granted';
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'granted') {
+    notificationsEnabled = true;
+    return;
+  }
+  if (Notification.permission === 'denied') return;
+
+  // Show a friendly in-app banner before the browser prompt
+  showNotificationBanner();
+}
+
+function showNotificationBanner() {
+  // Don't show if already exists
+  if (document.getElementById('notif-banner')) return;
+
+  const banner = document.createElement('div');
+  banner.id = 'notif-banner';
+  banner.innerHTML = `
+    <div class="notif-banner-content">
+      <span class="notif-banner-icon">🔔</span>
+      <div class="notif-banner-text">
+        <strong>Enable notifications?</strong>
+        <span>Get notified when files arrive or new messages come in, even when this tab is in the background.</span>
+      </div>
+      <div class="notif-banner-actions">
+        <button class="notif-btn-allow" onclick="acceptNotifications()">Allow</button>
+        <button class="notif-btn-dismiss" onclick="dismissNotificationBanner()">Not now</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(banner);
+  // Trigger animation
+  requestAnimationFrame(() => banner.classList.add('show'));
+}
+
+function acceptNotifications() {
+  dismissNotificationBanner();
+  Notification.requestPermission().then((perm) => {
+    notificationsEnabled = perm === 'granted';
+  });
+}
+
+function dismissNotificationBanner() {
+  const banner = document.getElementById('notif-banner');
+  if (banner) {
+    banner.classList.remove('show');
+    setTimeout(() => banner.remove(), 300);
   }
 }
 
