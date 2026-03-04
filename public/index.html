@@ -1723,13 +1723,21 @@ function handleSignalingMessage(msg) {
       createPeerConnection(msg.hostId, true);
       break;
 
+    case 'rejoin-confirmed':
+      // Host successfully reclaimed their room — just update peerId, don't reset UI
+      myPeerId = msg.peerId;
+      console.log('[session] rejoin confirmed, new peerId:', msg.peerId);
+      break;
+
     case 'peer-joined':
       // Host receives new peer — cancel any pending disconnect timer
       clearTimeout(peerGoneTimer);
       // Clean up any dead connections first
       for (const [id, p] of peers) {
-        if (p.pc.connectionState === 'failed' || p.pc.connectionState === 'closed') {
+        if (p.pc.connectionState === 'failed' || p.pc.connectionState === 'closed' || p.pc.connectionState === 'disconnected') {
           console.log('[session] cleaning up dead peer:', id);
+          clearTimeout(p.connectionTimer);
+          clearTimeout(p.disconnectTimer);
           try { p.pc.close(); } catch {}
           peers.delete(id);
         }
@@ -1753,6 +1761,8 @@ function handleSignalingMessage(msg) {
       clearTimeout(peerGoneTimer);
       // Clean up old dead peer connections
       for (const [id, p] of peers) {
+        clearTimeout(p.connectionTimer);
+        clearTimeout(p.disconnectTimer);
         try { p.pc.close(); } catch {}
         peers.delete(id);
       }

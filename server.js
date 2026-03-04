@@ -223,7 +223,7 @@ wss.on('connection', (ws) => {
         room.hostId = ws.id;
         ws.roomId = msg.roomId;
         ws.role = 'host';
-        ws.send(JSON.stringify({ type: 'room-joined', roomId: msg.roomId, peerId: ws.id, hostId: ws.id }));
+        ws.send(JSON.stringify({ type: 'rejoin-confirmed', roomId: msg.roomId, peerId: ws.id }));
         // Notify existing peers so they can create new peer connections
         for (const [peerId, peer] of room.peers) {
           if (peer.readyState === WebSocket.OPEN) {
