@@ -433,34 +433,6 @@ header {
 
 .modal-actions .btn { flex: 1; justify-content: center; }
 
-.qr-scan-divider {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin: 16px 0;
-  color: var(--text-muted);
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-}
-.qr-scan-divider::before, .qr-scan-divider::after {
-  content: '';
-  flex: 1;
-  height: 1px;
-  background: var(--border);
-}
-.btn-scan-qr {
-  width: 100%;
-  justify-content: center;
-  gap: 8px;
-}
-#qr-reader {
-  width: 100%;
-  max-width: 320px;
-  margin: 0 auto 16px;
-}
-#qr-reader video { border-radius: 12px; }
-
 /* ─── Features ─── */
 .features {
   display: grid;
@@ -1345,7 +1317,6 @@ header {
 }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 </head>
 <body>
 
@@ -1489,24 +1460,12 @@ header {
 <!-- Join Modal -->
 <div class="modal-overlay" id="join-modal">
   <div class="modal">
-    <div id="join-code-view">
-      <h2>Join a Room</h2>
-      <p>Enter the 6-character room code to connect</p>
-      <input class="input" id="room-code-input" maxlength="6" placeholder="abc123" autofocus>
-      <div class="qr-scan-divider"><span>or</span></div>
-      <button class="btn btn-secondary btn-scan-qr" id="btn-scan-qr" onclick="showQrScanner()">
-        <span style="font-size:18px">📷</span> Scan QR Code
-      </button>
-      <div class="modal-actions">
-        <button class="btn btn-secondary" onclick="hideJoinModal()">Cancel</button>
-        <button class="btn btn-primary" onclick="joinRoom()">Connect</button>
-      </div>
-    </div>
-    <div id="join-scan-view" style="display:none">
-      <h2>Scan QR Code</h2>
-      <p>Point your camera at the QR code on the host's screen</p>
-      <div id="qr-reader" style="border-radius:12px; overflow:hidden; margin-bottom:16px;"></div>
-      <button class="btn btn-secondary" onclick="hideQrScanner()" style="width:100%; justify-content:center;">Back to code entry</button>
+    <h2>Join a Room</h2>
+    <p>Enter the 6-character room code, or scan the QR code on the host's screen with your phone camera</p>
+    <input class="input" id="room-code-input" maxlength="6" placeholder="abc123" autofocus>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="hideJoinModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="joinRoom()">Connect</button>
     </div>
   </div>
 </div>
@@ -2757,73 +2716,7 @@ function showJoinModal() {
 }
 
 function hideJoinModal() {
-  stopQrScanner();
   document.getElementById('join-modal').classList.remove('active');
-  document.getElementById('join-code-view').style.display = 'block';
-  document.getElementById('join-scan-view').style.display = 'none';
-}
-
-let qrScanner = null;
-
-function showQrScanner() {
-  document.getElementById('join-code-view').style.display = 'none';
-  document.getElementById('join-scan-view').style.display = 'block';
-
-  if (typeof Html5Qrcode === 'undefined') {
-    showToast('QR scanner not available');
-    hideQrScanner();
-    return;
-  }
-
-  qrScanner = new Html5Qrcode('qr-reader');
-  qrScanner.start(
-    { facingMode: 'environment' },
-    { fps: 10, qrbox: { width: 220, height: 220 } },
-    (decodedText) => {
-      // Extract room code from URL or raw code
-      let code = decodedText;
-      try {
-        const url = new URL(decodedText);
-        if (url.hash && url.hash.length > 1) code = url.hash.slice(1);
-      } catch (e) { /* not a URL, use as-is */ }
-
-      code = code.trim().toLowerCase();
-      if (code.length === 6) {
-        // Stop camera fully before starting WebRTC
-        const scanner = qrScanner;
-        qrScanner = null;
-        const doJoin = () => {
-          document.getElementById('room-code-input').value = code;
-          hideJoinModal();
-          joinRoom();
-        };
-        if (scanner) {
-          scanner.stop().then(() => { scanner.clear(); doJoin(); }).catch(() => doJoin());
-        } else {
-          doJoin();
-        }
-      }
-    },
-    () => { /* ignore scan errors */ }
-  ).catch((err) => {
-    console.warn('QR scanner error:', err);
-    showToast('Could not access camera');
-    hideQrScanner();
-  });
-}
-
-function hideQrScanner() {
-  stopQrScanner();
-  document.getElementById('join-code-view').style.display = 'block';
-  document.getElementById('join-scan-view').style.display = 'none';
-}
-
-function stopQrScanner() {
-  if (qrScanner) {
-    const s = qrScanner;
-    qrScanner = null;
-    s.stop().then(() => s.clear()).catch(() => {});
-  }
 }
 
 // ─── Actions ───
