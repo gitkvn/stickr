@@ -130,12 +130,26 @@ function cleanupExistingRoom(ws) {
   if (!room) { ws.roomId = null; ws.role = null; return; }
 
   if (ws.role === 'host') {
+    // Don't delete room immediately — keep it alive for reconnection
+    room.host = null;
     for (const [, peer] of room.peers) {
       if (peer.readyState === WebSocket.OPEN) {
         peer.send(JSON.stringify({ type: 'host-disconnected' }));
       }
     }
-    rooms.delete(ws.roomId);
+    // Grace period — delete room if host doesn't reconnect
+    room.hostGraceTimer = setTimeout(() => {
+      const r = rooms.get(ws.roomId);
+      if (r && !r.host) {
+        // Host never came back — notify peers and delete
+        for (const [, peer] of r.peers) {
+          if (peer.readyState === WebSocket.OPEN) {
+            peer.send(JSON.stringify({ type: 'error', message: 'Room not found' }));
+          }
+        }
+        rooms.delete(ws.roomId);
+      }
+    }, 30000);
   } else {
     room.peers.delete(ws.id);
     if (room.host && room.host.readyState === WebSocket.OPEN) {
@@ -179,15 +193,44 @@ wss.on('connection', (ws) => {
           ws.send(JSON.stringify({ type: 'error', message: 'Room not found' }));
           return;
         }
-        if (!room.host || room.host.readyState !== WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: 'error', message: 'Host is offline' }));
-          return;
-        }
         ws.roomId = msg.roomId;
         ws.role = 'peer';
         room.peers.set(ws.id, ws);
-        ws.send(JSON.stringify({ type: 'room-joined', roomId: msg.roomId, peerId: ws.id, hostId: room.hostId }));
-        room.host.send(JSON.stringify({ type: 'peer-joined', peerId: ws.id }));
+        if (room.host && room.host.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'room-joined', roomId: msg.roomId, peerId: ws.id, hostId: room.hostId }));
+          room.host.send(JSON.stringify({ type: 'peer-joined', peerId: ws.id }));
+        } else {
+          // Host is temporarily offline — peer waits. Host will get peer-joined on rejoin.
+          ws.send(JSON.stringify({ type: 'room-joined', roomId: msg.roomId, peerId: ws.id, hostId: room.hostId }));
+        }
+        break;
+      }
+
+      case 'rejoin-host': {
+        // Host reconnecting to their room after backgrounding
+        const room = rooms.get(msg.roomId);
+        if (!room) {
+          ws.send(JSON.stringify({ type: 'error', message: 'Room not found' }));
+          return;
+        }
+        // Cancel the grace timer
+        if (room.hostGraceTimer) {
+          clearTimeout(room.hostGraceTimer);
+          room.hostGraceTimer = null;
+        }
+        // Reassign host
+        room.host = ws;
+        room.hostId = ws.id;
+        ws.roomId = msg.roomId;
+        ws.role = 'host';
+        ws.send(JSON.stringify({ type: 'room-joined', roomId: msg.roomId, peerId: ws.id, hostId: ws.id }));
+        // Notify existing peers so they can create new peer connections
+        for (const [peerId, peer] of room.peers) {
+          if (peer.readyState === WebSocket.OPEN) {
+            peer.send(JSON.stringify({ type: 'host-reconnected', hostId: ws.id }));
+            ws.send(JSON.stringify({ type: 'peer-joined', peerId }));
+          }
+        }
         break;
       }
 

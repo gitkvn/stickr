@@ -1748,6 +1748,20 @@ function handleSignalingMessage(msg) {
       handlePeerGone('host');
       break;
 
+    case 'host-reconnected':
+      console.log('[ws] host-reconnected, new hostId:', msg.hostId);
+      clearTimeout(peerGoneTimer);
+      // Clean up old dead peer connections
+      for (const [id, p] of peers) {
+        try { p.pc.close(); } catch {}
+        peers.delete(id);
+      }
+      // Create fresh connection to reconnected host
+      updateStatus('peer-found');
+      addSystemMessage('Host reconnected — restoring connection...');
+      createPeerConnection(msg.hostId, true);
+      break;
+
     case 'peer-disconnected':
       console.log('[ws] peer-disconnected received, peerId:', msg.peerId);
       // Don't close the peer connection — WebRTC may still be alive even though
@@ -2938,10 +2952,10 @@ async function attemptResume() {
     // Re-join the room — server will send room-joined and host gets peer-joined,
     // which triggers a fresh createPeerConnection on both sides
     if (isHost) {
-      // Host's room should still exist on server. New peer will re-join.
-      console.log('[resume] host WS reconnected, waiting for peer to rejoin');
+      ws.send(JSON.stringify({ type: 'rejoin-host', roomId }));
+      console.log('[resume] host re-joining room:', roomId);
       updateStatus('waiting');
-      addSystemMessage('Reconnected — waiting for peer...');
+      addSystemMessage('Reconnected — restoring room...');
     } else {
       ws.send(JSON.stringify({ type: 'join-room', roomId }));
       console.log('[resume] peer re-joining room:', roomId);
