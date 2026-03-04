@@ -1761,11 +1761,9 @@ function handleSignalingMessage(msg) {
 
     case 'peer-disconnected':
       console.log('[ws] peer-disconnected received, peerId:', msg.peerId);
-      const peer = peers.get(msg.peerId);
-      if (peer) {
-        peer.pc.close();
-        peers.delete(msg.peerId);
-      }
+      // Don't close the peer connection — WebRTC may still be alive even though
+      // the signaling WebSocket dropped (e.g. iOS backgrounding Safari briefly).
+      // Let handlePeerGone's grace timer check the actual connection state.
       handlePeerGone('peer');
       break;
 
@@ -2471,23 +2469,31 @@ function handlePeerGone(who) {
   console.log('[session] handlePeerGone:', who, 'peers:', peers.size);
   // Server confirmed peer/host WebSocket closed.
   // Show a warning but give a short grace period before showing ended screen,
-  // in case of brief network interruption.
-  disableChat();
+  // in case of brief network interruption (e.g. iOS backgrounding Safari).
   updateStatus('disconnected');
   addSystemMessage(who === 'host' ? 'Host disconnected — waiting to see if they reconnect...' : 'Peer disconnected — waiting to see if they reconnect...');
 
   clearTimeout(peerGoneTimer);
   peerGoneTimer = setTimeout(() => {
-    // If still no active peers, show session ended
-    let anyConnected = false;
+    // Check if any peer connection or data channel is still alive
+    let anyAlive = false;
     for (const [, p] of peers) {
-      if (p.pc.connectionState === 'connected') {
-        anyConnected = true;
+      const pcState = p.pc.connectionState;
+      const dcOpen = (p.dataChannel && p.dataChannel.readyState === 'open') ||
+                     (p.chatChannel && p.chatChannel.readyState === 'open');
+      console.log('[session] peerGoneTimer check — pc:', pcState, 'dc:', p.dataChannel?.readyState, 'chat:', p.chatChannel?.readyState);
+      if (pcState === 'connected' || dcOpen) {
+        anyAlive = true;
         break;
       }
     }
-    console.log('[session] peerGoneTimer fired, anyConnected:', anyConnected, 'peers:', peers.size);
-    if (!anyConnected) {
+    console.log('[session] peerGoneTimer fired, anyAlive:', anyAlive, 'peers:', peers.size);
+    if (anyAlive) {
+      // Connection survived — restore normal state
+      updateStatus('connected');
+      enableChat();
+      addSystemMessage('Connection restored.');
+    } else {
       showSessionEnded(who === 'host' ? 'Host left the session' : 'Peer left the session');
     }
   }, 5000);
