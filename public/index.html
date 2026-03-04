@@ -1852,9 +1852,27 @@ function createPeerConnection(remotePeerId, initiator, retryCount = 0) {
     } else if (pc.connectionState === 'failed') {
       clearTimeout(peerObj.connectionTimer);
       clearTimeout(peerObj.disconnectTimer);
-      updateStatus('disconnected');
-      addSystemMessage('Connection lost.');
-      disableChat();
+      // Attempt ICE restart if signaling is still available
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        console.log('[webrtc] connection failed, attempting ICE restart for peer:', remotePeerId);
+        updateStatus('retrying');
+        addSystemMessage('Reconnecting...');
+        pc.restartIce();
+        pc.createOffer({ iceRestart: true }).then((offer) => {
+          return pc.setLocalDescription(offer);
+        }).then(() => {
+          ws.send(JSON.stringify({ type: 'signal', to: remotePeerId, signal: { type: 'offer', sdp: pc.localDescription.sdp } }));
+        }).catch((err) => {
+          console.warn('[webrtc] ICE restart failed:', err.message);
+          updateStatus('disconnected');
+          addSystemMessage('Connection lost.');
+          disableChat();
+        });
+      } else {
+        updateStatus('disconnected');
+        addSystemMessage('Connection lost.');
+        disableChat();
+      }
     }
   };
 
@@ -2920,6 +2938,32 @@ document.getElementById('chat-input').addEventListener('keydown', (e) => {
 // ─── Join Modal Enter Key ───
 document.getElementById('room-code-input').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') joinRoom();
+});
+
+// ─── Resume after iOS backgrounding ───
+document.addEventListener('visibilitychange', async () => {
+  if (document.visibilityState !== 'visible') return;
+  if (!roomId) return; // Not in a room
+
+  // Check if WS is dead but we should still be in a room
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    console.log('[resume] page visible, WS dead, reconnecting...');
+    try {
+      await connectWS();
+      await fetchIceServers();
+      // Re-join the room so the server knows we're back
+      if (isHost) {
+        // Host can't re-create with the same room ID, but the room might still exist
+        // on the server if it hasn't timed out. For now just log it.
+        console.log('[resume] host WS reconnected');
+      } else {
+        ws.send(JSON.stringify({ type: 'join-room', roomId }));
+        console.log('[resume] peer re-joined room:', roomId);
+      }
+    } catch (err) {
+      console.warn('[resume] failed to reconnect WS:', err.message);
+    }
+  }
 });
 
 // ─── Auto-join from URL hash ───
