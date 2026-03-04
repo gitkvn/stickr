@@ -755,6 +755,25 @@ header {
   background: rgba(255,107,107,0.1);
 }
 
+.file-save-btn {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--bg-primary);
+  background: var(--success);
+  border: none;
+  border-radius: 6px;
+  padding: 6px 14px;
+  cursor: pointer;
+  flex-shrink: 0;
+  margin-left: 4px;
+  transition: opacity 0.2s;
+}
+.file-save-btn:active { opacity: 0.8; }
+.file-save-btn.saved {
+  background: var(--text-muted);
+  cursor: default;
+}
+
 /* ═══════════════════════════════════════════ */
 /* ─── Chat Panel ─── */
 /* ═══════════════════════════════════════════ */
@@ -1510,6 +1529,8 @@ let isHost = false;
 const peers = new Map();       // peerId -> { pc, dataChannel, chatChannel }
 const CHUNK_SIZE = 128 * 1024; // 128KB chunks
 const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB limit
+const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || window.matchMedia('(display-mode: standalone)').matches;
+const completedFiles = new Map(); // fileId -> { blob, name } for mobile save-on-tap
 
 // Session stats
 let sessionStartTime = null;
@@ -1744,7 +1765,16 @@ function handleSignalingMessage(msg) {
       break;
 
     case 'peer-joined':
-      // Host receives new peer
+      // Host receives new peer — cancel any pending disconnect timer
+      clearTimeout(peerGoneTimer);
+      // Clean up any dead connections first
+      for (const [id, p] of peers) {
+        if (p.pc.connectionState === 'failed' || p.pc.connectionState === 'closed') {
+          console.log('[session] cleaning up dead peer:', id);
+          try { p.pc.close(); } catch {}
+          peers.delete(id);
+        }
+      }
       updateStatus('peer-found');
       createPeerConnection(msg.peerId, false);
       break;
@@ -1852,27 +1882,12 @@ function createPeerConnection(remotePeerId, initiator, retryCount = 0) {
     } else if (pc.connectionState === 'failed') {
       clearTimeout(peerObj.connectionTimer);
       clearTimeout(peerObj.disconnectTimer);
-      // Attempt ICE restart if signaling is still available
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        console.log('[webrtc] connection failed, attempting ICE restart for peer:', remotePeerId);
-        updateStatus('retrying');
-        addSystemMessage('Reconnecting...');
-        pc.restartIce();
-        pc.createOffer({ iceRestart: true }).then((offer) => {
-          return pc.setLocalDescription(offer);
-        }).then(() => {
-          ws.send(JSON.stringify({ type: 'signal', to: remotePeerId, signal: { type: 'offer', sdp: pc.localDescription.sdp } }));
-        }).catch((err) => {
-          console.warn('[webrtc] ICE restart failed:', err.message);
-          updateStatus('disconnected');
-          addSystemMessage('Connection lost.');
-          disableChat();
-        });
-      } else {
-        updateStatus('disconnected');
-        addSystemMessage('Connection lost.');
-        disableChat();
-      }
+      // Don't attempt ICE restart — the other side likely backgrounded.
+      // Mark connection lost and let the resume/rejoin flow handle recovery.
+      console.log('[webrtc] connection failed for peer:', remotePeerId);
+      updateStatus('disconnected');
+      addSystemMessage('Connection lost — waiting for peer to reconnect...');
+      disableChat();
     }
   };
 
@@ -2001,8 +2016,15 @@ function setupFileChannel(channel, remotePeerId) {
         const file = incomingFiles[msg.id];
         if (file) {
           const blob = new Blob(file.chunks, { type: file.mimeType || 'application/octet-stream' });
-          downloadBlob(blob, file.name);
-          updateFileStatus(msg.id, 'complete');
+          if (isMobile) {
+            // On mobile/PWA, don't auto-download — store blob and show save button
+            completedFiles.set(msg.id, { blob, name: file.name });
+            updateFileStatus(msg.id, 'complete');
+            showSaveButton(msg.id, file.name);
+          } else {
+            downloadBlob(blob, file.name);
+            updateFileStatus(msg.id, 'complete');
+          }
           playChime('file');
           sendNotification('File received', file.name);
           sessionStats.filesReceived++;
@@ -2199,8 +2221,40 @@ function downloadBlob(blob, filename) {
   const a = document.createElement('a');
   a.href = url;
   a.download = filename;
+  a.style.display = 'none';
+  document.body.appendChild(a);
   a.click();
+  document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function showSaveButton(id, name) {
+  const fileItem = document.getElementById(`file-${id}`);
+  if (!fileItem) return;
+  // Remove cancel button if present
+  const cancelBtn = document.getElementById(`cancel-${id}`);
+  if (cancelBtn) cancelBtn.remove();
+  // Add save button
+  const btn = document.createElement('button');
+  btn.className = 'file-save-btn';
+  btn.id = `save-${id}`;
+  btn.textContent = 'Save';
+  btn.onclick = () => saveFile(id);
+  fileItem.appendChild(btn);
+}
+
+function saveFile(id) {
+  const entry = completedFiles.get(id);
+  if (!entry) return;
+  downloadBlob(entry.blob, entry.name);
+  // Update button to show saved
+  const btn = document.getElementById(`save-${id}`);
+  if (btn) {
+    btn.textContent = 'Saved';
+    btn.classList.add('saved');
+    btn.disabled = true;
+  }
+  completedFiles.delete(id);
 }
 
 // ═══════════════════════════════════════════
@@ -2514,7 +2568,7 @@ function handlePeerGone(who) {
     } else {
       showSessionEnded(who === 'host' ? 'Host left the session' : 'Peer left the session');
     }
-  }, 5000);
+  }, 15000);
 }
 
 function endSession() {
@@ -2639,6 +2693,7 @@ function resetSessionState() {
   myPeerId = null;
   isHost = false;
   incomingFiles = {};
+  completedFiles.clear();
   ws = null;
   sessionToken = null;
   sessionStartTime = null;
@@ -2941,30 +2996,71 @@ document.getElementById('room-code-input').addEventListener('keydown', (e) => {
 });
 
 // ─── Resume after iOS backgrounding ───
-document.addEventListener('visibilitychange', async () => {
-  if (document.visibilityState !== 'visible') return;
-  if (!roomId) return; // Not in a room
+// iOS share sheets and "Open in..." dialogs can kill WS + WebRTC without
+// triggering visibilitychange. We listen to multiple events and use a
+// periodic check to catch all cases.
+let resumeDebounce = null;
 
-  // Check if WS is dead but we should still be in a room
-  if (!ws || ws.readyState !== WebSocket.OPEN) {
-    console.log('[resume] page visible, WS dead, reconnecting...');
-    try {
-      await connectWS();
-      await fetchIceServers();
-      // Re-join the room so the server knows we're back
-      if (isHost) {
-        // Host can't re-create with the same room ID, but the room might still exist
-        // on the server if it hasn't timed out. For now just log it.
-        console.log('[resume] host WS reconnected');
-      } else {
-        ws.send(JSON.stringify({ type: 'join-room', roomId }));
-        console.log('[resume] peer re-joined room:', roomId);
-      }
-    } catch (err) {
-      console.warn('[resume] failed to reconnect WS:', err.message);
+async function attemptResume() {
+  if (resumeDebounce) return;
+  if (!roomId) return;
+  
+  // Check if any peer connection is actually dead
+  let anyFailed = false;
+  for (const [, p] of peers) {
+    if (p.pc.connectionState === 'failed' || p.pc.connectionState === 'closed') {
+      anyFailed = true;
+      break;
     }
   }
+  
+  const wsDown = !ws || ws.readyState !== WebSocket.OPEN;
+  
+  if (!anyFailed && !wsDown) return; // Everything fine
+  
+  resumeDebounce = setTimeout(() => { resumeDebounce = null; }, 3000);
+  
+  console.log('[resume] attempting recovery, wsDown:', wsDown, 'anyFailed:', anyFailed);
+  
+  // Tear down old peer connections
+  for (const [, p] of peers) {
+    try { p.pc.close(); } catch {}
+  }
+  peers.clear();
+  
+  try {
+    if (wsDown) {
+      await connectWS();
+      await fetchIceServers();
+    }
+    // Re-join the room — server will send room-joined and host gets peer-joined,
+    // which triggers a fresh createPeerConnection on both sides
+    if (isHost) {
+      // Host's room should still exist on server. New peer will re-join.
+      console.log('[resume] host WS reconnected, waiting for peer to rejoin');
+      updateStatus('waiting');
+      addSystemMessage('Reconnected — waiting for peer...');
+    } else {
+      ws.send(JSON.stringify({ type: 'join-room', roomId }));
+      console.log('[resume] peer re-joining room:', roomId);
+      updateStatus('connecting');
+      addSystemMessage('Reconnecting to room...');
+    }
+  } catch (err) {
+    console.warn('[resume] recovery failed:', err.message);
+  }
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') attemptResume();
 });
+document.addEventListener('focus', () => attemptResume());
+document.addEventListener('pageshow', () => attemptResume());
+
+// Periodic liveness check — catches cases where no event fires
+setInterval(() => {
+  if (document.visibilityState === 'visible') attemptResume();
+}, 5000);
 
 // ─── Auto-join from URL hash ───
 window.addEventListener('load', () => {
