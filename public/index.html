@@ -594,6 +594,13 @@ header {
   align-items: center;
   justify-content: center;
 }
+.drop-zone.collapsed {
+  min-height: 0;
+  padding: 16px 24px;
+}
+.drop-zone.collapsed .drop-zone-icon { display: none; }
+.drop-zone.collapsed h3 { font-size: 13px; margin: 0; }
+.drop-zone.collapsed p { display: none; }
 .drop-zone:hover, .drop-zone.dragover {
   border-color: var(--accent);
   background: var(--accent-glow);
@@ -1747,11 +1754,13 @@ function handleSignalingMessage(msg) {
       break;
 
     case 'host-disconnected':
+      console.log('[ws] host-disconnected received');
       // Grace period — host WS closed, but give a moment in case of reconnect
       handlePeerGone('host');
       break;
 
     case 'peer-disconnected':
+      console.log('[ws] peer-disconnected received, peerId:', msg.peerId);
       const peer = peers.get(msg.peerId);
       if (peer) {
         peer.pc.close();
@@ -1822,6 +1831,7 @@ function createPeerConnection(remotePeerId, initiator, retryCount = 0) {
   };
 
   pc.onconnectionstatechange = () => {
+    console.log('[webrtc] connectionState:', pc.connectionState, 'for peer:', remotePeerId);
     if (pc.connectionState === 'connected') {
       clearTimeout(peerObj.connectionTimer);
       clearTimeout(peerObj.disconnectTimer);
@@ -1968,8 +1978,10 @@ function setupFileChannel(channel, remotePeerId) {
           fromPeer: remotePeerId,
         };
         receivingFileId = msg.id;
+        console.log('[file] receiving file-meta:', msg.name, 'size:', msg.size, 'id:', msg.id);
         addFileItem(msg.id, msg.name, msg.size, 'receiving');
       } else if (msg.type === 'file-complete') {
+        console.log('[file] file-complete:', msg.id);
         const file = incomingFiles[msg.id];
         if (file) {
           const blob = new Blob(file.chunks, { type: file.mimeType || 'application/octet-stream' });
@@ -1983,6 +1995,7 @@ function setupFileChannel(channel, remotePeerId) {
           if (receivingFileId === msg.id) receivingFileId = null;
         }
       } else if (msg.type === 'session-ended') {
+        console.log('[session] received session-ended via data channel');
         showSessionEnded('Peer ended the session');
       } else if (msg.type === 'file-cancelled') {
         const file = incomingFiles[msg.id];
@@ -2187,6 +2200,7 @@ function setupChatChannel(channel) {
         sendNotification('New message', msg.text);
         sessionStats.messages++;
       } else if (msg.type === 'session-ended') {
+        console.log('[session] received session-ended via CHAT channel');
         // Peer explicitly ended the session — show immediately, no grace period
         showSessionEnded('Peer ended the session');
       }
@@ -2299,6 +2313,8 @@ function formatSize(bytes) {
 
 function addFileItem(id, name, size, status) {
   const list = document.getElementById('file-list');
+  // Collapse drop zone to make room for file list
+  document.getElementById('drop-zone').classList.add('collapsed');
   const div = document.createElement('div');
   div.className = 'file-item';
   div.id = `file-${id}`;
@@ -2314,6 +2330,7 @@ function addFileItem(id, name, size, status) {
     ${cancelBtn}
   `;
   list.appendChild(div);
+  div.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 function updateFileProgress(id, pct, speed) {
@@ -2451,6 +2468,7 @@ function switchMobileTab(tab) {
 let peerGoneTimer = null;
 
 function handlePeerGone(who) {
+  console.log('[session] handlePeerGone:', who, 'peers:', peers.size);
   // Server confirmed peer/host WebSocket closed.
   // Show a warning but give a short grace period before showing ended screen,
   // in case of brief network interruption.
@@ -2468,6 +2486,7 @@ function handlePeerGone(who) {
         break;
       }
     }
+    console.log('[session] peerGoneTimer fired, anyConnected:', anyConnected, 'peers:', peers.size);
     if (!anyConnected) {
       showSessionEnded(who === 'host' ? 'Host left the session' : 'Peer left the session');
     }
@@ -2501,6 +2520,8 @@ function endSession() {
 }
 
 function showSessionEnded(reason, isStaleRoom = false) {
+  console.log('[session] showSessionEnded:', reason, 'isStaleRoom:', isStaleRoom);
+  console.trace();
   clearTimeout(peerGoneTimer);
   // Clean up connections if not already done
   for (const [, peer] of peers) {
@@ -2603,6 +2624,22 @@ function resetSessionState() {
   // Abort any in-progress transfers
   for (const [, ctrl] of activeSendAbort) ctrl.abort();
   activeSendAbort.clear();
+
+  // Reset room UI
+  document.getElementById('file-list').innerHTML = '';
+  document.getElementById('drop-zone').classList.remove('collapsed');
+  document.getElementById('chat-messages').innerHTML = `
+    <div class="empty-chat">
+      <div class="empty-icon">💬</div>
+      <p>Messages will appear here</p>
+      <p style="font-size:11px; color: var(--text-muted)">All messages are peer-to-peer encrypted</p>
+    </div>
+  `;
+  document.getElementById('chat-input').disabled = true;
+  document.getElementById('chat-send').disabled = true;
+  document.getElementById('share-bar').style.display = 'none';
+  document.getElementById('qr-inline').style.display = 'none';
+  document.getElementById('room-code-display').style.display = 'none';
 }
 
 function goHome() {
@@ -2621,33 +2658,7 @@ function goHome() {
   document.body.classList.remove('in-room');
   history.pushState(null, '', location.pathname);
 
-  // Reset connection & transfer state
-  roomId = null;
-  myPeerId = null;
-  isHost = false;
-  incomingFiles = {};
-  ws = null;
-  sessionStartTime = null;
-  sessionStats = { filesSent: 0, filesReceived: 0, bytesSent: 0, bytesReceived: 0, messages: 0 };
-  hasEverConnectedPeer = false;
-  isJoiningRoom = false;
-  for (const [, ctrl] of activeSendAbort) ctrl.abort();
-  activeSendAbort.clear();
-
-  // Reset room UI
-  document.getElementById('file-list').innerHTML = '';
-  document.getElementById('chat-messages').innerHTML = `
-    <div class="empty-chat">
-      <div class="empty-icon">💬</div>
-      <p>Messages will appear here</p>
-      <p style="font-size:11px; color: var(--text-muted)">All messages are peer-to-peer encrypted</p>
-    </div>
-  `;
-  document.getElementById('chat-input').disabled = true;
-  document.getElementById('chat-send').disabled = true;
-  document.getElementById('share-bar').style.display = 'none';
-  document.getElementById('qr-inline').style.display = 'none';
-  document.getElementById('room-code-display').style.display = 'none';
+  resetSessionState();
 }
 
 // ─── Modal ───
@@ -2690,11 +2701,19 @@ function showQrScanner() {
 
       code = code.trim().toLowerCase();
       if (code.length === 6) {
-        stopQrScanner();
-        // Auto-join with scanned code
-        document.getElementById('room-code-input').value = code;
-        hideJoinModal();
-        joinRoom();
+        // Stop camera fully before starting WebRTC
+        const scanner = qrScanner;
+        qrScanner = null;
+        const doJoin = () => {
+          document.getElementById('room-code-input').value = code;
+          hideJoinModal();
+          joinRoom();
+        };
+        if (scanner) {
+          scanner.stop().then(() => { scanner.clear(); doJoin(); }).catch(() => doJoin());
+        } else {
+          doJoin();
+        }
       }
     },
     () => { /* ignore scan errors */ }
