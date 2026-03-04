@@ -1650,8 +1650,9 @@ if ('serviceWorker' in navigator) {
 // Fetch ephemeral TURN credentials from our server
 async function fetchIceServers() {
   try {
-    const url = sessionToken ? '/api/ice-servers?token=' + sessionToken : '/api/ice-servers';
-    const res = await fetch(url);
+    const headers = {};
+    if (sessionToken) headers['Authorization'] = 'Bearer ' + sessionToken;
+    const res = await fetch('/api/ice-servers', { headers });
     const data = await res.json();
     if (data.iceServers && data.iceServers.length > 0) {
       ICE_SERVERS = data.iceServers;
@@ -1978,7 +1979,8 @@ function setupFileChannel(channel, remotePeerId) {
 
   channel.onmessage = (e) => {
     if (typeof e.data === 'string') {
-      const msg = JSON.parse(e.data);
+      let msg;
+      try { msg = JSON.parse(e.data); } catch { return; }
       if (msg.type === 'file-meta') {
         incomingFiles[msg.id] = {
           name: msg.name,

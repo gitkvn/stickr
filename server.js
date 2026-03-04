@@ -33,7 +33,8 @@ const ICE_RATE_LIMIT = 10;
 const ICE_RATE_WINDOW = 60 * 1000;
 
 app.get('/api/ice-servers', async (req, res) => {
-  const token = req.query.token;
+  const auth = req.headers.authorization;
+  const token = auth && auth.startsWith('Bearer ') ? auth.slice(7) : null;
   if (!token || !sessionTokens.has(token)) {
     return res.status(403).json({ error: 'Invalid or missing session token' });
   }
@@ -126,7 +127,8 @@ const rooms = new Map();
 // Clean up any existing room membership before re-create/re-join
 function cleanupExistingRoom(ws) {
   if (!ws.roomId) return;
-  const room = rooms.get(ws.roomId);
+  const roomId = ws.roomId;
+  const room = rooms.get(roomId);
   if (!room) { ws.roomId = null; ws.role = null; return; }
 
   if (ws.role === 'host') {
@@ -139,15 +141,14 @@ function cleanupExistingRoom(ws) {
     }
     // Grace period — delete room if host doesn't reconnect
     room.hostGraceTimer = setTimeout(() => {
-      const r = rooms.get(ws.roomId);
+      const r = rooms.get(roomId);
       if (r && !r.host) {
-        // Host never came back — notify peers and delete
         for (const [, peer] of r.peers) {
           if (peer.readyState === WebSocket.OPEN) {
             peer.send(JSON.stringify({ type: 'error', message: 'Room not found' }));
           }
         }
-        rooms.delete(ws.roomId);
+        rooms.delete(roomId);
       }
     }, 30000);
   } else {
