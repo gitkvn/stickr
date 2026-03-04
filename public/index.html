@@ -1655,9 +1655,9 @@ function connectWS() {
       console.log('WS closed');
     };
     ws.onmessage = (e) => {
-      const msg = JSON.parse(e.data);
+      let msg;
+      try { msg = JSON.parse(e.data); } catch { return; }
       handleSignalingMessage(msg);
-      // Resolve after we get the session token (first message from server)
       if (msg.type === 'session-token') {
         resolve();
       }
