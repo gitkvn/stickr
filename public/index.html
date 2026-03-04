@@ -2660,8 +2660,7 @@ function showJoinModal() {
 function hideJoinModal() {
   stopQrScanner();
   document.getElementById('join-modal').classList.remove('active');
-  // Reset to code view
-  document.getElementById('join-code-view').style.display = '';
+  document.getElementById('join-code-view').style.display = 'block';
   document.getElementById('join-scan-view').style.display = 'none';
 }
 
@@ -2669,7 +2668,7 @@ let qrScanner = null;
 
 function showQrScanner() {
   document.getElementById('join-code-view').style.display = 'none';
-  document.getElementById('join-scan-view').style.display = '';
+  document.getElementById('join-scan-view').style.display = 'block';
 
   if (typeof Html5Qrcode === 'undefined') {
     showToast('QR scanner not available');
@@ -2692,9 +2691,9 @@ function showQrScanner() {
       code = code.trim().toLowerCase();
       if (code.length === 6) {
         stopQrScanner();
-        hideJoinModal();
         // Auto-join with scanned code
         document.getElementById('room-code-input').value = code;
+        hideJoinModal();
         joinRoom();
       }
     },
@@ -2708,15 +2707,15 @@ function showQrScanner() {
 
 function hideQrScanner() {
   stopQrScanner();
-  document.getElementById('join-code-view').style.display = '';
+  document.getElementById('join-code-view').style.display = 'block';
   document.getElementById('join-scan-view').style.display = 'none';
 }
 
 function stopQrScanner() {
   if (qrScanner) {
-    qrScanner.stop().catch(() => {});
-    qrScanner.clear();
+    const s = qrScanner;
     qrScanner = null;
+    s.stop().then(() => s.clear()).catch(() => {});
   }
 }
 
