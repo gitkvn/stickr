@@ -2595,6 +2595,8 @@ function showSessionEnded(reason, isStaleRoom = false) {
   console.log('[session] showSessionEnded:', reason, 'isStaleRoom:', isStaleRoom);
   console.trace();
   clearTimeout(peerGoneTimer);
+  // Stop resume logic from trying to reconnect
+  roomId = null;
   // Clean up connections if not already done
   for (const [, peer] of peers) {
     clearTimeout(peer.connectionTimer);
