@@ -2246,15 +2246,24 @@ function showSaveButton(id, name) {
 function saveFile(id) {
   const entry = completedFiles.get(id);
   if (!entry) return;
-  downloadBlob(entry.blob, entry.name);
-  // Update button to show saved
+
   const btn = document.getElementById(`save-${id}`);
-  if (btn) {
-    btn.textContent = 'Saved';
-    btn.classList.add('saved');
-    btn.disabled = true;
+
+  if (isMobile && navigator.canShare && navigator.canShare({ files: [new File([entry.blob], entry.name)] })) {
+    // Use native share API — doesn't background the app like download does
+    const file = new File([entry.blob], entry.name, { type: entry.blob.type });
+    navigator.share({ files: [file] }).then(() => {
+      if (btn) { btn.textContent = 'Saved'; btn.classList.add('saved'); btn.disabled = true; }
+      completedFiles.delete(id);
+    }).catch(() => {
+      // User cancelled share sheet — that's fine, don't mark as saved
+    });
+  } else {
+    // Desktop or fallback
+    downloadBlob(entry.blob, entry.name);
+    if (btn) { btn.textContent = 'Saved'; btn.classList.add('saved'); btn.disabled = true; }
+    completedFiles.delete(id);
   }
-  completedFiles.delete(id);
 }
 
 // ═══════════════════════════════════════════
