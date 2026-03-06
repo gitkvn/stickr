@@ -2329,7 +2329,11 @@ function sendChatMessage() {
   addChatMessage(text, 'sent', time);
   sessionStats.messages++;
   input.value = '';
-  input.focus();
+  if (isMobile) {
+    input.blur(); // Dismiss keyboard on mobile
+  } else {
+    input.focus(); // Keep focus on desktop for quick follow-up
+  }
 }
 
 function enableChat() {
