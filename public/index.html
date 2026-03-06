@@ -2330,9 +2330,12 @@ function sendChatMessage() {
   sessionStats.messages++;
   input.value = '';
   if (isMobile) {
-    input.blur(); // Dismiss keyboard on mobile
+    // Force iOS Safari to dismiss keyboard
+    input.blur();
+    input.readOnly = true;
+    setTimeout(() => { input.readOnly = false; }, 100);
   } else {
-    input.focus(); // Keep focus on desktop for quick follow-up
+    input.focus();
   }
 }
 
