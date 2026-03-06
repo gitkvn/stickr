@@ -1089,16 +1089,20 @@ header {
   background: rgba(255,107,107,0.1);
 }
 
-.mobile-end-btn {
-  font-size: 14px;
+.mobile-exit-btn {
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 600;
   color: var(--text-muted);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 10px;
   cursor: pointer;
-  padding: 2px 4px;
-  border-radius: 4px;
-  transition: color 0.2s;
-  margin-left: 2px;
+  margin-left: 4px;
+  transition: all 0.2s;
 }
-.mobile-end-btn:hover { color: var(--danger); }
+.mobile-exit-btn:active { color: var(--danger); border-color: var(--danger); }
 
 /* ─── Session Ended View ─── */
 .session-ended-view {
@@ -1304,9 +1308,8 @@ header {
     min-height: 0;
   }
   /* Hide duplicate panel headers on mobile — tabs already show status and controls */
-  .chat-panel .panel-header,
-  .file-panel .panel-header {
-    display: none;
+  .panel-header {
+    display: none !important;
   }
   .chat-messages {
     padding: 16px;
@@ -1420,7 +1423,7 @@ header {
       <div class="mobile-status" id="mobile-status">
         <div class="status-dot" id="mobile-status-dot"></div>
         <span class="room-code-mini" id="mobile-room-code" onclick="copyRoomCode()"></span>
-        <span class="mobile-end-btn" onclick="endSession()" title="End Session">✕</span>
+        <button class="mobile-exit-btn" onclick="endSession()">Exit</button>
       </div>
     </div>
     <div class="room-layout">
