@@ -2484,6 +2484,10 @@ function showRoomView() {
   const link = `${location.origin}/#${roomId}`;
   document.getElementById('share-link').value = link;
   document.getElementById('share-bar').style.display = 'flex';
+  // On mobile, change Copy button to Share since it opens the native share sheet
+  if (isMobile && navigator.share) {
+    document.getElementById('copy-btn').textContent = 'Share';
+  }
   generateInlineQR();
 
   // Room code display
@@ -2804,6 +2808,12 @@ async function joinRoom() {
 
 function copyLink() {
   const link = document.getElementById('share-link').value;
+  // On mobile, open native share sheet (has its own copy option)
+  if (isMobile && navigator.share) {
+    navigator.share({ title: 'Join my Stickr room', url: link }).catch(() => {});
+    return;
+  }
+  // Desktop: copy to clipboard
   navigator.clipboard.writeText(link).then(() => {
     const btn = document.getElementById('copy-btn');
     btn.textContent = 'Copied!';
