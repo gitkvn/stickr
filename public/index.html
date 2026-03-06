@@ -464,6 +464,9 @@ header {
 .room-view {
   flex: 1;
   flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
 }
 
 .room-view.active {
@@ -474,8 +477,7 @@ header {
   display: grid;
   grid-template-columns: 1fr 380px;
   flex: 1;
-  height: calc(100vh - 65px);
-  height: calc(100dvh - 65px);
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -1252,10 +1254,10 @@ header {
 @media (max-width: 860px) {
   .mobile-tabs {
     display: flex;
-    position: sticky;
-    top: 0;
+    position: relative;
     z-index: 10;
     padding-top: env(safe-area-inset-top, 0px);
+    flex-shrink: 0;
   }
   /* Hide main header in room view to save space on mobile */
   body.in-room header {
@@ -1264,8 +1266,8 @@ header {
   .room-layout {
     grid-template-columns: 1fr;
     grid-template-rows: 1fr;
-    height: calc(100vh - 46px - env(safe-area-inset-top, 0px));
-    height: calc(100dvh - 46px - env(safe-area-inset-top, 0px));
+    flex: 1;
+    min-height: 0;
     overflow: hidden;
   }
   .file-panel {
@@ -2971,10 +2973,10 @@ document.getElementById('room-code-input').addEventListener('keydown', (e) => {
 // ─── Keyboard-safe viewport handling for iOS ───
 if (window.visualViewport) {
   window.visualViewport.addEventListener('resize', () => {
-    // When the iOS keyboard opens/closes, adjust the room layout height
-    const roomLayout = document.querySelector('.room-layout');
-    if (roomLayout) {
-      roomLayout.style.height = `${window.visualViewport.height - 65}px`;
+    // When the iOS keyboard opens/closes, adjust the room view height
+    const roomView = document.getElementById('room-view');
+    if (roomView && roomView.classList.contains('active')) {
+      roomView.style.height = `${window.visualViewport.height}px`;
     }
   });
 }
