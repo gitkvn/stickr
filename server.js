@@ -41,7 +41,9 @@ if (R2_ACCOUNT_ID && R2_ACCESS_KEY_ID && R2_SECRET_ACCESS_KEY) {
 // ═══════════════════════════════════════════
 // DATABASE
 // ═══════════════════════════════════════════
-const db = new Database(path.join(__dirname, 'stickr.db'));
+const fs = require('fs');
+const DB_DIR = fs.existsSync('/data') ? '/data' : __dirname;
+const db = new Database(path.join(DB_DIR, 'stickr.db'));
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
