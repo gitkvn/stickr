@@ -63,6 +63,15 @@ const stmts = {
   findPendingTransfer: db.prepare('SELECT * FROM pending_transfers WHERE file_id = ? AND user_id = ?'),
   markRefunded: db.prepare('UPDATE pending_transfers SET refunded = 1 WHERE file_id = ? AND user_id = ?'),
   cleanOldTransfers: db.prepare("DELETE FROM pending_transfers WHERE created_at < datetime('now', '-1 day')"),
+  // Stats queries
+  totalUsers: db.prepare('SELECT COUNT(*) as count FROM users'),
+  totalTransfers: db.prepare('SELECT COUNT(*) as count, COALESCE(SUM(file_size), 0) as total_bytes FROM pending_transfers'),
+  recentTransfers: db.prepare("SELECT COUNT(*) as count, COALESCE(SUM(file_size), 0) as total_bytes FROM pending_transfers WHERE created_at > datetime('now', '-24 hours')"),
+  topUsers: db.prepare(`SELECT u.email, u.name, u.transfer_balance, 
+    COUNT(pt.file_id) as transfers, COALESCE(SUM(pt.file_size), 0) as bytes_sent 
+    FROM users u LEFT JOIN pending_transfers pt ON u.id = pt.user_id 
+    GROUP BY u.id ORDER BY bytes_sent DESC LIMIT 10`),
+  usersNearLimit: db.prepare('SELECT email, name, transfer_balance FROM users WHERE transfer_balance < 52428800 ORDER BY transfer_balance ASC LIMIT 10'),
 };
 
 // Clean expired sessions every hour
@@ -378,6 +387,76 @@ setInterval(() => {
 }, 5 * 60 * 1000);
 
 // ═══════════════════════════════════════════
+// STATS + ANALYTICS
+// ═══════════════════════════════════════════
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || '';
+
+// In-memory counters (reset on server restart)
+const stats = {
+  roomsCreated: 0,
+  wsConnections: 0,
+  peakConcurrentRooms: 0,
+  peakConcurrentConnections: 0,
+  serverStartedAt: new Date().toISOString(),
+};
+
+app.get('/api/stats', (req, res) => {
+  const user = getUserFromCookie(req);
+  if (!user || user.email !== ADMIN_EMAIL) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+
+  const totalUsers = stmts.totalUsers.get();
+  const totalTransfers = stmts.totalTransfers.get();
+  const recentTransfers = stmts.recentTransfers.get();
+  const topUsers = stmts.topUsers.all();
+  const usersNearLimit = stmts.usersNearLimit.all();
+
+  res.json({
+    server: {
+      uptime: Math.floor(process.uptime()),
+      startedAt: stats.serverStartedAt,
+      activeRooms: rooms.size,
+      activeConnections: wss.clients.size,
+      peakRooms: stats.peakConcurrentRooms,
+      peakConnections: stats.peakConcurrentConnections,
+      roomsCreatedSinceRestart: stats.roomsCreated,
+    },
+    users: {
+      total: totalUsers.count,
+      nearLimit: usersNearLimit,
+    },
+    transfers: {
+      allTime: {
+        count: totalTransfers.count,
+        bytes: totalTransfers.total_bytes,
+        formatted: formatBytes(totalTransfers.total_bytes),
+      },
+      last24h: {
+        count: recentTransfers.count,
+        bytes: recentTransfers.total_bytes,
+        formatted: formatBytes(recentTransfers.total_bytes),
+      },
+    },
+    topUsers: topUsers.map(u => ({
+      email: u.email,
+      name: u.name,
+      balance: formatBytes(u.transfer_balance),
+      transfers: u.transfers,
+      sent: formatBytes(u.bytes_sent),
+    })),
+  });
+});
+
+function formatBytes(bytes) {
+  if (!bytes || bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
+// ═══════════════════════════════════════════
 // HEALTH CHECK + SELF-PING
 // ═══════════════════════════════════════════
 app.get('/health', (req, res) => {
@@ -451,6 +530,9 @@ wss.on('connection', (ws, req) => {
   // Attach user from cookie if authenticated
   ws.user = getUserFromCookie(req);
 
+  stats.wsConnections++;
+  if (wss.clients.size > stats.peakConcurrentConnections) stats.peakConcurrentConnections = wss.clients.size;
+
   const wsToken = generateTurnSessionToken();
   turnSessionTokens.set(wsToken, { peerId: ws.id, createdAt: Date.now() });
   ws.turnSessionToken = wsToken;
@@ -474,6 +556,8 @@ wss.on('connection', (ws, req) => {
         ws.roomId = roomId;
         ws.role = 'host';
         ws.send(JSON.stringify({ type: 'room-created', roomId, peerId: ws.id }));
+        stats.roomsCreated++;
+        if (rooms.size > stats.peakConcurrentRooms) stats.peakConcurrentRooms = rooms.size;
         break;
       }
 
