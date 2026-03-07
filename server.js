@@ -288,16 +288,6 @@ app.post('/api/transfer/refund', (req, res) => {
 // ═══════════════════════════════════════════
 // STATIC FILES
 // ═══════════════════════════════════════════
-// DEBUG: Temporary endpoint to test balance limits — REMOVE BEFORE PRODUCTION
-app.post('/api/debug/set-balance', (req, res) => {
-  const user = getUserFromCookie(req);
-  if (!user) return res.status(401).json({ error: 'Not authenticated' });
-  const { balance } = req.body;
-  if (typeof balance !== 'number') return res.status(400).json({ error: 'Invalid balance' });
-  stmts.updateBalance.run(balance, user.id);
-  res.json({ balance });
-});
-
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ═══════════════════════════════════════════
