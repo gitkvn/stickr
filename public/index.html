@@ -365,6 +365,132 @@ header {
   gap: 50px;
 }
 
+/* ─── Get a Link View ─── */
+.link-view {
+  padding: 40px 20px;
+  max-width: 600px;
+  margin: 0 auto;
+  width: 100%;
+  flex-direction: column;
+  gap: 24px;
+}
+.link-view-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.link-view-header h2 {
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 700;
+}
+.btn-back {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-family: var(--font-body);
+  font-size: 14px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-back:hover { color: var(--text-primary); border-color: var(--text-muted); }
+.link-upload-area {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.link-drop-zone {
+  border: 2px dashed var(--border);
+  border-radius: var(--radius-lg);
+  padding: 48px 24px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s;
+  background: var(--bg-card);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.link-drop-zone:hover, .link-drop-zone.dragover {
+  border-color: var(--accent);
+  background: var(--accent-glow);
+}
+.link-drop-zone h3 {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.link-drop-zone p {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.link-file-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.link-file-item {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.link-file-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.link-file-name {
+  font-weight: 600;
+  font-size: 14px;
+  word-break: break-all;
+}
+.link-file-size {
+  font-size: 12px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.link-file-progress {
+  height: 3px;
+  background: var(--bg-tertiary);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.link-file-progress-bar {
+  height: 100%;
+  background: var(--gradient-1);
+  border-radius: 2px;
+  width: 0%;
+  transition: width 0.3s;
+}
+.link-file-status {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.link-file-status.done { color: var(--success); }
+.link-file-status.error { color: var(--danger); }
+.link-file-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 4px;
+}
+.link-file-actions span {
+  color: var(--accent-bright);
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+}
+.link-file-actions span:hover { text-decoration: underline; }
+
 .hero {
   text-align: center;
   max-width: 680px;
@@ -1499,6 +1625,9 @@ header {
       <button class="btn btn-secondary" onclick="showJoinModal()">
         <span class="btn-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span> Join Room
       </button>
+      <button class="btn btn-secondary" onclick="startGetLink()">
+        <span class="btn-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span> Get a Link
+      </button>
     </div>
 
     <div class="features">
@@ -1530,6 +1659,27 @@ header {
       <span class="footer-note">Encrypted end-to-end. Fast. Private.</span>
     </footer>
   </div>
+
+  <!-- ═══ GET A LINK VIEW ═══ -->
+  <div id="link-view" class="view link-view">
+    <div class="link-view-header">
+      <h2>Get a Link</h2>
+      <button class="btn-back" onclick="closeLinkView()">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+        Back
+      </button>
+    </div>
+    <div class="link-upload-area">
+      <div class="link-drop-zone" id="link-drop-zone" onclick="document.getElementById('link-file-input').click()">
+        <input type="file" id="link-file-input" class="file-input" multiple>
+        <div class="drop-zone-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 16l-4-4-4 4"/><path d="M12 12v9"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/><polyline points="16 16 12 12 8 16"/></svg></div>
+        <h3>Drop files here or click to browse</h3>
+        <p>Upload any file and get a shareable link — expires in 24 hours</p>
+      </div>
+      <div class="link-file-list" id="link-file-list"></div>
+    </div>
+  </div>
+
   <div id="room-view" class="view room-view">
     <div class="mobile-tabs" id="mobile-tabs">
       <button class="active" onclick="switchMobileTab('files')">📁 Files</button>
@@ -2518,6 +2668,132 @@ function shareAsyncLink(url, fileId) {
   } else {
     navigator.clipboard.writeText(url);
     showToast('Link copied to clipboard');
+  }
+}
+
+// ═══════════════════════════════════════════
+// GET A LINK FLOW
+// ═══════════════════════════════════════════
+function startGetLink() {
+  if (!currentUser) {
+    showSigninModal();
+    return;
+  }
+  document.getElementById('home-view').classList.remove('active');
+  document.getElementById('link-view').classList.add('active');
+  document.getElementById('link-file-list').innerHTML = '';
+}
+
+function closeLinkView() {
+  document.getElementById('link-view').classList.remove('active');
+  document.getElementById('home-view').classList.add('active');
+}
+
+// File input handler for link view
+document.getElementById('link-file-input').addEventListener('change', (e) => {
+  const files = Array.from(e.target.files);
+  if (files.length > 0) uploadLinkFiles(files);
+  e.target.value = '';
+});
+
+// Drag and drop for link view
+const linkDropZone = document.getElementById('link-drop-zone');
+linkDropZone.addEventListener('dragover', (e) => { e.preventDefault(); linkDropZone.classList.add('dragover'); });
+linkDropZone.addEventListener('dragleave', () => linkDropZone.classList.remove('dragover'));
+linkDropZone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  linkDropZone.classList.remove('dragover');
+  const files = Array.from(e.dataTransfer.files);
+  if (files.length > 0) uploadLinkFiles(files);
+});
+
+async function uploadLinkFiles(files) {
+  for (const file of files) {
+    await uploadLinkFile(file);
+  }
+}
+
+async function uploadLinkFile(file) {
+  const MAX_FILE_SIZE = 500 * 1024 * 1024;
+  if (file.size > MAX_FILE_SIZE) {
+    showToast('Maximum file size is 500 MB');
+    return;
+  }
+
+  const id = 'link-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6);
+  const list = document.getElementById('link-file-list');
+
+  const item = document.createElement('div');
+  item.className = 'link-file-item';
+  item.id = id;
+  item.innerHTML = `
+    <div class="link-file-top">
+      <span class="link-file-name">${escapeHtml(file.name)}</span>
+      <span class="link-file-size">${formatSize(file.size)}</span>
+    </div>
+    <div class="link-file-progress"><div class="link-file-progress-bar" id="bar-${id}"></div></div>
+    <div class="link-file-status" id="status-${id}">Uploading...</div>
+  `;
+  list.appendChild(item);
+  item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+  try {
+    const xhr = new XMLHttpRequest();
+    const uploadStart = Date.now();
+
+    const result = await new Promise((resolve, reject) => {
+      xhr.upload.addEventListener('progress', (e) => {
+        if (e.lengthComputable) {
+          const pct = Math.round((e.loaded / e.total) * 100);
+          document.getElementById('bar-' + id).style.width = pct + '%';
+          const elapsed = (Date.now() - uploadStart) / 1000;
+          const speed = e.loaded / elapsed;
+          document.getElementById('status-' + id).textContent = pct + '% · ' + formatSize(speed) + '/s';
+        }
+      });
+      xhr.addEventListener('load', () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(JSON.parse(xhr.responseText));
+        } else {
+          try { reject(JSON.parse(xhr.responseText)); } catch { reject({ error: 'Upload failed' }); }
+        }
+      });
+      xhr.addEventListener('error', () => reject({ error: 'Network error' }));
+      xhr.open('POST', '/api/upload');
+      xhr.setRequestHeader('X-Filename', encodeURIComponent(file.name));
+      xhr.setRequestHeader('X-Mime-Type', file.type || 'application/octet-stream');
+      xhr.send(file);
+    });
+
+    // Update balance
+    if (currentUser && result.balance !== undefined) {
+      currentUser.transfer_balance = result.balance;
+      updateUsageDisplay();
+    }
+
+    // Show success with copy/share
+    document.getElementById('bar-' + id).style.width = '100%';
+    const statusEl = document.getElementById('status-' + id);
+    statusEl.className = 'link-file-status done';
+    statusEl.textContent = '✓ Ready';
+
+    const actionsDiv = document.createElement('div');
+    actionsDiv.className = 'link-file-actions';
+    actionsDiv.innerHTML = `
+      <span onclick="navigator.clipboard.writeText('${result.url}');this.textContent='Copied!';setTimeout(()=>this.textContent='Copy',2000);">Copy</span>
+      <span onclick="shareAsyncLink('${result.url}','${id}')">Share</span>
+    `;
+    document.getElementById(id).appendChild(actionsDiv);
+
+  } catch (err) {
+    const statusEl = document.getElementById('status-' + id);
+    statusEl.className = 'link-file-status error';
+    if (err.error === 'insufficient_balance') {
+      statusEl.textContent = '✕ Transfer limit reached';
+      showTopUpPrompt(err.balance, file.size);
+    } else {
+      statusEl.textContent = '✕ ' + (err.error || 'Upload failed');
+    }
   }
 }
 
