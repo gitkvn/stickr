@@ -4,26 +4,220 @@ const WebSocket = require('ws');
 const { v4: uuidv4 } = require('uuid');
 const crypto = require('crypto');
 const path = require('path');
+const Database = require('better-sqlite3');
+const cookie = require('cookie');
 
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
+// ═══════════════════════════════════════════
+// DATABASE
+// ═══════════════════════════════════════════
+const db = new Database(path.join(__dirname, 'stickr.db'));
+db.pragma('journal_mode = WAL');
+db.pragma('foreign_keys = ON');
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    google_id TEXT UNIQUE NOT NULL,
+    email TEXT UNIQUE NOT NULL,
+    name TEXT,
+    picture TEXT,
+    transfer_balance INTEGER DEFAULT 524288000,
+    created_at TEXT DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS sessions (
+    token TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    expires_at TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now'))
+  );
+`);
+
+// Prepared statements
+const stmts = {
+  findUserByGoogleId: db.prepare('SELECT * FROM users WHERE google_id = ?'),
+  findUserById: db.prepare('SELECT * FROM users WHERE id = ?'),
+  createUser: db.prepare('INSERT INTO users (id, google_id, email, name, picture) VALUES (?, ?, ?, ?, ?)'),
+  updateUser: db.prepare('UPDATE users SET name = ?, picture = ?, email = ? WHERE google_id = ?'),
+  createSession: db.prepare('INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)'),
+  findSession: db.prepare(`SELECT s.token as session_token, s.user_id, s.expires_at,
+    u.id, u.google_id, u.email, u.name, u.picture, u.transfer_balance, u.created_at
+    FROM sessions s JOIN users u ON s.user_id = u.id
+    WHERE s.token = ? AND s.expires_at > datetime('now')`),
+  deleteSession: db.prepare('DELETE FROM sessions WHERE token = ?'),
+  cleanExpiredSessions: db.prepare("DELETE FROM sessions WHERE expires_at < datetime('now')"),
+  updateBalance: db.prepare('UPDATE users SET transfer_balance = ? WHERE id = ?'),
+};
+
+// Clean expired sessions every hour
+setInterval(() => { stmts.cleanExpiredSessions.run(); }, 60 * 60 * 1000);
+
+// ═══════════════════════════════════════════
+// AUTH HELPERS
+// ═══════════════════════════════════════════
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
+const SESSION_COOKIE = 'stickr_session';
+const SESSION_MAX_AGE = 30 * 24 * 60 * 60 * 1000; // 30 days
+
+function getBaseUrl(req) {
+  const proto = req.headers['x-forwarded-proto'] || req.protocol || 'http';
+  const host = req.headers['x-forwarded-host'] || req.headers.host;
+  return `${proto}://${host}`;
+}
+
+function setSessionCookie(res, token) {
+  res.setHeader('Set-Cookie', cookie.serialize(SESSION_COOKIE, token, {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'lax',
+    path: '/',
+    maxAge: SESSION_MAX_AGE / 1000,
+  }));
+}
+
+function clearSessionCookie(res) {
+  res.setHeader('Set-Cookie', cookie.serialize(SESSION_COOKIE, '', {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 0,
+  }));
+}
+
+function getUserFromCookie(req) {
+  const cookies = cookie.parse(req.headers.cookie || '');
+  const token = cookies[SESSION_COOKIE];
+  if (!token) return null;
+  const row = stmts.findSession.get(token);
+  if (!row) return null;
+  return {
+    id: row.user_id,
+    google_id: row.google_id,
+    email: row.email,
+    name: row.name,
+    picture: row.picture,
+    transfer_balance: row.transfer_balance,
+    created_at: row.created_at,
+  };
+}
+
+// ═══════════════════════════════════════════
+// GOOGLE OAUTH ROUTES
+// ═══════════════════════════════════════════
+app.get('/auth/google', (req, res) => {
+  if (!GOOGLE_CLIENT_ID) {
+    return res.status(500).send('Google OAuth not configured');
+  }
+  const redirectUri = `${getBaseUrl(req)}/auth/callback`;
+  const params = new URLSearchParams({
+    client_id: GOOGLE_CLIENT_ID,
+    redirect_uri: redirectUri,
+    response_type: 'code',
+    scope: 'openid email profile',
+    access_type: 'online',
+    prompt: 'select_account',
+  });
+  res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`);
+});
+
+app.get('/auth/callback', async (req, res) => {
+  const { code } = req.query;
+  if (!code) return res.redirect('/?error=no_code');
+
+  try {
+    const redirectUri = `${getBaseUrl(req)}/auth/callback`;
+
+    // Exchange code for tokens
+    const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code,
+        client_id: GOOGLE_CLIENT_ID,
+        client_secret: GOOGLE_CLIENT_SECRET,
+        redirect_uri: redirectUri,
+        grant_type: 'authorization_code',
+      }),
+    });
+    if (!tokenRes.ok) throw new Error('Token exchange failed');
+    const tokenData = await tokenRes.json();
+
+    // Get user info
+    const userRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+      headers: { Authorization: `Bearer ${tokenData.access_token}` },
+    });
+    if (!userRes.ok) throw new Error('Failed to fetch user info');
+    const profile = await userRes.json();
+
+    // Find or create user
+    let user = stmts.findUserByGoogleId.get(profile.id);
+    if (user) {
+      stmts.updateUser.run(profile.name, profile.picture, profile.email, profile.id);
+      user = stmts.findUserByGoogleId.get(profile.id);
+    } else {
+      const userId = uuidv4();
+      stmts.createUser.run(userId, profile.id, profile.email, profile.name, profile.picture || null);
+      user = stmts.findUserById.get(userId);
+    }
+
+    // Create session
+    const sessionToken = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + SESSION_MAX_AGE).toISOString();
+    stmts.createSession.run(sessionToken, user.id, expiresAt);
+
+    setSessionCookie(res, sessionToken);
+    res.redirect('/');
+  } catch (err) {
+    console.error('OAuth error:', err.message);
+    res.redirect('/?error=auth_failed');
+  }
+});
+
+app.get('/auth/me', (req, res) => {
+  const user = getUserFromCookie(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  res.json({
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    picture: user.picture,
+    transfer_balance: user.transfer_balance,
+  });
+});
+
+app.get('/auth/logout', (req, res) => {
+  const cookies = cookie.parse(req.headers.cookie || '');
+  const token = cookies[SESSION_COOKIE];
+  if (token) stmts.deleteSession.run(token);
+  clearSessionCookie(res);
+  res.redirect('/');
+});
+
+// ═══════════════════════════════════════════
+// STATIC FILES
+// ═══════════════════════════════════════════
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Session tokens - bind TURN creds to active WS sessions
-const sessionTokens = new Map();
-const SESSION_TOKEN_TTL = 2 * 60 * 60 * 1000;
+// ═══════════════════════════════════════════
+// TURN SESSION TOKENS
+// ═══════════════════════════════════════════
+const turnSessionTokens = new Map();
+const TURN_SESSION_TOKEN_TTL = 2 * 60 * 60 * 1000;
 
-function generateSessionToken() {
+function generateTurnSessionToken() {
   return crypto.randomBytes(24).toString('hex');
 }
 
-// Clean up expired session tokens every 10 minutes
 setInterval(() => {
   const now = Date.now();
-  for (const [token, data] of sessionTokens) {
-    if (now - data.createdAt > SESSION_TOKEN_TTL) sessionTokens.delete(token);
+  for (const [token, data] of turnSessionTokens) {
+    if (now - data.createdAt > TURN_SESSION_TOKEN_TTL) turnSessionTokens.delete(token);
   }
 }, 10 * 60 * 1000);
 
@@ -35,7 +229,7 @@ const ICE_RATE_WINDOW = 60 * 1000;
 app.get('/api/ice-servers', async (req, res) => {
   const auth = req.headers.authorization;
   const token = auth && auth.startsWith('Bearer ') ? auth.slice(7) : null;
-  if (!token || !sessionTokens.has(token)) {
+  if (!token || !turnSessionTokens.has(token)) {
     return res.status(403).json({ error: 'Invalid or missing session token' });
   }
 
@@ -97,7 +291,9 @@ setInterval(() => {
   }
 }, 5 * 60 * 1000);
 
-// Health check
+// ═══════════════════════════════════════════
+// HEALTH CHECK + SELF-PING
+// ═══════════════════════════════════════════
 app.get('/health', (req, res) => {
   res.status(200).json({
     status: 'ok',
@@ -106,7 +302,6 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Self-ping to prevent Railway cold starts
 const SELF_PING_INTERVAL = 4 * 60 * 1000;
 let selfPingTimer = null;
 
@@ -121,10 +316,11 @@ function startSelfPing() {
   console.log(`Self-ping active: ${appUrl} every ${SELF_PING_INTERVAL / 1000}s`);
 }
 
-// Room management
+// ═══════════════════════════════════════════
+// ROOM MANAGEMENT
+// ═══════════════════════════════════════════
 const rooms = new Map();
 
-// Clean up any existing room membership before re-create/re-join
 function cleanupExistingRoom(ws) {
   if (!ws.roomId) return;
   const roomId = ws.roomId;
@@ -132,14 +328,12 @@ function cleanupExistingRoom(ws) {
   if (!room) { ws.roomId = null; ws.role = null; return; }
 
   if (ws.role === 'host') {
-    // Don't delete room immediately — keep it alive for reconnection
     room.host = null;
     for (const [, peer] of room.peers) {
       if (peer.readyState === WebSocket.OPEN) {
         peer.send(JSON.stringify({ type: 'host-disconnected' }));
       }
     }
-    // Grace period — delete room if host doesn't reconnect
     room.hostGraceTimer = setTimeout(() => {
       const r = rooms.get(roomId);
       if (r && !r.host) {
@@ -161,14 +355,20 @@ function cleanupExistingRoom(ws) {
   ws.role = null;
 }
 
-wss.on('connection', (ws) => {
+// ═══════════════════════════════════════════
+// WEBSOCKET
+// ═══════════════════════════════════════════
+wss.on('connection', (ws, req) => {
   ws.id = uuidv4();
   ws.isAlive = true;
 
-  const sessionToken = generateSessionToken();
-  sessionTokens.set(sessionToken, { peerId: ws.id, createdAt: Date.now() });
-  ws.sessionToken = sessionToken;
-  ws.send(JSON.stringify({ type: 'session-token', token: sessionToken }));
+  // Attach user from cookie if authenticated
+  ws.user = getUserFromCookie(req);
+
+  const wsToken = generateTurnSessionToken();
+  turnSessionTokens.set(wsToken, { peerId: ws.id, createdAt: Date.now() });
+  ws.turnSessionToken = wsToken;
+  ws.send(JSON.stringify({ type: 'session-token', token: wsToken }));
 
   ws.on('pong', () => { ws.isAlive = true; });
 
@@ -178,9 +378,13 @@ wss.on('connection', (ws) => {
 
     switch (msg.type) {
       case 'create-room': {
+        if (!ws.user) {
+          ws.send(JSON.stringify({ type: 'error', message: 'auth-required' }));
+          return;
+        }
         cleanupExistingRoom(ws);
         const roomId = generateRoomId();
-        rooms.set(roomId, { host: ws, hostId: ws.id, peers: new Map() });
+        rooms.set(roomId, { host: ws, hostId: ws.id, hostUserId: ws.user.id, peers: new Map() });
         ws.roomId = roomId;
         ws.role = 'host';
         ws.send(JSON.stringify({ type: 'room-created', roomId, peerId: ws.id }));
@@ -201,31 +405,30 @@ wss.on('connection', (ws) => {
           ws.send(JSON.stringify({ type: 'room-joined', roomId: msg.roomId, peerId: ws.id, hostId: room.hostId }));
           room.host.send(JSON.stringify({ type: 'peer-joined', peerId: ws.id }));
         } else {
-          // Host is temporarily offline — peer waits. Host will get peer-joined on rejoin.
           ws.send(JSON.stringify({ type: 'room-joined', roomId: msg.roomId, peerId: ws.id, hostId: room.hostId }));
         }
         break;
       }
 
       case 'rejoin-host': {
-        // Host reconnecting to their room after backgrounding
+        if (!ws.user) {
+          ws.send(JSON.stringify({ type: 'error', message: 'auth-required' }));
+          return;
+        }
         const room = rooms.get(msg.roomId);
         if (!room) {
           ws.send(JSON.stringify({ type: 'error', message: 'Room not found' }));
           return;
         }
-        // Cancel the grace timer
         if (room.hostGraceTimer) {
           clearTimeout(room.hostGraceTimer);
           room.hostGraceTimer = null;
         }
-        // Reassign host
         room.host = ws;
         room.hostId = ws.id;
         ws.roomId = msg.roomId;
         ws.role = 'host';
         ws.send(JSON.stringify({ type: 'rejoin-confirmed', roomId: msg.roomId, peerId: ws.id }));
-        // Notify existing peers so they can create new peer connections
         for (const [peerId, peer] of room.peers) {
           if (peer.readyState === WebSocket.OPEN) {
             peer.send(JSON.stringify({ type: 'host-reconnected', hostId: ws.id }));
@@ -250,7 +453,7 @@ wss.on('connection', (ws) => {
   });
 
   ws.on('close', () => {
-    if (ws.sessionToken) sessionTokens.delete(ws.sessionToken);
+    if (ws.turnSessionToken) turnSessionTokens.delete(ws.turnSessionToken);
     cleanupExistingRoom(ws);
   });
 });

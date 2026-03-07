@@ -285,6 +285,53 @@ header {
   text-transform: uppercase;
 }
 
+.user-menu {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.user-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+}
+.user-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.user-logout {
+  font-family: var(--font-body);
+  font-size: 12px;
+  color: var(--text-muted);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.user-logout:hover { color: var(--text-primary); border-color: var(--text-muted); }
+
+.btn-sign-in {
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent-bright);
+  background: var(--accent-glow);
+  border: 1px solid var(--accent);
+  border-radius: 20px;
+  padding: 6px 16px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-sign-in:hover { background: var(--accent); color: white; }
+
 /* ─── Views ─── */
 .view {
   display: none;
@@ -1368,6 +1415,12 @@ header {
     </div>
     <div class="header-right">
       <div class="header-badge">P2P Encrypted</div>
+      <div class="user-menu" id="user-menu" style="display:none">
+        <img class="user-avatar" id="user-avatar" src="" alt="">
+        <span class="user-name" id="user-name"></span>
+        <button class="user-logout" onclick="logout()" title="Sign out">Sign out</button>
+      </div>
+      <button class="btn-sign-in" id="btn-sign-in" onclick="signIn()" style="display:none">Sign in</button>
       <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Toggle light/dark mode">☀️</button>
     </div>
   </header>
@@ -1376,7 +1429,7 @@ header {
   <div id="home-view" class="view home-view active">
     <div class="hero">
       <h1>Share files <span class="highlight">directly.</span><br>Chat <span class="highlight">privately.</span></h1>
-      <p>Peer-to-peer file sharing and encrypted chat. No uploads, no storage, no sign-ups. Files go straight from you to them.</p>
+      <p>Peer-to-peer file sharing and encrypted chat. No uploads, no storage, no middleman. Files go straight from you to them.</p>
     </div>
 
     <div class="actions">
@@ -1414,7 +1467,7 @@ header {
     <footer class="site-footer">
       <a href="/privacy.html">Privacy</a>
       <span class="footer-sep">·</span>
-      <span class="footer-note">No tracking. No cookies. No accounts.</span>
+      <span class="footer-note">P2P encrypted. Your files never touch our servers.</span>
     </footer>
   </div>
   <div id="room-view" class="view room-view">
@@ -1518,6 +1571,7 @@ let sessionToken = null;
 let myPeerId = null;
 let roomId = null;
 let isHost = false;
+let currentUser = null; // authenticated user object
 const peers = new Map();       // peerId -> { pc, dataChannel, chatChannel }
 const CHUNK_SIZE = 128 * 1024; // 128KB chunks
 const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB limit
@@ -1815,6 +1869,11 @@ function handleSignalingMessage(msg) {
       break;
 
     case 'error':
+      if (msg.message === 'auth-required') {
+        // Server rejected — user not authenticated
+        window.location.href = '/auth/google';
+        return;
+      }
       if (msg.message === 'Room not found' || msg.message === 'Host is offline') {
         if (hasEverConnectedPeer) {
           // Had a connection before — session ended
@@ -2844,6 +2903,11 @@ function hideJoinModal() {
 
 // ─── Actions ───
 async function createRoom() {
+  // Auth required to create rooms
+  if (!currentUser) {
+    window.location.href = '/auth/google';
+    return;
+  }
   try {
     updateStatus('connecting');
     await connectWS();
@@ -3113,6 +3177,46 @@ document.addEventListener('pageshow', () => attemptResume());
 setInterval(() => {
   if (document.visibilityState === 'visible') attemptResume();
 }, 5000);
+
+// ─── Auth ───
+function signIn() {
+  window.location.href = '/auth/google';
+}
+
+function logout() {
+  window.location.href = '/auth/logout';
+}
+
+async function checkAuth() {
+  try {
+    const res = await fetch('/auth/me');
+    if (res.ok) {
+      currentUser = await res.json();
+      // Show user menu, hide sign-in button
+      document.getElementById('user-menu').style.display = 'flex';
+      document.getElementById('btn-sign-in').style.display = 'none';
+      document.getElementById('user-name').textContent = currentUser.name || currentUser.email;
+      const avatar = document.getElementById('user-avatar');
+      if (currentUser.picture) {
+        avatar.src = currentUser.picture;
+        avatar.style.display = '';
+      } else {
+        avatar.style.display = 'none';
+      }
+    } else {
+      currentUser = null;
+      document.getElementById('user-menu').style.display = 'none';
+      document.getElementById('btn-sign-in').style.display = '';
+    }
+  } catch {
+    currentUser = null;
+    document.getElementById('user-menu').style.display = 'none';
+    document.getElementById('btn-sign-in').style.display = '';
+  }
+}
+
+// Check auth on page load
+checkAuth();
 
 // ─── Auto-join from URL hash ───
 window.addEventListener('load', () => {
