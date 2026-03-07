@@ -529,7 +529,16 @@ header {
 }
 .feature-card:hover { border-color: var(--accent); }
 
-.feature-icon { font-size: 28px; margin-bottom: 10px; }
+.feature-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: var(--bg-tertiary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 14px;
+}
 .feature-card h3 { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
 .feature-card p { font-size: 12px; color: var(--text-secondary); }
 
@@ -1478,22 +1487,22 @@ header {
 
     <div class="features">
       <div class="feature-card">
-        <div class="feature-icon">🔗</div>
+        <div class="feature-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--accent-bright)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></div>
         <h3>Peer-to-Peer</h3>
         <p>Direct device-to-device transfer via WebRTC</p>
       </div>
       <div class="feature-card">
-        <div class="feature-icon">🔒</div>
+        <div class="feature-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
         <h3>Encrypted</h3>
         <p>End-to-end encrypted with DTLS</p>
       </div>
       <div class="feature-card">
-        <div class="feature-icon">💬</div>
+        <div class="feature-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#74b9ff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
         <h3>Live Chat</h3>
         <p>Real-time P2P messaging alongside file transfers</p>
       </div>
       <div class="feature-card">
-        <div class="feature-icon">🎁</div>
+        <div class="feature-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#FFD93D" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2z"/></svg></div>
         <h3>500 MB Free</h3>
         <p>Sign in with Google and start sharing instantly</p>
       </div>
@@ -1519,7 +1528,7 @@ header {
       <!-- File Panel -->
       <div class="file-panel">
         <div class="panel-header">
-          <div class="panel-title">📁 Files</div>
+          <div class="panel-title">Files</div>
           <div style="display:flex; align-items:center; gap:12px;">
             <div class="connection-status">
               <div class="status-dot" id="status-dot"></div>
@@ -1536,7 +1545,8 @@ header {
             <p>or click to browse — up to 500 MB per file</p>
           </div>
           <button class="mobile-file-btn" onclick="document.getElementById('file-input').click()">
-            📎 Select Files
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+            Select Files
           </button>
           <div class="file-list" id="file-list"></div>
         </div>
