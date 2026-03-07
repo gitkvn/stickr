@@ -912,12 +912,19 @@ header {
   color: white;
   border-bottom-right-radius: 4px;
 }
+.chat-msg.sent .chat-link { color: white; text-decoration: underline; }
 
 .chat-msg.received {
   align-self: flex-start;
   background: var(--bg-tertiary);
   border: 1px solid var(--border);
   border-bottom-left-radius: 4px;
+}
+.chat-link {
+  color: var(--accent-bright);
+  text-decoration: underline;
+  word-break: break-all;
+}
 }
 
 .chat-msg.system {
@@ -2492,6 +2499,19 @@ function removeFileItem(fileId) {
   if (el) el.remove();
 }
 
+function shareAsyncLink(url, fileId) {
+  if (navigator.share) {
+    navigator.share({
+      title: 'Download from Stickr',
+      text: 'Download your file from Stickr',
+      url: url,
+    }).catch(() => {});
+  } else {
+    navigator.clipboard.writeText(url);
+    showToast('Link copied to clipboard');
+  }
+}
+
 function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -2628,7 +2648,7 @@ function addChatMessage(text, type, time) {
 
   const div = document.createElement('div');
   div.className = `chat-msg ${type}`;
-  div.innerHTML = `${escapeHtml(text)}<span class="msg-time">${time || ''}</span>`;
+  div.innerHTML = `${linkifyText(escapeHtml(text))}<span class="msg-time">${time || ''}</span>`;
   container.appendChild(div);
 
   // Only auto-scroll if user was already near the bottom, or if it's our own message
@@ -2738,7 +2758,7 @@ function updateFileStatus(id, status, pct, url) {
     } else if (status === 'uploading') {
       el.textContent = '⬆ Uploading...';
     } else if (status === 'link-ready') {
-      el.innerHTML = '✓ <a href="' + url + '" target="_blank" class="download-link" title="Copy link" onclick="event.stopPropagation();navigator.clipboard.writeText(\'' + url + '\');this.textContent=\'Copied!\';">Copy link</a>';
+      el.innerHTML = '✓ <span class="download-link" onclick="event.stopPropagation();navigator.clipboard.writeText(\'' + url + '\');this.textContent=\'Copied!\';setTimeout(()=>this.textContent=\'Copy\',2000);">Copy</span> · <span class="download-link" onclick="event.stopPropagation();shareAsyncLink(\'' + url + '\',\'' + id + '\');">Share</span>';
     } else if (status === 'interrupted') {
       el.textContent = pct !== undefined ? `✕ Failed at ${pct}%` : '✕ Failed';
     } else if (status === 'cancelled') {
@@ -3215,6 +3235,10 @@ function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
+}
+
+function linkifyText(html) {
+  return html.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener" class="chat-link">$1</a>');
 }
 
 // ═══════════════════════════════════════════
