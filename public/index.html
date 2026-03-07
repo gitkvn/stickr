@@ -814,6 +814,15 @@ header {
   text-align: right;
 }
 .file-status.complete { color: var(--success); }
+.file-status.link-ready { color: var(--success); }
+.file-status.uploading { color: var(--accent-bright); }
+.download-link {
+  color: var(--accent-bright);
+  text-decoration: none;
+  font-weight: 600;
+  cursor: pointer;
+}
+.download-link:hover { text-decoration: underline; }
 .file-status.sending { color: var(--accent-bright); }
 .file-status.interrupted { color: var(--danger); }
 .file-status.cancelled { color: var(--danger); }
@@ -2216,6 +2225,13 @@ function setupFileChannel(channel, remotePeerId) {
 }
 
 async function sendFile(file) {
+  const ASYNC_THRESHOLD = 25 * 1024 * 1024; // 25MB
+
+  // Route large files through async R2 upload
+  if (file.size >= ASYNC_THRESHOLD) {
+    return sendFileAsync(file);
+  }
+
   const fileId = 'f-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6);
   const abortCtrl = new AbortController();
   activeSendAbort.set(fileId, abortCtrl);
@@ -2393,6 +2409,87 @@ async function sendFile(file) {
 function cancelSend(fileId) {
   const ctrl = activeSendAbort.get(fileId);
   if (ctrl) ctrl.abort();
+}
+
+async function sendFileAsync(file) {
+  const fileId = 'async-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6);
+
+  addFileItem(fileId, file.name, file.size, 'sending');
+  updateFileStatus(fileId, 'uploading');
+
+  try {
+    const xhr = new XMLHttpRequest();
+    const uploadPromise = new Promise((resolve, reject) => {
+      xhr.upload.addEventListener('progress', (e) => {
+        if (e.lengthComputable) {
+          const pct = Math.round((e.loaded / e.total) * 100);
+          const speed = e.loaded / ((Date.now() - uploadStart) / 1000);
+          updateFileProgress(fileId, pct, speed);
+        }
+      });
+      xhr.addEventListener('load', () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(JSON.parse(xhr.responseText));
+        } else {
+          try {
+            const err = JSON.parse(xhr.responseText);
+            reject(err);
+          } catch {
+            reject({ error: 'Upload failed' });
+          }
+        }
+      });
+      xhr.addEventListener('error', () => reject({ error: 'Network error' }));
+      xhr.addEventListener('abort', () => reject({ error: 'Cancelled' }));
+    });
+
+    const uploadStart = Date.now();
+    xhr.open('POST', '/api/upload');
+    xhr.setRequestHeader('X-Filename', encodeURIComponent(file.name));
+    xhr.setRequestHeader('X-Mime-Type', file.type || 'application/octet-stream');
+    xhr.send(file);
+
+    const result = await uploadPromise;
+
+    // Update balance
+    if (currentUser && result.balance !== undefined) {
+      currentUser.transfer_balance = result.balance;
+      updateUsageDisplay();
+    }
+
+    // Show download link in file item
+    updateFileStatus(fileId, 'link-ready', 100, result.url);
+
+    // Send the download link to connected peers via chat
+    for (const [, peer] of peers) {
+      const ch = peer.dataChannel;
+      if (ch && ch.readyState === 'open') {
+        ch.send(JSON.stringify({
+          type: 'chat',
+          text: '📎 ' + file.name + ' (' + formatSize(file.size) + ')\n' + result.url,
+        }));
+      }
+    }
+
+    sessionStats.filesSent++;
+    sessionStats.bytesSent += file.size;
+
+  } catch (err) {
+    console.error('Async upload error:', err);
+    if (err.error === 'insufficient_balance') {
+      showToast('Transfer limit reached — top up to send more files');
+      showTopUpPrompt(err.balance, file.size);
+      removeFileItem(fileId);
+    } else {
+      updateFileStatus(fileId, 'cancelled');
+      showToast(err.error || 'Upload failed');
+    }
+  }
+}
+
+function removeFileItem(fileId) {
+  const el = document.getElementById(fileId);
+  if (el) el.remove();
 }
 
 function downloadBlob(blob, filename) {
@@ -2632,12 +2729,16 @@ function formatSpeed(bytesPerSec) {
   return Math.round(bytesPerSec) + ' B/s';
 }
 
-function updateFileStatus(id, status, pct) {
+function updateFileStatus(id, status, pct, url) {
   const el = document.getElementById(`status-${id}`);
   if (el) {
     el.className = 'file-status ' + status;
     if (status === 'complete') {
       el.textContent = '✓ Done';
+    } else if (status === 'uploading') {
+      el.textContent = '⬆ Uploading...';
+    } else if (status === 'link-ready') {
+      el.innerHTML = '✓ <a href="' + url + '" target="_blank" class="download-link" title="Copy link" onclick="event.stopPropagation();navigator.clipboard.writeText(\'' + url + '\');this.textContent=\'Copied!\';">Copy link</a>';
     } else if (status === 'interrupted') {
       el.textContent = pct !== undefined ? `✕ Failed at ${pct}%` : '✕ Failed';
     } else if (status === 'cancelled') {
@@ -2647,10 +2748,10 @@ function updateFileStatus(id, status, pct) {
     }
   }
   const bar = document.getElementById(`progress-${id}`);
-  if (bar && status === 'complete') bar.style.width = '100%';
+  if (bar && (status === 'complete' || status === 'link-ready')) bar.style.width = '100%';
 
   // Hide cancel button when transfer is no longer active
-  if (status === 'complete' || status === 'interrupted' || status === 'cancelled') {
+  if (status === 'complete' || status === 'interrupted' || status === 'cancelled' || status === 'link-ready') {
     const cancelBtn = document.getElementById(`cancel-${id}`);
     if (cancelBtn) cancelBtn.remove();
   }

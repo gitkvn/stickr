@@ -6,10 +6,36 @@ const crypto = require('crypto');
 const path = require('path');
 const Database = require('better-sqlite3');
 const cookie = require('cookie');
+const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
+
+// ═══════════════════════════════════════════
+// R2 OBJECT STORAGE
+// ═══════════════════════════════════════════
+const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID;
+const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID;
+const R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY;
+const R2_BUCKET_NAME = process.env.R2_BUCKET_NAME || 'stickr-files';
+const ASYNC_FILE_EXPIRY = 24 * 60 * 60 * 1000; // 24 hours
+const ASYNC_THRESHOLD = 25 * 1024 * 1024; // 25MB
+
+let s3 = null;
+if (R2_ACCOUNT_ID && R2_ACCESS_KEY_ID && R2_SECRET_ACCESS_KEY) {
+  s3 = new S3Client({
+    region: 'auto',
+    endpoint: `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+    credentials: {
+      accessKeyId: R2_ACCESS_KEY_ID,
+      secretAccessKey: R2_SECRET_ACCESS_KEY,
+    },
+  });
+  console.log('R2 storage configured');
+} else {
+  console.warn('R2 credentials not configured — async transfers disabled');
+}
 
 // ═══════════════════════════════════════════
 // DATABASE
@@ -43,6 +69,18 @@ db.exec(`
     refunded INTEGER DEFAULT 0,
     created_at TEXT DEFAULT (datetime('now'))
   );
+
+  CREATE TABLE IF NOT EXISTS async_files (
+    token TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    filename TEXT NOT NULL,
+    file_size INTEGER NOT NULL,
+    mime_type TEXT,
+    r2_key TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    download_count INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now'))
+  );
 `);
 
 // Prepared statements
@@ -63,6 +101,12 @@ const stmts = {
   findPendingTransfer: db.prepare('SELECT * FROM pending_transfers WHERE file_id = ? AND user_id = ?'),
   markRefunded: db.prepare('UPDATE pending_transfers SET refunded = 1 WHERE file_id = ? AND user_id = ?'),
   cleanOldTransfers: db.prepare("DELETE FROM pending_transfers WHERE created_at < datetime('now', '-1 day')"),
+  // Async file queries
+  createAsyncFile: db.prepare('INSERT INTO async_files (token, user_id, filename, file_size, mime_type, r2_key, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)'),
+  findAsyncFile: db.prepare('SELECT * FROM async_files WHERE token = ?'),
+  incrementDownloadCount: db.prepare('UPDATE async_files SET download_count = download_count + 1 WHERE token = ?'),
+  findExpiredFiles: db.prepare("SELECT * FROM async_files WHERE expires_at < datetime('now')"),
+  deleteAsyncFile: db.prepare('DELETE FROM async_files WHERE token = ?'),
   // Stats queries
   totalUsers: db.prepare('SELECT COUNT(*) as count FROM users'),
   totalTransfers: db.prepare('SELECT COUNT(*) as count, COALESCE(SUM(file_size), 0) as total_bytes FROM pending_transfers'),
@@ -75,9 +119,22 @@ const stmts = {
 };
 
 // Clean expired sessions every hour
-setInterval(() => {
+setInterval(async () => {
   stmts.cleanExpiredSessions.run();
   stmts.cleanOldTransfers.run();
+  // Clean expired async files from R2
+  if (s3) {
+    const expired = stmts.findExpiredFiles.all();
+    for (const file of expired) {
+      try {
+        await s3.send(new DeleteObjectCommand({ Bucket: R2_BUCKET_NAME, Key: file.r2_key }));
+      } catch (err) {
+        console.warn('Failed to delete R2 object:', file.r2_key, err.message);
+      }
+      stmts.deleteAsyncFile.run(file.token);
+    }
+    if (expired.length > 0) console.log(`Cleaned ${expired.length} expired async files`);
+  }
 }, 60 * 60 * 1000);
 
 // ═══════════════════════════════════════════
@@ -297,6 +354,218 @@ app.post('/api/transfer/refund', (req, res) => {
 // ═══════════════════════════════════════════
 // STATIC FILES
 // ═══════════════════════════════════════════
+// ═══════════════════════════════════════════
+// ASYNC FILE TRANSFER (R2)
+// ═══════════════════════════════════════════
+
+// Upload a file to R2 (authenticated, streams to R2)
+app.post('/api/upload', async (req, res) => {
+  if (!s3) return res.status(503).json({ error: 'Async transfers not available' });
+
+  const user = getUserFromCookie(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+
+  const filename = req.headers['x-filename'];
+  const mimeType = req.headers['x-mime-type'] || 'application/octet-stream';
+  const fileSize = parseInt(req.headers['content-length'], 10);
+
+  if (!filename || !fileSize || fileSize <= 0) {
+    return res.status(400).json({ error: 'Missing filename or content-length' });
+  }
+
+  // Check balance
+  const currentUser = stmts.findUserById.get(user.id);
+  if (!currentUser) return res.status(401).json({ error: 'User not found' });
+
+  if (currentUser.transfer_balance < fileSize) {
+    return res.status(403).json({
+      error: 'insufficient_balance',
+      balance: currentUser.transfer_balance,
+      required: fileSize,
+    });
+  }
+
+  // Deduct balance upfront
+  const newBalance = currentUser.transfer_balance - fileSize;
+  stmts.updateBalance.run(newBalance, user.id);
+
+  const token = crypto.randomBytes(16).toString('hex');
+  const r2Key = `${user.id}/${token}/${filename}`;
+  const expiresAt = new Date(Date.now() + ASYNC_FILE_EXPIRY).toISOString();
+
+  try {
+    // Collect request body into buffer (for files up to ~500MB)
+    const chunks = [];
+    for await (const chunk of req) {
+      chunks.push(chunk);
+    }
+    const body = Buffer.concat(chunks);
+    const actualSize = body.length;
+
+    await s3.send(new PutObjectCommand({
+      Bucket: R2_BUCKET_NAME,
+      Key: r2Key,
+      Body: body,
+      ContentType: mimeType,
+      ContentLength: actualSize,
+    }));
+
+    // Record in database
+    stmts.createAsyncFile.run(token, user.id, filename, actualSize, mimeType, r2Key, expiresAt);
+
+    // Track as pending transfer for stats
+    const fileId = 'async-' + token;
+    try { stmts.createPendingTransfer.run(fileId, user.id, actualSize); } catch {}
+
+    // Adjust balance if actual size differs from content-length
+    if (actualSize !== fileSize) {
+      const diff = fileSize - actualSize;
+      const adjustedBalance = newBalance + diff;
+      stmts.updateBalance.run(adjustedBalance, user.id);
+    }
+
+    const host = req.headers.host;
+    const protocol = req.headers['x-forwarded-proto'] || 'https';
+    const downloadUrl = `${protocol}://${host}/dl/${token}`;
+
+    res.json({
+      token,
+      url: downloadUrl,
+      balance: stmts.findUserById.get(user.id).transfer_balance,
+      expiresAt,
+    });
+  } catch (err) {
+    console.error('R2 upload error:', err);
+    // Refund on failure
+    stmts.updateBalance.run(currentUser.transfer_balance, user.id);
+    res.status(500).json({ error: 'Upload failed' });
+  }
+});
+
+// Download page (public, branded)
+app.get('/dl/:token', (req, res) => {
+  const file = stmts.findAsyncFile.get(req.params.token);
+  if (!file) {
+    return res.status(404).send(getDownloadPage(null));
+  }
+
+  // Check expiry
+  if (new Date(file.expires_at) < new Date()) {
+    return res.status(410).send(getDownloadPage(null, true));
+  }
+
+  res.send(getDownloadPage(file));
+});
+
+// Actual file download (streams from R2)
+app.get('/api/download/:token', async (req, res) => {
+  if (!s3) return res.status(503).send('Async transfers not available');
+
+  const file = stmts.findAsyncFile.get(req.params.token);
+  if (!file) return res.status(404).send('File not found');
+
+  if (new Date(file.expires_at) < new Date()) {
+    return res.status(410).send('File expired');
+  }
+
+  try {
+    const obj = await s3.send(new GetObjectCommand({
+      Bucket: R2_BUCKET_NAME,
+      Key: file.r2_key,
+    }));
+
+    stmts.incrementDownloadCount.run(req.params.token);
+
+    res.set({
+      'Content-Type': file.mime_type || 'application/octet-stream',
+      'Content-Disposition': `attachment; filename="${encodeURIComponent(file.filename)}"`,
+      'Content-Length': file.file_size,
+    });
+
+    const stream = obj.Body;
+    stream.on('data', (chunk) => res.write(chunk));
+    stream.on('end', () => res.end());
+    stream.on('error', (err) => {
+      console.error('R2 stream error:', err);
+      res.end();
+    });
+  } catch (err) {
+    console.error('R2 download error:', err);
+    res.status(500).send('Download failed');
+  }
+});
+
+// Download page HTML generator
+function getDownloadPage(file, expired = false) {
+  const sizeFormatted = file ? formatBytes(file.file_size) : '';
+  const expiresIn = file ? getTimeRemaining(file.expires_at) : '';
+
+  if (!file || expired) {
+    return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stickr — File ${expired ? 'Expired' : 'Not Found'}</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,system-ui,sans-serif;background:#0a0a0f;color:#e8e8f0;min-height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;padding:24px}
+.card{background:#12121a;border:1px solid #2a2a3e;border-radius:16px;padding:48px 36px;max-width:420px;width:100%;text-align:center}
+h1{font-size:24px;margin-bottom:8px}
+p{color:#8888a8;font-size:14px;line-height:1.6;margin-bottom:24px}
+.btn{display:inline-flex;align-items:center;justify-content:center;padding:14px 32px;border-radius:12px;font-size:15px;font-weight:600;text-decoration:none;background:linear-gradient(135deg,#6c5ce7,#a29bfe);color:white;transition:all 0.2s}
+.btn:hover{transform:translateY(-1px);box-shadow:0 4px 20px #6c5ce730}
+.logo{font-size:28px;font-weight:800;margin-bottom:24px;background:linear-gradient(135deg,#6c5ce7,#a29bfe);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+</style></head><body>
+<div class="card">
+<div class="logo">Stickr</div>
+<h1>${expired ? 'File Expired' : 'File Not Found'}</h1>
+<p>${expired ? 'This download link has expired. Ask the sender for a new link.' : 'This download link does not exist or has been removed.'}</p>
+<a class="btn" href="/">Share files with Stickr</a>
+</div></body></html>`;
+  }
+
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stickr — Download ${file.filename}</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,system-ui,sans-serif;background:#0a0a0f;color:#e8e8f0;min-height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;padding:24px}
+.card{background:#12121a;border:1px solid #2a2a3e;border-radius:16px;padding:48px 36px;max-width:420px;width:100%;text-align:center}
+h1{font-size:20px;margin-bottom:4px;word-break:break-all}
+.meta{color:#8888a8;font-size:13px;margin-bottom:24px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:16px 32px;border-radius:12px;font-size:16px;font-weight:600;text-decoration:none;background:linear-gradient(135deg,#6c5ce7,#a29bfe);color:white;transition:all 0.2s;margin-bottom:16px;border:none;cursor:pointer}
+.btn:hover{transform:translateY(-1px);box-shadow:0 4px 20px #6c5ce730}
+.btn svg{flex-shrink:0}
+.logo{font-size:28px;font-weight:800;margin-bottom:24px;background:linear-gradient(135deg,#6c5ce7,#a29bfe);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.expiry{color:#555570;font-size:11px;margin-bottom:20px}
+.promo{border-top:1px solid #2a2a3e;padding-top:20px;margin-top:8px}
+.promo p{color:#8888a8;font-size:13px;margin-bottom:12px}
+.promo a{color:#a29bfe;text-decoration:none;font-weight:600;font-size:14px}
+.promo a:hover{text-decoration:underline}
+.file-icon{margin-bottom:16px}
+</style></head><body>
+<div class="card">
+<div class="logo">Stickr</div>
+<div class="file-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#a29bfe" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><polyline points="9 15 12 18 15 15"/></svg></div>
+<h1>${file.filename}</h1>
+<p class="meta">${sizeFormatted}</p>
+<p class="expiry">Expires in ${expiresIn}</p>
+<a class="btn" href="/api/download/${file.token}">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+Download
+</a>
+<div class="promo">
+<p>Want to share files too?</p>
+<a href="/">Start free with 500 MB on Stickr</a>
+</div>
+</div></body></html>`;
+}
+
+function getTimeRemaining(expiresAt) {
+  const diff = new Date(expiresAt) - new Date();
+  if (diff <= 0) return 'expired';
+  const hours = Math.floor(diff / (1000 * 60 * 60));
+  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+  if (hours > 0) return hours + 'h ' + minutes + 'm';
+  return minutes + 'm';
+}
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ═══════════════════════════════════════════
