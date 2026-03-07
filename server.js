@@ -35,6 +35,14 @@ db.exec(`
     expires_at TEXT NOT NULL,
     created_at TEXT DEFAULT (datetime('now'))
   );
+
+  CREATE TABLE IF NOT EXISTS pending_transfers (
+    file_id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    file_size INTEGER NOT NULL,
+    refunded INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now'))
+  );
 `);
 
 // Prepared statements
@@ -51,10 +59,17 @@ const stmts = {
   deleteSession: db.prepare('DELETE FROM sessions WHERE token = ?'),
   cleanExpiredSessions: db.prepare("DELETE FROM sessions WHERE expires_at < datetime('now')"),
   updateBalance: db.prepare('UPDATE users SET transfer_balance = ? WHERE id = ?'),
+  createPendingTransfer: db.prepare('INSERT INTO pending_transfers (file_id, user_id, file_size) VALUES (?, ?, ?)'),
+  findPendingTransfer: db.prepare('SELECT * FROM pending_transfers WHERE file_id = ? AND user_id = ?'),
+  markRefunded: db.prepare('UPDATE pending_transfers SET refunded = 1 WHERE file_id = ? AND user_id = ?'),
+  cleanOldTransfers: db.prepare("DELETE FROM pending_transfers WHERE created_at < datetime('now', '-1 day')"),
 };
 
 // Clean expired sessions every hour
-setInterval(() => { stmts.cleanExpiredSessions.run(); }, 60 * 60 * 1000);
+setInterval(() => {
+  stmts.cleanExpiredSessions.run();
+  stmts.cleanOldTransfers.run();
+}, 60 * 60 * 1000);
 
 // ═══════════════════════════════════════════
 // AUTH HELPERS
@@ -213,6 +228,9 @@ app.post('/api/transfer/start', (req, res) => {
   if (!fileSize || !fileId || typeof fileSize !== 'number' || fileSize <= 0) {
     return res.status(400).json({ error: 'Invalid file size' });
   }
+  if (typeof fileId !== 'string' || fileId.length > 100) {
+    return res.status(400).json({ error: 'Invalid file ID' });
+  }
 
   // Check balance
   const currentUser = stmts.findUserById.get(user.id);
@@ -226,14 +244,19 @@ app.post('/api/transfer/start', (req, res) => {
     });
   }
 
-  // Deduct
+  // Deduct and record pending transfer
   const newBalance = currentUser.transfer_balance - fileSize;
   stmts.updateBalance.run(newBalance, user.id);
+  try {
+    stmts.createPendingTransfer.run(fileId, user.id, fileSize);
+  } catch (e) {
+    // Duplicate fileId — ignore, deduction still stands
+  }
 
   res.json({ balance: newBalance });
 });
 
-// Refund a failed/cancelled transfer
+// Refund a failed/cancelled transfer — only refunds what was actually deducted
 app.post('/api/transfer/refund', (req, res) => {
   const user = getUserFromCookie(req);
   if (!user) return res.status(401).json({ error: 'Not authenticated' });
@@ -243,11 +266,21 @@ app.post('/api/transfer/refund', (req, res) => {
     return res.status(400).json({ error: 'Invalid file size' });
   }
 
+  // Only refund if there's a matching pending transfer that hasn't been refunded
+  const pending = stmts.findPendingTransfer.get(fileId, user.id);
+  if (!pending || pending.refunded) {
+    return res.status(400).json({ error: 'No refundable transfer found' });
+  }
+
+  // Refund at most the original deducted amount
+  const refundAmount = Math.min(fileSize, pending.file_size);
+
   const currentUser = stmts.findUserById.get(user.id);
   if (!currentUser) return res.status(401).json({ error: 'User not found' });
 
-  const newBalance = currentUser.transfer_balance + fileSize;
+  const newBalance = currentUser.transfer_balance + refundAmount;
   stmts.updateBalance.run(newBalance, user.id);
+  stmts.markRefunded.run(fileId, user.id);
 
   res.json({ balance: newBalance });
 });
@@ -255,6 +288,16 @@ app.post('/api/transfer/refund', (req, res) => {
 // ═══════════════════════════════════════════
 // STATIC FILES
 // ═══════════════════════════════════════════
+// DEBUG: Temporary endpoint to test balance limits — REMOVE BEFORE PRODUCTION
+app.post('/api/debug/set-balance', (req, res) => {
+  const user = getUserFromCookie(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  const { balance } = req.body;
+  if (typeof balance !== 'number') return res.status(400).json({ error: 'Invalid balance' });
+  stmts.updateBalance.run(balance, user.id);
+  res.json({ balance });
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ═══════════════════════════════════════════
