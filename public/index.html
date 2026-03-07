@@ -440,6 +440,30 @@ header {
   font-size: 18px;
 }
 
+/* ─── Confetti ─── */
+.confetti-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 1;
+}
+.confetti-piece {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  top: -10px;
+  animation: confettiFall 1.5s ease-out forwards;
+}
+@keyframes confettiFall {
+  0% { transform: translateY(0) rotate(0deg) scale(1); opacity: 1; }
+  100% { transform: translateY(300px) rotate(720deg) scale(0.3); opacity: 0; }
+}
+
 /* ─── Join Modal ─── */
 .modal-overlay {
   position: fixed;
@@ -1572,8 +1596,9 @@ header {
 
 <!-- Sign-in Modal -->
 <div class="modal-overlay" id="signin-modal">
-  <div class="modal" style="text-align:center; max-width:380px;">
-    <div style="font-size:40px; margin-bottom:12px;">📤</div>
+  <div class="modal signin-modal-inner" style="text-align:center; max-width:380px; position:relative; overflow:hidden;">
+    <div class="confetti-container" id="confetti-container"></div>
+    <div style="font-size:40px; margin-bottom:12px;">🎉</div>
     <h2>Sign in to share</h2>
     <p style="color:var(--text-secondary); margin: 8px 0 24px; font-size:14px; line-height:1.6;">Sign in with Google to create rooms and share files. You'll get <strong style="color:var(--accent-bright);">500 MB free</strong> to get started.</p>
     <button class="btn btn-primary btn-google-signin" onclick="window.location.href='/auth/google'" style="width:100%; justify-content:center; gap:10px; margin-bottom:12px;">
@@ -3269,6 +3294,22 @@ function signIn() {
 
 function showSigninModal() {
   document.getElementById('signin-modal').classList.add('active');
+  // Trigger confetti
+  const container = document.getElementById('confetti-container');
+  container.innerHTML = '';
+  const colors = ['#6c5ce7', '#a29bfe', '#00d2a0', '#FFD93D', '#FF6B6B', '#74b9ff', '#fd79a8'];
+  for (let i = 0; i < 40; i++) {
+    const piece = document.createElement('div');
+    piece.className = 'confetti-piece';
+    piece.style.left = Math.random() * 100 + '%';
+    piece.style.background = colors[Math.floor(Math.random() * colors.length)];
+    piece.style.animationDelay = Math.random() * 0.5 + 's';
+    piece.style.animationDuration = (1 + Math.random() * 1) + 's';
+    piece.style.width = (5 + Math.random() * 6) + 'px';
+    piece.style.height = (5 + Math.random() * 6) + 'px';
+    piece.style.borderRadius = Math.random() > 0.5 ? '50%' : '2px';
+    container.appendChild(piece);
+  }
 }
 
 function hideSigninModal() {
