@@ -2419,6 +2419,12 @@ function cancelSend(fileId) {
 }
 
 async function sendFileAsync(file) {
+  const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB
+  if (file.size > MAX_FILE_SIZE) {
+    showToast('Maximum file size is 500 MB');
+    return;
+  }
+
   const fileId = 'async-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6);
 
   addFileItem(fileId, file.name, file.size, 'sending');
@@ -2486,6 +2492,9 @@ async function sendFileAsync(file) {
     if (err.error === 'insufficient_balance') {
       showToast('Transfer limit reached — top up to send more files');
       showTopUpPrompt(err.balance, file.size);
+      removeFileItem(fileId);
+    } else if (err.error === 'file_too_large') {
+      showToast('Maximum file size is 500 MB');
       removeFileItem(fileId);
     } else {
       updateFileStatus(fileId, 'cancelled');

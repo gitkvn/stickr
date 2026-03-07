@@ -7,6 +7,7 @@ const path = require('path');
 const Database = require('better-sqlite3');
 const cookie = require('cookie');
 const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
+const { Upload } = require('@aws-sdk/lib-storage');
 
 const app = express();
 const server = http.createServer(app);
@@ -359,70 +360,93 @@ app.post('/api/transfer/refund', (req, res) => {
 // ═══════════════════════════════════════════
 
 // Upload a file to R2 (authenticated, streams to R2)
+const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB per file
+
 app.post('/api/upload', async (req, res) => {
   if (!s3) return res.status(503).json({ error: 'Async transfers not available' });
 
   const user = getUserFromCookie(req);
   if (!user) return res.status(401).json({ error: 'Not authenticated' });
 
-  const filename = req.headers['x-filename'];
+  const filename = decodeURIComponent(req.headers['x-filename'] || '');
   const mimeType = req.headers['x-mime-type'] || 'application/octet-stream';
-  const fileSize = parseInt(req.headers['content-length'], 10);
+  const declaredSize = parseInt(req.headers['content-length'], 10);
 
-  if (!filename || !fileSize || fileSize <= 0) {
-    return res.status(400).json({ error: 'Missing filename or content-length' });
+  if (!filename) {
+    return res.status(400).json({ error: 'Missing filename' });
   }
 
-  // Check balance
+  if (declaredSize > MAX_FILE_SIZE) {
+    return res.status(413).json({ error: 'file_too_large', maxSize: MAX_FILE_SIZE });
+  }
+
+  // Check balance using declared size
   const currentUser = stmts.findUserById.get(user.id);
   if (!currentUser) return res.status(401).json({ error: 'User not found' });
 
-  if (currentUser.transfer_balance < fileSize) {
+  if (declaredSize && currentUser.transfer_balance < declaredSize) {
     return res.status(403).json({
       error: 'insufficient_balance',
       balance: currentUser.transfer_balance,
-      required: fileSize,
+      required: declaredSize,
     });
   }
-
-  // Deduct balance upfront
-  const newBalance = currentUser.transfer_balance - fileSize;
-  stmts.updateBalance.run(newBalance, user.id);
 
   const token = crypto.randomBytes(16).toString('hex');
   const r2Key = `${user.id}/${token}/${filename}`;
   const expiresAt = new Date(Date.now() + ASYNC_FILE_EXPIRY).toISOString();
 
-  try {
-    // Collect request body into buffer (for files up to ~500MB)
-    const chunks = [];
-    for await (const chunk of req) {
-      chunks.push(chunk);
-    }
-    const body = Buffer.concat(chunks);
-    const actualSize = body.length;
+  // Track bytes as they stream through
+  let bytesReceived = 0;
+  const { PassThrough } = require('stream');
+  const passthrough = new PassThrough();
 
-    await s3.send(new PutObjectCommand({
-      Bucket: R2_BUCKET_NAME,
-      Key: r2Key,
-      Body: body,
-      ContentType: mimeType,
-      ContentLength: actualSize,
-    }));
+  req.on('data', (chunk) => {
+    bytesReceived += chunk.length;
+    if (bytesReceived > MAX_FILE_SIZE) {
+      passthrough.destroy(new Error('File too large'));
+      req.destroy();
+      return;
+    }
+    passthrough.write(chunk);
+  });
+  req.on('end', () => passthrough.end());
+  req.on('error', (err) => passthrough.destroy(err));
+
+  try {
+    // Multipart streaming upload to R2
+    const upload = new Upload({
+      client: s3,
+      params: {
+        Bucket: R2_BUCKET_NAME,
+        Key: r2Key,
+        Body: passthrough,
+        ContentType: mimeType,
+      },
+      queueSize: 4,
+      partSize: 5 * 1024 * 1024, // 5MB parts
+    });
+
+    await upload.done();
+
+    const fileSize = bytesReceived;
+
+    // Deduct actual bytes from balance
+    if (currentUser.transfer_balance < fileSize) {
+      // Edge case: balance dipped between check and completion
+      // Still save the file but set balance to 0
+      stmts.updateBalance.run(0, user.id);
+    } else {
+      const newBalance = currentUser.transfer_balance - fileSize;
+      stmts.updateBalance.run(newBalance, user.id);
+    }
 
     // Record in database
-    stmts.createAsyncFile.run(token, user.id, filename, actualSize, mimeType, r2Key, expiresAt);
+    stmts.createAsyncFile.run(token, user.id, filename, fileSize, mimeType, r2Key, expiresAt);
 
     // Track as pending transfer for stats
     const fileId = 'async-' + token;
-    try { stmts.createPendingTransfer.run(fileId, user.id, actualSize); } catch {}
-
-    // Adjust balance if actual size differs from content-length
-    if (actualSize !== fileSize) {
-      const diff = fileSize - actualSize;
-      const adjustedBalance = newBalance + diff;
-      stmts.updateBalance.run(adjustedBalance, user.id);
-    }
+    try { stmts.createPendingTransfer.run(fileId, user.id, fileSize); } catch {}
 
     const host = req.headers.host;
     const protocol = req.headers['x-forwarded-proto'] || 'https';
@@ -436,8 +460,6 @@ app.post('/api/upload', async (req, res) => {
     });
   } catch (err) {
     console.error('R2 upload error:', err);
-    // Refund on failure
-    stmts.updateBalance.run(currentUser.transfer_balance, user.id);
     res.status(500).json({ error: 'Upload failed' });
   }
 });
