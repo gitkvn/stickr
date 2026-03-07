@@ -318,6 +318,18 @@ header {
 }
 .user-logout:hover { color: var(--text-primary); border-color: var(--text-muted); }
 
+.user-usage {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+.user-usage.low { color: #FFD93D; border-color: #FFD93D40; }
+.user-usage.empty { color: var(--danger); border-color: var(--danger); }
+
 .btn-sign-in {
   font-family: var(--font-body);
   font-size: 13px;
@@ -688,6 +700,7 @@ header {
   .header-badge { display: none; }
   .user-name { display: none; }
   .user-logout { display: none; }
+  .user-usage { display: none; }
   .user-avatar { width: 32px; height: 32px; }
   .mobile-file-btn {
     display: block;
@@ -1422,6 +1435,7 @@ header {
       <div class="user-menu" id="user-menu" style="display:none">
         <img class="user-avatar" id="user-avatar" src="" alt="">
         <span class="user-name" id="user-name"></span>
+        <span class="user-usage" id="user-usage"></span>
         <button class="user-logout" onclick="logout()" title="Sign out">Sign out</button>
       </div>
       <button class="btn-sign-in" id="btn-sign-in" onclick="signIn()" style="display:none">Sign in</button>
@@ -2165,6 +2179,33 @@ async function sendFile(file) {
   const abortCtrl = new AbortController();
   activeSendAbort.set(fileId, abortCtrl);
 
+  // Check and deduct balance before sending (sender-only auth)
+  if (currentUser) {
+    try {
+      const res = await fetch('/api/transfer/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileSize: file.size, fileId }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        if (data.error === 'insufficient_balance') {
+          showToast('Transfer limit reached — top up to send more files');
+          showTopUpPrompt(data.balance, file.size);
+          activeSendAbort.delete(fileId);
+          return;
+        }
+        showToast(data.error || 'Transfer failed');
+        activeSendAbort.delete(fileId);
+        return;
+      }
+      currentUser.transfer_balance = data.balance;
+      updateUsageDisplay();
+    } catch (err) {
+      console.warn('Balance check failed, proceeding anyway:', err.message);
+    }
+  }
+
   addFileItem(fileId, file.name, file.size, 'sending');
 
   for (const [, peer] of peers) {
@@ -2279,6 +2320,22 @@ async function sendFile(file) {
       const pct = Math.round((sent / file.size) * 100);
       const isStall = pct > 0 && abortCtrl.signal.aborted;
       updateFileStatus(fileId, 'cancelled', pct);
+      // Refund the unused portion
+      if (currentUser) {
+        const unsent = file.size - sent;
+        if (unsent > 0) {
+          fetch('/api/transfer/refund', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fileSize: unsent, fileId }),
+          }).then(r => r.json()).then(data => {
+            if (data.balance !== undefined) {
+              currentUser.transfer_balance = data.balance;
+              updateUsageDisplay();
+            }
+          }).catch(() => {});
+        }
+      }
       activeSendAbort.delete(fileId);
       return; // Skip remaining peers — transfer is done
     }
@@ -3196,7 +3253,6 @@ async function checkAuth() {
     const res = await fetch('/auth/me');
     if (res.ok) {
       currentUser = await res.json();
-      // Show user menu, hide sign-in button
       document.getElementById('user-menu').style.display = 'flex';
       document.getElementById('btn-sign-in').style.display = 'none';
       document.getElementById('user-name').textContent = currentUser.name || currentUser.email;
@@ -3207,6 +3263,7 @@ async function checkAuth() {
       } else {
         avatar.style.display = 'none';
       }
+      updateUsageDisplay();
     } else {
       currentUser = null;
       document.getElementById('user-menu').style.display = 'none';
@@ -3217,6 +3274,47 @@ async function checkAuth() {
     document.getElementById('user-menu').style.display = 'none';
     document.getElementById('btn-sign-in').style.display = '';
   }
+}
+
+function updateUsageDisplay() {
+  const el = document.getElementById('user-usage');
+  if (!el || !currentUser) return;
+  const balance = currentUser.transfer_balance;
+  const text = formatSize(balance) + ' left';
+  el.textContent = text;
+  el.className = 'user-usage';
+  if (balance <= 0) {
+    el.classList.add('empty');
+  } else if (balance < 50 * 1024 * 1024) { // < 50MB
+    el.classList.add('low');
+  }
+}
+
+function showTopUpPrompt(balance, required) {
+  const needed = formatSize(required - balance);
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay active';
+  modal.id = 'topup-modal';
+  modal.innerHTML = `
+    <div class="modal" style="text-align:center; max-width:400px;">
+      <h2>Transfer limit reached</h2>
+      <p style="color:var(--text-secondary); margin: 12px 0 20px;">You need ${needed} more to send this file. Top up your balance to continue sharing.</p>
+      <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:20px;">
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+          <button class="btn btn-secondary" style="justify-content:center; font-size:14px;" disabled>2 GB — $1</button>
+          <button class="btn btn-secondary" style="justify-content:center; font-size:14px;" disabled>5 GB — $2</button>
+          <button class="btn btn-secondary" style="justify-content:center; font-size:14px;" disabled>10 GB — $3</button>
+          <button class="btn btn-secondary" style="justify-content:center; font-size:14px;" disabled>50 GB — $10</button>
+        </div>
+        <p style="font-size:11px; color:var(--text-muted);">Payments coming soon</p>
+      </div>
+      <button class="btn btn-secondary" style="width:100%; justify-content:center;" onclick="document.getElementById('topup-modal').remove()">Close</button>
+    </div>
+  `;
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) modal.remove();
+  });
+  document.body.appendChild(modal);
 }
 
 // Check auth on page load

@@ -200,6 +200,59 @@ app.get('/auth/logout', (req, res) => {
 });
 
 // ═══════════════════════════════════════════
+// TRANSFER TRACKING API
+// ═══════════════════════════════════════════
+app.use(express.json());
+
+// Start a transfer — deduct bytes upfront
+app.post('/api/transfer/start', (req, res) => {
+  const user = getUserFromCookie(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+
+  const { fileSize, fileId } = req.body;
+  if (!fileSize || !fileId || typeof fileSize !== 'number' || fileSize <= 0) {
+    return res.status(400).json({ error: 'Invalid file size' });
+  }
+
+  // Check balance
+  const currentUser = stmts.findUserById.get(user.id);
+  if (!currentUser) return res.status(401).json({ error: 'User not found' });
+
+  if (currentUser.transfer_balance < fileSize) {
+    return res.status(403).json({
+      error: 'insufficient_balance',
+      balance: currentUser.transfer_balance,
+      required: fileSize,
+    });
+  }
+
+  // Deduct
+  const newBalance = currentUser.transfer_balance - fileSize;
+  stmts.updateBalance.run(newBalance, user.id);
+
+  res.json({ balance: newBalance });
+});
+
+// Refund a failed/cancelled transfer
+app.post('/api/transfer/refund', (req, res) => {
+  const user = getUserFromCookie(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+
+  const { fileSize, fileId } = req.body;
+  if (!fileSize || !fileId || typeof fileSize !== 'number' || fileSize <= 0) {
+    return res.status(400).json({ error: 'Invalid file size' });
+  }
+
+  const currentUser = stmts.findUserById.get(user.id);
+  if (!currentUser) return res.status(401).json({ error: 'User not found' });
+
+  const newBalance = currentUser.transfer_balance + fileSize;
+  stmts.updateBalance.run(newBalance, user.id);
+
+  res.json({ balance: newBalance });
+});
+
+// ═══════════════════════════════════════════
 // STATIC FILES
 // ═══════════════════════════════════════════
 app.use(express.static(path.join(__dirname, 'public')));
