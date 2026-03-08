@@ -1429,6 +1429,15 @@ function formatBytes(bytes) {
 // ═══════════════════════════════════════════
 // HEALTH CHECK + SELF-PING
 // ═══════════════════════════════════════════
+// DEBUG: check raw user data — REMOVE LATER
+app.get('/api/debug/user', (req, res) => {
+  const user = getUserFromCookie(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  const rawUser = stmts.findUserById.get(user.id);
+  const columns = db.prepare('PRAGMA table_info(users)').all().map(c => c.name);
+  res.json({ cookieUser: user, rawUser, columns });
+});
+
 app.get('/health', (req, res) => {
   res.status(200).json({
     status: 'ok',
