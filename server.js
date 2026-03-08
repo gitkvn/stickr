@@ -116,26 +116,21 @@ db.exec(`
 `);
 
 // Migrate: add columns if missing
-try { db.exec('ALTER TABLE async_files ADD COLUMN batch_token TEXT'); } catch (e) { if (!e.message.includes('duplicate')) console.log('Migration batch_token:', e.message); }
-try { db.exec('ALTER TABLE async_files ADD COLUMN receive_link_id TEXT'); } catch (e) { if (!e.message.includes('duplicate')) console.log('Migration receive_link_id:', e.message); }
-try { db.exec('ALTER TABLE users ADD COLUMN username TEXT'); } catch (e) { if (!e.message.includes('duplicate')) console.log('Migration username:', e.message); }
-// Add unique index on username separately (can't add UNIQUE constraint via ALTER TABLE in SQLite)
-try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username)'); } catch (e) { console.log('Migration username index:', e.message); }
+try { db.exec('ALTER TABLE async_files ADD COLUMN batch_token TEXT'); } catch (e) { /* already exists */ }
+try { db.exec('ALTER TABLE async_files ADD COLUMN receive_link_id TEXT'); } catch (e) { /* already exists */ }
+try { db.exec('ALTER TABLE users ADD COLUMN username TEXT'); } catch (e) { /* already exists */ }
+try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username)'); } catch (e) { /* already exists */ }
+
+// Verify username column exists
+const testRow = db.prepare('PRAGMA table_info(users)').all();
+const hasUsername = testRow.some(col => col.name === 'username');
+if (!hasUsername) {
+  console.error('FATAL: username column missing from users table');
+  process.exit(1);
+}
+console.log('DB schema verified: username column exists');
 
 const RESERVED_USERNAMES = new Set(['auth', 'api', 'dl', 'r', 'health', 'privacy', 'admin', 'app', 'login', 'signup', 'settings', 'inbox', 'static', 'public', 'favicon']);
-
-function generateUsername(email) {
-  let base = email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
-  if (!base || base.length < 2) base = 'user';
-  if (RESERVED_USERNAMES.has(base)) base = base + '1';
-  let username = base;
-  let attempt = 0;
-  while (stmts.findUserByUsername.get(username)) {
-    attempt++;
-    username = base + attempt;
-  }
-  return username;
-}
 
 // Prepared statements
 const stmts = {
@@ -196,6 +191,30 @@ const stmts = {
     GROUP BY u.id ORDER BY bytes_sent DESC LIMIT 10`),
   usersNearLimit: db.prepare('SELECT email, name, transfer_balance FROM users WHERE transfer_balance < 52428800 ORDER BY transfer_balance ASC LIMIT 10'),
 };
+
+// Generate username from email (must be after stmts)
+function generateUsername(email) {
+  let base = email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (!base || base.length < 2) base = 'user';
+  if (RESERVED_USERNAMES.has(base)) base = base + '1';
+  let username = base;
+  let attempt = 0;
+  while (stmts.findUserByUsername.get(username)) {
+    attempt++;
+    username = base + attempt;
+  }
+  return username;
+}
+
+// Assign usernames to existing users who don't have one
+{
+  const usersWithoutUsername = db.prepare('SELECT id, email FROM users WHERE username IS NULL').all();
+  for (const u of usersWithoutUsername) {
+    const username = generateUsername(u.email);
+    stmts.setUsername.run(username, u.id);
+    console.log(`Assigned username @${username} to ${u.email}`);
+  }
+}
 
 // Clean expired sessions every hour
 setInterval(async () => {
