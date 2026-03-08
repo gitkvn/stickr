@@ -286,6 +286,7 @@ function getUserFromCookie(req) {
     email: row.email,
     name: row.name,
     picture: row.picture,
+    username: row.username,
     transfer_balance: row.transfer_balance,
     created_at: row.created_at,
   };
