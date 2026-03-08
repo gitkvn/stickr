@@ -4063,7 +4063,6 @@ function closeInbox() {
 
 async function loadInbox() {
   const list = document.getElementById('inbox-list');
-  const empty = document.getElementById('inbox-empty');
   
   try {
     const res = await fetch('/api/inbox');
@@ -4073,13 +4072,10 @@ async function loadInbox() {
     document.getElementById('inbox-count-label').textContent = files.length + ' file' + (files.length !== 1 ? 's' : '');
     
     if (files.length === 0) {
-      list.innerHTML = '';
-      list.appendChild(empty);
-      empty.style.display = '';
+      list.innerHTML = '<div class="inbox-empty">No files received yet. Share your receive link to get started.</div>';
       return;
     }
 
-    empty.style.display = 'none';
     list.innerHTML = files.map(f => {
       const timeAgo = getTimeAgo(f.created_at);
       const expiresIn = getExpiresIn(f.expires_at);
@@ -4115,11 +4111,9 @@ async function deleteInboxFile(token) {
       const el = document.getElementById('inbox-' + token);
       if (el) el.remove();
       checkInboxCount();
-      // Check if list is empty
       const list = document.getElementById('inbox-list');
       if (!list.querySelector('.inbox-file-item')) {
-        document.getElementById('inbox-empty').style.display = '';
-        list.appendChild(document.getElementById('inbox-empty'));
+        list.innerHTML = '<div class="inbox-empty">No files received yet. Share your receive link to get started.</div>';
         document.getElementById('inbox-count-label').textContent = '0 files';
       }
     }
