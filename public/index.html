@@ -334,6 +334,73 @@ header {
   color: var(--text-primary);
   border-color: var(--text-muted);
 }
+.profile-menu-handle {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: -4px;
+  margin-bottom: 4px;
+}
+.profile-menu-item.clickable {
+  cursor: pointer;
+  border-radius: 6px;
+  padding: 4px 0;
+}
+.profile-menu-item.clickable:hover .profile-menu-label {
+  color: var(--text-primary);
+}
+.profile-menu-value {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.profile-menu-small-btn {
+  font-family: var(--font-body);
+  font-size: 11px;
+  color: var(--accent-bright);
+  background: var(--accent-glow);
+  border: none;
+  border-radius: 4px;
+  padding: 3px 10px;
+  cursor: pointer;
+  font-weight: 600;
+}
+.profile-menu-small-btn:hover { opacity: 0.8; }
+.receive-link-result {
+  margin-top: 8px;
+}
+.receive-link-passkey {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+.receive-link-passkey strong {
+  color: var(--accent-bright);
+  font-size: 16px;
+  letter-spacing: 2px;
+}
+.receive-link-actions {
+  display: flex;
+  gap: 12px;
+}
+.receive-link-actions span {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-bright);
+  cursor: pointer;
+}
+.receive-link-actions span:hover { text-decoration: underline; }
+.profile-menu-badge {
+  background: var(--accent);
+  color: white;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 10px;
+  min-width: 20px;
+  text-align: center;
+}
 
 .btn-sign-in {
   font-family: var(--font-body);
@@ -495,6 +562,98 @@ header {
   cursor: pointer;
 }
 .link-file-actions span:hover { text-decoration: underline; }
+
+/* ─── Inbox View ─── */
+.inbox-view {
+  padding: 40px 20px;
+  max-width: 600px;
+  margin: 0 auto;
+  width: 100%;
+  flex-direction: column;
+  gap: 16px;
+}
+.inbox-count-label {
+  font-size: 13px;
+  color: var(--text-muted);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  padding: 3px 10px;
+  border-radius: 12px;
+}
+.inbox-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.inbox-empty {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+.inbox-file-item {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.inbox-file-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--bg-tertiary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+.inbox-file-details {
+  flex: 1;
+  min-width: 0;
+}
+.inbox-file-name {
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.inbox-file-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 3px;
+}
+.inbox-file-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.inbox-btn-dl, .inbox-btn-del {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.inbox-btn-dl {
+  background: var(--accent-glow);
+  color: var(--accent-bright);
+}
+.inbox-btn-dl:hover { background: #6c5ce730; }
+.inbox-btn-del {
+  background: #e0555510;
+  color: #e05555;
+  opacity: 0.5;
+}
+.inbox-btn-del:hover { opacity: 1; background: #e0555520; }
 
 .hero {
   text-align: center;
@@ -1619,10 +1778,35 @@ header {
               <div class="profile-menu-email" id="profile-menu-email"></div>
             </div>
           </div>
+          <div class="profile-menu-handle" id="profile-menu-handle"></div>
           <div class="profile-menu-divider"></div>
           <div class="profile-menu-item">
             <span class="profile-menu-label">Balance</span>
             <span class="profile-menu-balance" id="profile-menu-balance"></span>
+          </div>
+          <div class="profile-menu-divider"></div>
+          <div class="profile-menu-item clickable" onclick="window.open('/' + currentUser.username, '_blank')">
+            <span class="profile-menu-label">Your profile</span>
+            <span class="profile-menu-value" id="profile-menu-link"></span>
+          </div>
+          <div class="profile-menu-divider"></div>
+          <div class="profile-menu-section" id="receive-link-section">
+            <div class="profile-menu-item">
+              <span class="profile-menu-label">Receive link</span>
+              <button class="profile-menu-small-btn" onclick="event.stopPropagation();generateReceiveLink();" id="receive-link-btn">Generate</button>
+            </div>
+            <div class="receive-link-result" id="receive-link-result" style="display:none">
+              <div class="receive-link-passkey">Passkey: <strong id="receive-link-passkey"></strong></div>
+              <div class="receive-link-actions">
+                <span id="receive-link-copy" onclick="event.stopPropagation();copyReceiveLink();">Copy</span>
+                <span onclick="event.stopPropagation();shareReceiveLink();">Share</span>
+              </div>
+            </div>
+          </div>
+          <div class="profile-menu-divider"></div>
+          <div class="profile-menu-item clickable" onclick="event.stopPropagation();showInbox();">
+            <span class="profile-menu-label">Inbox</span>
+            <span class="profile-menu-badge" id="inbox-badge" style="display:none">0</span>
           </div>
           <div class="profile-menu-divider"></div>
           <button class="profile-menu-btn" onclick="logout()">Sign out</button>
@@ -1679,6 +1863,23 @@ header {
       <span class="footer-sep">·</span>
       <span class="footer-note">Encrypted end-to-end. Fast. Private.</span>
     </footer>
+  </div>
+
+  <!-- ═══ INBOX VIEW ═══ -->
+  <div id="inbox-view" class="view inbox-view">
+    <div class="link-view-header">
+      <div style="display:flex;align-items:center;gap:12px;">
+        <h2>Inbox</h2>
+        <span class="inbox-count-label" id="inbox-count-label"></span>
+      </div>
+      <button class="btn-back" onclick="closeInbox()">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+        Back
+      </button>
+    </div>
+    <div class="inbox-list" id="inbox-list">
+      <div class="inbox-empty" id="inbox-empty">No files received yet. Share your receive link to get started.</div>
+    </div>
   </div>
 
   <!-- ═══ GET A LINK VIEW ═══ -->
@@ -3739,6 +3940,159 @@ function hideSigninModal() {
 function toggleProfileMenu() {
   const menu = document.getElementById('profile-menu');
   menu.classList.toggle('active');
+  // Refresh inbox count when opening
+  if (menu.classList.contains('active') && currentUser) {
+    checkInboxCount();
+  }
+}
+
+// Receive link
+let currentReceiveLink = null;
+
+async function generateReceiveLink() {
+  try {
+    const res = await fetch('/api/receive-link/create', { method: 'POST' });
+    const data = await res.json();
+    currentReceiveLink = data;
+    document.getElementById('receive-link-passkey').textContent = data.passkey;
+    document.getElementById('receive-link-result').style.display = 'block';
+    document.getElementById('receive-link-btn').textContent = 'Regenerate';
+  } catch (err) {
+    showToast('Failed to generate receive link');
+  }
+}
+
+function copyReceiveLink() {
+  if (!currentReceiveLink || !currentUser) return;
+  const text = currentReceiveLink.url + '\nPasskey: ' + currentReceiveLink.passkey;
+  navigator.clipboard.writeText(text);
+  const el = document.getElementById('receive-link-copy');
+  el.textContent = 'Copied!';
+  setTimeout(() => el.textContent = 'Copy', 2000);
+}
+
+function shareReceiveLink() {
+  if (!currentReceiveLink || !currentUser) return;
+  const text = 'Send me files on Stickr: ' + currentReceiveLink.url + '\nPasskey: ' + currentReceiveLink.passkey;
+  if (navigator.share) {
+    navigator.share({ title: 'Send me files on Stickr', text }).catch(() => {});
+  } else {
+    navigator.clipboard.writeText(text);
+    showToast('Link copied to clipboard');
+  }
+}
+
+// Inbox
+async function checkInboxCount() {
+  try {
+    const res = await fetch('/api/inbox');
+    if (res.ok) {
+      const files = await res.json();
+      const badge = document.getElementById('inbox-badge');
+      if (files.length > 0) {
+        badge.textContent = files.length;
+        badge.style.display = '';
+      } else {
+        badge.style.display = 'none';
+      }
+    }
+  } catch {}
+}
+
+function showInbox() {
+  document.getElementById('profile-menu').classList.remove('active');
+  document.getElementById('home-view').classList.remove('active');
+  document.getElementById('link-view').classList.remove('active');
+  document.getElementById('inbox-view').classList.add('active');
+  loadInbox();
+}
+
+function closeInbox() {
+  document.getElementById('inbox-view').classList.remove('active');
+  document.getElementById('home-view').classList.add('active');
+}
+
+async function loadInbox() {
+  const list = document.getElementById('inbox-list');
+  const empty = document.getElementById('inbox-empty');
+  
+  try {
+    const res = await fetch('/api/inbox');
+    if (!res.ok) return;
+    const files = await res.json();
+    
+    document.getElementById('inbox-count-label').textContent = files.length + ' file' + (files.length !== 1 ? 's' : '');
+    
+    if (files.length === 0) {
+      list.innerHTML = '';
+      list.appendChild(empty);
+      empty.style.display = '';
+      return;
+    }
+
+    empty.style.display = 'none';
+    list.innerHTML = files.map(f => {
+      const timeAgo = getTimeAgo(f.created_at);
+      const expiresIn = getExpiresIn(f.expires_at);
+      return `
+        <div class="inbox-file-item" id="inbox-${f.token}">
+          <div class="inbox-file-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          </div>
+          <div class="inbox-file-details">
+            <div class="inbox-file-name">${escapeHtml(f.filename)}</div>
+            <div class="inbox-file-meta">${formatSize(f.file_size)} · ${timeAgo} · ${expiresIn}</div>
+          </div>
+          <div class="inbox-file-actions">
+            <a class="inbox-btn-dl" href="/api/download/${f.token}" title="Download">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            </a>
+            <button class="inbox-btn-del" onclick="deleteInboxFile('${f.token}')" title="Delete">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            </button>
+          </div>
+        </div>
+      `;
+    }).join('');
+  } catch (err) {
+    console.error('Failed to load inbox:', err);
+  }
+}
+
+async function deleteInboxFile(token) {
+  try {
+    const res = await fetch('/api/inbox/' + token, { method: 'DELETE' });
+    if (res.ok) {
+      const el = document.getElementById('inbox-' + token);
+      if (el) el.remove();
+      checkInboxCount();
+      // Check if list is empty
+      const list = document.getElementById('inbox-list');
+      if (!list.querySelector('.inbox-file-item')) {
+        document.getElementById('inbox-empty').style.display = '';
+        list.appendChild(document.getElementById('inbox-empty'));
+        document.getElementById('inbox-count-label').textContent = '0 files';
+      }
+    }
+  } catch {}
+}
+
+function getTimeAgo(dateStr) {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return mins + 'm ago';
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return hours + 'h ago';
+  return Math.floor(hours / 24) + 'd ago';
+}
+
+function getExpiresIn(dateStr) {
+  const diff = new Date(dateStr).getTime() - Date.now();
+  if (diff <= 0) return 'expired';
+  const hours = Math.floor(diff / (1000 * 60 * 60));
+  const mins = Math.floor((diff % (1000 * 60 * 60)) / 60000);
+  if (hours > 0) return 'expires in ' + hours + 'h';
+  return 'expires in ' + mins + 'm';
 }
 
 // Close profile menu on outside click
@@ -3773,7 +4127,20 @@ async function checkAuth() {
       // Populate profile dropdown
       document.getElementById('profile-menu-name').textContent = currentUser.name || '';
       document.getElementById('profile-menu-email').textContent = currentUser.email || '';
+      document.getElementById('profile-menu-handle').textContent = currentUser.username ? '@' + currentUser.username : '';
+      document.getElementById('profile-menu-link').textContent = currentUser.username ? '/' + currentUser.username : '';
+      // Show existing receive link if active
+      if (currentUser.receiveLink) {
+        currentReceiveLink = {
+          passkey: currentUser.receiveLink.passkey,
+          url: window.location.origin + '/' + currentUser.username,
+        };
+        document.getElementById('receive-link-passkey').textContent = currentUser.receiveLink.passkey;
+        document.getElementById('receive-link-result').style.display = 'block';
+        document.getElementById('receive-link-btn').textContent = 'Regenerate';
+      }
       updateUsageDisplay();
+      checkInboxCount();
     } else {
       currentUser = null;
       document.getElementById('user-menu').style.display = 'none';

@@ -54,6 +54,7 @@ db.exec(`
     email TEXT UNIQUE NOT NULL,
     name TEXT,
     picture TEXT,
+    username TEXT UNIQUE,
     transfer_balance INTEGER DEFAULT 524288000,
     created_at TEXT DEFAULT (datetime('now'))
   );
@@ -83,6 +84,7 @@ db.exec(`
     expires_at TEXT NOT NULL,
     download_count INTEGER DEFAULT 0,
     batch_token TEXT,
+    receive_link_id TEXT,
     created_at TEXT DEFAULT (datetime('now'))
   );
 
@@ -92,10 +94,46 @@ db.exec(`
     expires_at TEXT NOT NULL,
     created_at TEXT DEFAULT (datetime('now'))
   );
+
+  CREATE TABLE IF NOT EXISTS receive_links (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    passkey TEXT NOT NULL,
+    active INTEGER DEFAULT 1,
+    expires_at TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS pinned_files (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    filename TEXT NOT NULL,
+    file_size INTEGER NOT NULL,
+    mime_type TEXT,
+    r2_key TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now'))
+  );
 `);
 
-// Migrate: add batch_token column if missing
+// Migrate: add columns if missing
 try { db.exec('ALTER TABLE async_files ADD COLUMN batch_token TEXT'); } catch {}
+try { db.exec('ALTER TABLE async_files ADD COLUMN receive_link_id TEXT'); } catch {}
+try { db.exec('ALTER TABLE users ADD COLUMN username TEXT UNIQUE'); } catch {}
+
+const RESERVED_USERNAMES = new Set(['auth', 'api', 'dl', 'r', 'health', 'privacy', 'admin', 'app', 'login', 'signup', 'settings', 'inbox', 'static', 'public', 'favicon']);
+
+function generateUsername(email) {
+  let base = email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (!base || base.length < 2) base = 'user';
+  if (RESERVED_USERNAMES.has(base)) base = base + '1';
+  let username = base;
+  let attempt = 0;
+  while (stmts.findUserByUsername.get(username)) {
+    attempt++;
+    username = base + attempt;
+  }
+  return username;
+}
 
 // Prepared statements
 const stmts = {
@@ -127,6 +165,25 @@ const stmts = {
   findBatchFiles: db.prepare('SELECT * FROM async_files WHERE batch_token = ? ORDER BY created_at ASC'),
   findExpiredBatches: db.prepare("SELECT * FROM batches WHERE expires_at < datetime('now')"),
   deleteBatch: db.prepare('DELETE FROM batches WHERE token = ?'),
+  // Username queries
+  findUserByUsername: db.prepare('SELECT * FROM users WHERE username = ?'),
+  setUsername: db.prepare('UPDATE users SET username = ? WHERE id = ?'),
+  // Receive link queries
+  createReceiveLink: db.prepare('INSERT INTO receive_links (id, user_id, passkey, expires_at) VALUES (?, ?, ?, ?)'),
+  deactivateUserReceiveLinks: db.prepare('UPDATE receive_links SET active = 0 WHERE user_id = ?'),
+  findActiveReceiveLink: db.prepare('SELECT * FROM receive_links WHERE user_id = ? AND active = 1'),
+  findReceiveLinkById: db.prepare('SELECT * FROM receive_links WHERE id = ?'),
+  findReceiveLinkByUserAndPasskey: db.prepare('SELECT rl.* FROM receive_links rl JOIN users u ON rl.user_id = u.id WHERE u.username = ? AND rl.passkey = ? AND rl.active = 1'),
+  // Inbox queries
+  findReceivedFiles: db.prepare("SELECT * FROM async_files WHERE receive_link_id IS NOT NULL AND user_id = ? ORDER BY created_at DESC"),
+  createReceivedFile: db.prepare('INSERT INTO async_files (token, user_id, filename, file_size, mime_type, r2_key, expires_at, receive_link_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'),
+  // Pinned files queries
+  findPinnedFiles: db.prepare('SELECT * FROM pinned_files WHERE user_id = ? ORDER BY created_at ASC'),
+  findPinnedFilesByUsername: db.prepare('SELECT pf.* FROM pinned_files pf JOIN users u ON pf.user_id = u.id WHERE u.username = ?'),
+  countPinnedFiles: db.prepare('SELECT COUNT(*) as count FROM pinned_files WHERE user_id = ?'),
+  createPinnedFile: db.prepare('INSERT INTO pinned_files (id, user_id, filename, file_size, mime_type, r2_key) VALUES (?, ?, ?, ?, ?, ?)'),
+  deletePinnedFile: db.prepare('DELETE FROM pinned_files WHERE id = ? AND user_id = ?'),
+  findPinnedFileById: db.prepare('SELECT * FROM pinned_files WHERE id = ?'),
   // Stats queries
   totalUsers: db.prepare('SELECT COUNT(*) as count FROM users'),
   totalTransfers: db.prepare('SELECT COUNT(*) as count, COALESCE(SUM(file_size), 0) as total_bytes FROM pending_transfers'),
@@ -266,9 +323,19 @@ app.get('/auth/callback', async (req, res) => {
     if (user) {
       stmts.updateUser.run(profile.name, profile.picture, profile.email, profile.id);
       user = stmts.findUserByGoogleId.get(profile.id);
+      // Assign username if missing (existing users)
+      if (!user.username) {
+        const username = generateUsername(profile.email);
+        stmts.setUsername.run(username, user.id);
+        user = stmts.findUserById.get(user.id);
+      }
     } else {
       const userId = uuidv4();
       stmts.createUser.run(userId, profile.id, profile.email, profile.name, profile.picture || null);
+      user = stmts.findUserById.get(userId);
+      // Assign username for new user
+      const username = generateUsername(profile.email);
+      stmts.setUsername.run(username, user.id);
       user = stmts.findUserById.get(userId);
     }
 
@@ -288,12 +355,15 @@ app.get('/auth/callback', async (req, res) => {
 app.get('/auth/me', (req, res) => {
   const user = getUserFromCookie(req);
   if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  const receiveLink = stmts.findActiveReceiveLink.get(user.id);
   res.json({
     id: user.id,
     name: user.name,
     email: user.email,
     picture: user.picture,
+    username: user.username,
     transfer_balance: user.transfer_balance,
+    receiveLink: receiveLink ? { passkey: receiveLink.passkey, expiresAt: receiveLink.expires_at } : null,
   });
 });
 
@@ -382,6 +452,490 @@ app.post('/api/transfer/refund', (req, res) => {
 // ═══════════════════════════════════════════
 // ASYNC FILE TRANSFER (R2)
 // ═══════════════════════════════════════════
+
+// ═══════════════════════════════════════════
+// RECEIVE LINKS
+// ═══════════════════════════════════════════
+
+// Generate a new receive link (passkey)
+app.post('/api/receive-link/create', (req, res) => {
+  const user = getUserFromCookie(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  if (!user.username) return res.status(400).json({ error: 'No username set' });
+
+  // Deactivate old receive links
+  stmts.deactivateUserReceiveLinks.run(user.id);
+
+  const id = crypto.randomBytes(8).toString('hex');
+  const passkey = String(Math.floor(1000 + Math.random() * 9000)); // 4-digit
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(); // 7 days
+
+  stmts.createReceiveLink.run(id, user.id, passkey, expiresAt);
+
+  const host = req.headers.host;
+  const protocol = req.headers['x-forwarded-proto'] || 'https';
+
+  res.json({
+    passkey,
+    url: `${protocol}://${host}/${user.username}`,
+    expiresAt,
+  });
+});
+
+// Verify passkey for a username
+app.post('/api/receive-link/verify', (req, res) => {
+  const { username, passkey } = req.body;
+  if (!username || !passkey) return res.status(400).json({ error: 'Missing username or passkey' });
+
+  const link = stmts.findReceiveLinkByUserAndPasskey.get(username, passkey);
+  if (!link) return res.status(403).json({ error: 'Invalid passkey' });
+
+  if (new Date(link.expires_at) < new Date()) {
+    return res.status(410).json({ error: 'Passkey expired' });
+  }
+
+  res.json({ valid: true, linkId: link.id });
+});
+
+// Upload to someone's receive link (public, no auth needed)
+app.post('/api/receive/upload', async (req, res) => {
+  if (!s3) return res.status(503).json({ error: 'Async transfers not available' });
+
+  const linkId = req.headers['x-receive-link-id'];
+  const filename = decodeURIComponent(req.headers['x-filename'] || '');
+  const mimeType = req.headers['x-mime-type'] || 'application/octet-stream';
+  const declaredSize = parseInt(req.headers['content-length'], 10);
+
+  if (!linkId || !filename) return res.status(400).json({ error: 'Missing link ID or filename' });
+
+  const link = stmts.findReceiveLinkById.get(linkId);
+  if (!link || !link.active) return res.status(403).json({ error: 'Invalid receive link' });
+  if (new Date(link.expires_at) < new Date()) return res.status(410).json({ error: 'Link expired' });
+
+  // Check owner's balance
+  const owner = stmts.findUserById.get(link.user_id);
+  if (!owner) return res.status(400).json({ error: 'User not found' });
+
+  if (declaredSize && owner.transfer_balance < declaredSize) {
+    return res.status(403).json({ error: 'Recipient has insufficient balance' });
+  }
+
+  const MAX_FILE_SIZE = 500 * 1024 * 1024;
+  if (declaredSize > MAX_FILE_SIZE) {
+    return res.status(413).json({ error: 'file_too_large' });
+  }
+
+  const token = crypto.randomBytes(16).toString('hex');
+  const r2Key = `received/${link.user_id}/${token}/${filename}`;
+  const expiresAt = new Date(Date.now() + ASYNC_FILE_EXPIRY).toISOString();
+
+  let bytesReceived = 0;
+  const { PassThrough } = require('stream');
+  const passthrough = new PassThrough();
+
+  req.on('data', (chunk) => {
+    bytesReceived += chunk.length;
+    if (bytesReceived > MAX_FILE_SIZE) {
+      passthrough.destroy(new Error('File too large'));
+      req.destroy();
+      return;
+    }
+    passthrough.write(chunk);
+  });
+  req.on('end', () => passthrough.end());
+  req.on('error', (err) => passthrough.destroy(err));
+
+  try {
+    const upload = new Upload({
+      client: s3,
+      params: { Bucket: R2_BUCKET_NAME, Key: r2Key, Body: passthrough, ContentType: mimeType },
+      queueSize: 4,
+      partSize: 5 * 1024 * 1024,
+    });
+
+    await upload.done();
+
+    const fileSize = bytesReceived;
+
+    // Deduct from owner's balance
+    const newBalance = Math.max(0, owner.transfer_balance - fileSize);
+    stmts.updateBalance.run(newBalance, owner.id);
+
+    // Record as received file
+    stmts.createReceivedFile.run(token, owner.id, filename, fileSize, mimeType, r2Key, expiresAt, link.id);
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Receive upload error:', err);
+    res.status(500).json({ error: 'Upload failed' });
+  }
+});
+
+// ═══════════════════════════════════════════
+// INBOX
+// ═══════════════════════════════════════════
+
+app.get('/api/inbox', (req, res) => {
+  const user = getUserFromCookie(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+
+  const files = stmts.findReceivedFiles.all(user.id);
+  // Filter out expired
+  const active = files.filter(f => new Date(f.expires_at) > new Date());
+  res.json(active);
+});
+
+app.delete('/api/inbox/:token', async (req, res) => {
+  const user = getUserFromCookie(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+
+  const file = stmts.findAsyncFile.get(req.params.token);
+  if (!file || file.user_id !== user.id) return res.status(404).json({ error: 'File not found' });
+
+  // Delete from R2
+  if (s3) {
+    try { await s3.send(new DeleteObjectCommand({ Bucket: R2_BUCKET_NAME, Key: file.r2_key })); } catch {}
+  }
+  stmts.deleteAsyncFile.run(req.params.token);
+  res.json({ success: true });
+});
+
+// ═══════════════════════════════════════════
+// PINNED FILES
+// ═══════════════════════════════════════════
+
+app.get('/api/pins', (req, res) => {
+  const user = getUserFromCookie(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  res.json(stmts.findPinnedFiles.all(user.id));
+});
+
+app.post('/api/pin', async (req, res) => {
+  if (!s3) return res.status(503).json({ error: 'Storage not available' });
+
+  const user = getUserFromCookie(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+
+  const count = stmts.countPinnedFiles.get(user.id);
+  if (count.count >= 3) return res.status(400).json({ error: 'Maximum 3 pinned files' });
+
+  const filename = decodeURIComponent(req.headers['x-filename'] || '');
+  const mimeType = req.headers['x-mime-type'] || 'application/octet-stream';
+  const declaredSize = parseInt(req.headers['content-length'], 10);
+
+  if (!filename) return res.status(400).json({ error: 'Missing filename' });
+
+  const MAX_PIN_SIZE = 25 * 1024 * 1024; // 25MB max for pinned files
+  if (declaredSize > MAX_PIN_SIZE) {
+    return res.status(413).json({ error: 'Pinned files must be under 25 MB' });
+  }
+
+  const id = crypto.randomBytes(8).toString('hex');
+  const r2Key = `pinned/${user.id}/${id}/${filename}`;
+
+  let bytesReceived = 0;
+  const { PassThrough } = require('stream');
+  const passthrough = new PassThrough();
+
+  req.on('data', (chunk) => {
+    bytesReceived += chunk.length;
+    if (bytesReceived > MAX_PIN_SIZE) {
+      passthrough.destroy(new Error('File too large'));
+      req.destroy();
+      return;
+    }
+    passthrough.write(chunk);
+  });
+  req.on('end', () => passthrough.end());
+  req.on('error', (err) => passthrough.destroy(err));
+
+  try {
+    const upload = new Upload({
+      client: s3,
+      params: { Bucket: R2_BUCKET_NAME, Key: r2Key, Body: passthrough, ContentType: mimeType },
+      queueSize: 4,
+      partSize: 5 * 1024 * 1024,
+    });
+
+    await upload.done();
+
+    stmts.createPinnedFile.run(id, user.id, filename, bytesReceived, mimeType, r2Key);
+    res.json({ id, filename, file_size: bytesReceived });
+  } catch (err) {
+    console.error('Pin upload error:', err);
+    res.status(500).json({ error: 'Upload failed' });
+  }
+});
+
+app.delete('/api/pin/:id', async (req, res) => {
+  const user = getUserFromCookie(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+
+  const pin = stmts.findPinnedFileById.get(req.params.id);
+  if (!pin || pin.user_id !== user.id) return res.status(404).json({ error: 'Not found' });
+
+  if (s3) {
+    try { await s3.send(new DeleteObjectCommand({ Bucket: R2_BUCKET_NAME, Key: pin.r2_key })); } catch {}
+  }
+  stmts.deletePinnedFile.run(req.params.id, user.id);
+  res.json({ success: true });
+});
+
+// Download pinned file
+app.get('/api/pin/:id/download', async (req, res) => {
+  if (!s3) return res.status(503).send('Storage not available');
+
+  const pin = stmts.findPinnedFileById.get(req.params.id);
+  if (!pin) return res.status(404).send('File not found');
+
+  try {
+    const obj = await s3.send(new GetObjectCommand({ Bucket: R2_BUCKET_NAME, Key: pin.r2_key }));
+    res.set({
+      'Content-Type': pin.mime_type || 'application/octet-stream',
+      'Content-Disposition': `attachment; filename="${encodeURIComponent(pin.filename)}"`,
+      'Content-Length': pin.file_size,
+    });
+    const stream = obj.Body;
+    stream.on('data', (chunk) => res.write(chunk));
+    stream.on('end', () => res.end());
+    stream.on('error', () => res.end());
+  } catch (err) {
+    console.error('Pin download error:', err);
+    res.status(500).send('Download failed');
+  }
+});
+
+// ═══════════════════════════════════════════
+// PROFILE PAGE
+// ═══════════════════════════════════════════
+
+function getProfilePage(user, pinnedFiles) {
+  const pinsHtml = pinnedFiles.length > 0 ? `
+    <div style="margin-top:24px;">
+      <div style="font-size:11px;font-weight:600;color:#555570;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:12px;">Pinned files</div>
+      ${pinnedFiles.map(f => `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;background:#1a1a28;border:1px solid #2a2a3e;border-radius:10px;margin-bottom:8px;">
+          <div style="min-width:0;">
+            <div style="font-size:13px;font-weight:600;color:#e8e8f0;">${f.filename}</div>
+            <div style="font-size:11px;color:#555570;margin-top:2px;">${formatBytes(f.file_size)}</div>
+          </div>
+          <a href="/api/pin/${f.id}/download" style="flex-shrink:0;margin-left:12px;width:34px;height:34px;border-radius:8px;background:#6c5ce715;display:flex;align-items:center;justify-content:center;color:#a29bfe;text-decoration:none;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          </a>
+        </div>
+      `).join('')}
+    </div>
+  ` : '';
+
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${user.name || user.username} — Stickr</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,system-ui,sans-serif;background:#0a0a0f;color:#e8e8f0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse at 30% 20%,#6c5ce708 0%,transparent 50%),radial-gradient(ellipse at 70% 80%,#00d2a005 0%,transparent 50%);pointer-events:none}
+.card{background:#12121a;border:1px solid #2a2a3e;border-radius:20px;padding:44px 36px;max-width:400px;width:100%;animation:cardIn .4s ease both}
+@keyframes cardIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+.profile{text-align:center;margin-bottom:24px}
+.avatar{width:72px;height:72px;border-radius:50%;border:3px solid #2a2a3e;margin-bottom:14px;object-fit:cover;background:#1a1a28}
+.name{font-size:22px;font-weight:700;margin-bottom:4px}
+.handle{font-size:13px;color:#555570;font-family:'SF Mono','Fira Code',monospace}
+.action-btn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;padding:16px;background:linear-gradient(135deg,#6c5ce7,#a29bfe);color:white;border:none;border-radius:12px;font-family:inherit;font-size:15px;font-weight:600;cursor:pointer;transition:all .2s;text-decoration:none;margin-top:24px}
+.action-btn:hover{transform:translateY(-1px);box-shadow:0 4px 20px #6c5ce730}
+.footer{border-top:1px solid #2a2a3e;padding-top:20px;margin-top:28px;text-align:center}
+.footer-logo{font-size:16px;font-weight:800;background:linear-gradient(135deg,#6c5ce7,#a29bfe);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:6px}
+.footer p{font-size:11px;color:#555570}
+.footer a{color:#a29bfe;text-decoration:none;font-weight:600}
+.footer a:hover{text-decoration:underline}
+/* Passkey modal */
+.passkey-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(8px);align-items:center;justify-content:center;z-index:200}
+.passkey-overlay.active{display:flex}
+.passkey-modal{background:#12121a;border:1px solid #2a2a3e;border-radius:16px;padding:36px;max-width:380px;width:90%;text-align:center}
+.passkey-input-group{display:flex;justify-content:center;gap:8px;margin:20px 0}
+.passkey-digit{width:48px;height:56px;background:#1a1a28;border:1.5px solid #2a2a3e;border-radius:10px;color:#e8e8f0;font-size:22px;font-weight:700;text-align:center;font-family:'SF Mono','Fira Code',monospace;outline:none;transition:border-color .2s}
+.passkey-digit:focus{border-color:#6c5ce7;box-shadow:0 0 0 3px #6c5ce720}
+.verify-btn{width:100%;padding:14px;background:linear-gradient(135deg,#6c5ce7,#a29bfe);color:white;border:none;border-radius:12px;font-size:15px;font-weight:600;cursor:pointer;transition:all .2s}
+.verify-btn:disabled{opacity:.5;cursor:not-allowed}
+.verify-btn:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 4px 20px #6c5ce730}
+.cancel-btn{width:100%;padding:12px;background:#1a1a28;color:#8888a8;border:1px solid #2a2a3e;border-radius:12px;font-size:14px;font-weight:500;cursor:pointer;margin-top:8px;transition:all .2s;font-family:inherit}
+.cancel-btn:hover{color:#e8e8f0;border-color:#555570}
+.error-msg{color:#e05555;font-size:12px;margin-top:8px;display:none}
+.error-msg.active{display:block}
+/* Upload section */
+.upload-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(8px);align-items:center;justify-content:center;z-index:200}
+.upload-overlay.active{display:flex}
+.upload-modal{background:#12121a;border:1px solid #2a2a3e;border-radius:16px;padding:36px;max-width:440px;width:90%}
+.upload-modal h2{text-align:center;margin-bottom:20px;font-size:18px}
+.drop-zone{border:2px dashed #2a2a3e;border-radius:14px;padding:32px 20px;text-align:center;cursor:pointer;transition:all .3s;margin-bottom:12px}
+.drop-zone:hover{border-color:#6c5ce7;background:#6c5ce708}
+.drop-zone h3{font-size:15px;font-weight:600;margin-top:12px;margin-bottom:4px}
+.drop-zone p{font-size:12px;color:#555570}
+.upload-file-list{display:flex;flex-direction:column;gap:8px;margin-bottom:12px;max-height:200px;overflow-y:auto}
+.upload-file-item{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:#1a1a28;border:1px solid #2a2a3e;border-radius:8px;font-size:13px}
+.upload-done{text-align:center;padding:24px 0}
+.upload-done .check{font-size:48px;color:#00d2a0;margin-bottom:12px}
+.upload-done h3{font-size:18px;margin-bottom:4px}
+.upload-done p{font-size:13px;color:#8888a8}
+</style></head><body>
+<div class="card">
+  <div class="profile">
+    ${user.picture ? `<img class="avatar" src="${user.picture}" alt="">` : '<div class="avatar"></div>'}
+    <div class="name">${user.name || user.username}</div>
+    <div class="handle">@${user.username}</div>
+  </div>
+  <button class="action-btn" onclick="document.getElementById('passkey-overlay').classList.add('active');document.querySelector('.passkey-digit').focus();">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+    Send files to ${user.name || user.username}
+  </button>
+  ${pinsHtml}
+  <div class="footer">
+    <div class="footer-logo">Stickr</div>
+    <p>Share files directly. <a href="/">Get your own link</a></p>
+  </div>
+</div>
+
+<!-- Passkey overlay -->
+<div class="passkey-overlay" id="passkey-overlay">
+  <div class="passkey-modal">
+    <h2>Enter passkey</h2>
+    <p style="color:#8888a8;font-size:13px;">Ask ${user.name || user.username} for the 4-digit passkey</p>
+    <div class="passkey-input-group">
+      <input class="passkey-digit" type="text" maxlength="1" inputmode="numeric">
+      <input class="passkey-digit" type="text" maxlength="1" inputmode="numeric">
+      <input class="passkey-digit" type="text" maxlength="1" inputmode="numeric">
+      <input class="passkey-digit" type="text" maxlength="1" inputmode="numeric">
+    </div>
+    <div class="error-msg" id="passkey-error">Incorrect passkey. Try again.</div>
+    <button class="verify-btn" id="verify-btn" disabled onclick="verifyPasskey()">Verify</button>
+    <button class="cancel-btn" onclick="document.getElementById('passkey-overlay').classList.remove('active')">Cancel</button>
+  </div>
+</div>
+
+<!-- Upload overlay -->
+<div class="upload-overlay" id="upload-overlay">
+  <div class="upload-modal">
+    <h2>Send files to ${user.name || user.username}</h2>
+    <div id="upload-area">
+      <div class="drop-zone" id="recv-drop-zone" onclick="document.getElementById('recv-file-input').click()">
+        <input type="file" id="recv-file-input" multiple style="display:none">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#555570" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 16l-4-4-4 4"/><path d="M12 12v9"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/><polyline points="16 16 12 12 8 16"/></svg>
+        <h3>Drop files here</h3>
+        <p>Files expire in 24 hours</p>
+      </div>
+      <div class="upload-file-list" id="recv-file-list"></div>
+    </div>
+    <div class="upload-done" id="upload-done" style="display:none">
+      <div class="check">✓</div>
+      <h3>Files sent!</h3>
+      <p>${user.name || user.username} will see them in their inbox.</p>
+    </div>
+    <button class="cancel-btn" onclick="document.getElementById('upload-overlay').classList.remove('active')" style="margin-top:16px">Close</button>
+  </div>
+</div>
+
+<script>
+const USERNAME = '${user.username}';
+let verifiedLinkId = null;
+
+// Passkey input logic
+const digits = document.querySelectorAll('.passkey-digit');
+const verifyBtnEl = document.getElementById('verify-btn');
+digits.forEach((input, i) => {
+  input.addEventListener('input', (e) => {
+    e.target.value = e.target.value.replace(/\\D/g, '');
+    if (e.target.value && i < digits.length - 1) digits[i + 1].focus();
+    verifyBtnEl.disabled = ![...digits].every(d => d.value.length === 1);
+    document.getElementById('passkey-error').classList.remove('active');
+  });
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Backspace' && !input.value && i > 0) { digits[i - 1].focus(); digits[i - 1].value = ''; }
+  });
+  input.addEventListener('paste', (e) => {
+    e.preventDefault();
+    const p = e.clipboardData.getData('text').replace(/\\D/g, '').slice(0, 4);
+    p.split('').forEach((c, j) => { if (digits[j]) digits[j].value = c; });
+    if (p.length === 4) { digits[3].focus(); verifyBtnEl.disabled = false; }
+  });
+});
+
+async function verifyPasskey() {
+  const passkey = [...digits].map(d => d.value).join('');
+  try {
+    const res = await fetch('/api/receive-link/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: USERNAME, passkey }),
+    });
+    const data = await res.json();
+    if (data.valid) {
+      verifiedLinkId = data.linkId;
+      document.getElementById('passkey-overlay').classList.remove('active');
+      document.getElementById('upload-overlay').classList.add('active');
+    } else {
+      document.getElementById('passkey-error').classList.add('active');
+    }
+  } catch {
+    document.getElementById('passkey-error').classList.add('active');
+  }
+}
+
+// File upload logic
+const recvDropZone = document.getElementById('recv-drop-zone');
+const recvFileInput = document.getElementById('recv-file-input');
+
+recvFileInput.addEventListener('change', (e) => {
+  uploadRecvFiles(Array.from(e.target.files));
+  e.target.value = '';
+});
+recvDropZone.addEventListener('dragover', (e) => { e.preventDefault(); recvDropZone.style.borderColor = '#6c5ce7'; });
+recvDropZone.addEventListener('dragleave', () => { recvDropZone.style.borderColor = '#2a2a3e'; });
+recvDropZone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  recvDropZone.style.borderColor = '#2a2a3e';
+  uploadRecvFiles(Array.from(e.dataTransfer.files));
+});
+
+async function uploadRecvFiles(files) {
+  for (const file of files) {
+    await uploadRecvFile(file);
+  }
+  // Show done
+  document.getElementById('upload-area').style.display = 'none';
+  document.getElementById('upload-done').style.display = 'block';
+}
+
+async function uploadRecvFile(file) {
+  const list = document.getElementById('recv-file-list');
+  const id = 'rf-' + Date.now();
+  const item = document.createElement('div');
+  item.className = 'upload-file-item';
+  item.id = id;
+  const sizeMB = (file.size / 1024 / 1024).toFixed(1);
+  item.innerHTML = '<span style="word-break:break-all">' + file.name + '</span><span style="color:#8888a8;flex-shrink:0;margin-left:8px">' + sizeMB + ' MB</span>';
+  list.appendChild(item);
+
+  try {
+    const xhr = new XMLHttpRequest();
+    await new Promise((resolve, reject) => {
+      xhr.addEventListener('load', () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          item.innerHTML = '<span style="word-break:break-all">' + file.name + '</span><span style="color:#00d2a0;flex-shrink:0;margin-left:8px">✓ Sent</span>';
+          resolve();
+        } else { reject(); }
+      });
+      xhr.addEventListener('error', reject);
+      xhr.open('POST', '/api/receive/upload');
+      xhr.setRequestHeader('X-Filename', encodeURIComponent(file.name));
+      xhr.setRequestHeader('X-Mime-Type', file.type || 'application/octet-stream');
+      xhr.setRequestHeader('X-Receive-Link-Id', verifiedLinkId);
+      xhr.send(file);
+    });
+  } catch {
+    item.innerHTML = '<span>' + file.name + '</span><span style="color:#e05555;flex-shrink:0;margin-left:8px">✕ Failed</span>';
+  }
+}
+</script>
+</body></html>`;
+}
 
 // Create a batch for grouping multiple files
 app.post('/api/batch/create', (req, res) => {
@@ -693,6 +1247,18 @@ Download All
 }
 
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Profile page catch-all (must be after all other routes)
+app.get('/:username', (req, res) => {
+  const username = req.params.username.toLowerCase();
+  if (RESERVED_USERNAMES.has(username)) return res.status(404).send('Not found');
+
+  const user = stmts.findUserByUsername.get(username);
+  if (!user) return res.status(404).send('Not found');
+
+  const pinnedFiles = stmts.findPinnedFilesByUsername.all(username);
+  res.send(getProfilePage(user, pinnedFiles));
+});
 
 // ═══════════════════════════════════════════
 // TURN SESSION TOKENS
