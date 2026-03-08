@@ -289,13 +289,17 @@ header {
   display: flex;
   align-items: center;
   gap: 10px;
+  position: relative;
 }
 .user-avatar {
   width: 28px;
   height: 28px;
   border-radius: 50%;
   border: 2px solid var(--border);
+  cursor: pointer;
+  transition: border-color 0.2s;
 }
+.user-avatar:hover { border-color: var(--accent); }
 .user-name {
   font-size: 13px;
   font-weight: 600;
@@ -329,6 +333,81 @@ header {
 }
 .user-usage.low { color: #FFD93D; border-color: #FFD93D40; }
 .user-usage.empty { color: var(--danger); border-color: var(--danger); }
+
+/* ─── Profile Dropdown ─── */
+.profile-menu {
+  display: none;
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  min-width: 240px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+  z-index: 300;
+}
+.profile-menu.active { display: block; }
+.profile-menu-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+.profile-menu-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+}
+.profile-menu-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.profile-menu-email {
+  font-size: 12px;
+  color: var(--text-muted);
+  word-break: break-all;
+}
+.profile-menu-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 12px 0;
+}
+.profile-menu-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.profile-menu-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.profile-menu-balance {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.profile-menu-btn {
+  width: 100%;
+  padding: 10px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.profile-menu-btn:hover {
+  color: var(--text-primary);
+  border-color: var(--text-muted);
+}
 
 .btn-sign-in {
   font-family: var(--font-body);
@@ -1601,10 +1680,27 @@ header {
     <div class="header-right">
       <div class="header-badge">P2P Encrypted</div>
       <div class="user-menu" id="user-menu" style="display:none">
-        <img class="user-avatar" id="user-avatar" src="" alt="">
+        <img class="user-avatar" id="user-avatar" src="" alt="" onclick="toggleProfileMenu()">
         <span class="user-name" id="user-name"></span>
         <span class="user-usage" id="user-usage"></span>
         <button class="user-logout" onclick="logout()" title="Sign out">Sign out</button>
+        <!-- Profile dropdown -->
+        <div class="profile-menu" id="profile-menu">
+          <div class="profile-menu-header">
+            <img class="profile-menu-avatar" id="profile-menu-avatar" src="" alt="">
+            <div>
+              <div class="profile-menu-name" id="profile-menu-name"></div>
+              <div class="profile-menu-email" id="profile-menu-email"></div>
+            </div>
+          </div>
+          <div class="profile-menu-divider"></div>
+          <div class="profile-menu-item">
+            <span class="profile-menu-label">Balance</span>
+            <span class="profile-menu-balance" id="profile-menu-balance"></span>
+          </div>
+          <div class="profile-menu-divider"></div>
+          <button class="profile-menu-btn" onclick="logout()">Sign out</button>
+        </div>
       </div>
       <button class="btn-sign-in" id="btn-sign-in" onclick="signIn()" style="display:none">Sign in</button>
       <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Toggle light/dark mode">☀️</button>
@@ -3703,6 +3799,20 @@ function hideSigninModal() {
   document.getElementById('signin-modal').classList.remove('active');
 }
 
+function toggleProfileMenu() {
+  const menu = document.getElementById('profile-menu');
+  menu.classList.toggle('active');
+}
+
+// Close profile menu on outside click
+document.addEventListener('click', (e) => {
+  const menu = document.getElementById('profile-menu');
+  const avatar = document.getElementById('user-avatar');
+  if (menu && menu.classList.contains('active') && !menu.contains(e.target) && e.target !== avatar) {
+    menu.classList.remove('active');
+  }
+});
+
 function logout() {
   window.location.href = '/auth/logout';
 }
@@ -3719,9 +3829,13 @@ async function checkAuth() {
       if (currentUser.picture) {
         avatar.src = currentUser.picture;
         avatar.style.display = '';
+        document.getElementById('profile-menu-avatar').src = currentUser.picture;
       } else {
         avatar.style.display = 'none';
       }
+      // Populate profile dropdown
+      document.getElementById('profile-menu-name').textContent = currentUser.name || '';
+      document.getElementById('profile-menu-email').textContent = currentUser.email || '';
       updateUsageDisplay();
     } else {
       currentUser = null;
@@ -3747,6 +3861,9 @@ function updateUsageDisplay() {
   } else if (balance < 50 * 1024 * 1024) { // < 50MB
     el.classList.add('low');
   }
+  // Update profile dropdown balance
+  const balanceEl = document.getElementById('profile-menu-balance');
+  if (balanceEl) balanceEl.textContent = formatSize(balance) + ' left';
 }
 
 function showTopUpPrompt(balance, required) {
