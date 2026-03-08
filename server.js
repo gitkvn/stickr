@@ -116,9 +116,11 @@ db.exec(`
 `);
 
 // Migrate: add columns if missing
-try { db.exec('ALTER TABLE async_files ADD COLUMN batch_token TEXT'); } catch {}
-try { db.exec('ALTER TABLE async_files ADD COLUMN receive_link_id TEXT'); } catch {}
-try { db.exec('ALTER TABLE users ADD COLUMN username TEXT UNIQUE'); } catch {}
+try { db.exec('ALTER TABLE async_files ADD COLUMN batch_token TEXT'); } catch (e) { if (!e.message.includes('duplicate')) console.log('Migration batch_token:', e.message); }
+try { db.exec('ALTER TABLE async_files ADD COLUMN receive_link_id TEXT'); } catch (e) { if (!e.message.includes('duplicate')) console.log('Migration receive_link_id:', e.message); }
+try { db.exec('ALTER TABLE users ADD COLUMN username TEXT'); } catch (e) { if (!e.message.includes('duplicate')) console.log('Migration username:', e.message); }
+// Add unique index on username separately (can't add UNIQUE constraint via ALTER TABLE in SQLite)
+try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username)'); } catch (e) { console.log('Migration username index:', e.message); }
 
 const RESERVED_USERNAMES = new Set(['auth', 'api', 'dl', 'r', 'health', 'privacy', 'admin', 'app', 'login', 'signup', 'settings', 'inbox', 'static', 'public', 'favicon']);
 
@@ -143,7 +145,7 @@ const stmts = {
   updateUser: db.prepare('UPDATE users SET name = ?, picture = ?, email = ? WHERE google_id = ?'),
   createSession: db.prepare('INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)'),
   findSession: db.prepare(`SELECT s.token as session_token, s.user_id, s.expires_at,
-    u.id, u.google_id, u.email, u.name, u.picture, u.transfer_balance, u.created_at
+    u.id, u.google_id, u.email, u.name, u.picture, u.username, u.transfer_balance, u.created_at
     FROM sessions s JOIN users u ON s.user_id = u.id
     WHERE s.token = ? AND s.expires_at > datetime('now')`),
   deleteSession: db.prepare('DELETE FROM sessions WHERE token = ?'),
