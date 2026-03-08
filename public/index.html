@@ -1844,6 +1844,13 @@ header {
               <span class="profile-menu-value" id="pin-count">0 / 3</span>
             </div>
             <div class="pinned-files-list" id="pinned-files-list"></div>
+            <div id="pin-rename-section" style="display:none;margin-top:8px;">
+              <input type="text" id="pin-display-name" placeholder="Display name" maxlength="60" class="profile-edit-input" style="margin-bottom:4px;">
+              <div style="display:flex;gap:6px;">
+                <button class="profile-menu-small-btn" onclick="event.stopPropagation();confirmPinUpload();" style="flex:1;text-align:center;padding:6px;">Pin</button>
+                <button class="profile-menu-small-btn" onclick="event.stopPropagation();cancelPinUpload();" style="flex:1;text-align:center;padding:6px;background:var(--bg-tertiary);color:var(--text-muted);">Cancel</button>
+              </div>
+            </div>
             <button class="profile-menu-small-btn" onclick="event.stopPropagation();document.getElementById('pin-file-input').click();" id="pin-upload-btn" style="margin-top:8px;width:100%;text-align:center;">+ Add file (max 25 MB)</button>
             <input type="file" id="pin-file-input" style="display:none">
           </div>
@@ -4136,7 +4143,7 @@ async function loadPinnedFiles() {
     }
     list.innerHTML = pins.map(p => `
       <div class="pinned-file-item" id="pin-${p.id}">
-        <span class="pinned-file-name" title="${escapeHtml(p.filename)}">${escapeHtml(p.filename)}</span>
+        <span class="pinned-file-name" title="${escapeHtml(p.filename)}">${escapeHtml(p.display_name || p.filename)}</span>
         <button class="pinned-file-del" onclick="event.stopPropagation();deletePin('${p.id}');" title="Remove">✕</button>
       </div>
     `).join('');
@@ -4144,7 +4151,7 @@ async function loadPinnedFiles() {
   } catch {}
 }
 
-document.getElementById('pin-file-input').addEventListener('change', async (e) => {
+document.getElementById('pin-file-input').addEventListener('change', (e) => {
   const file = e.target.files[0];
   e.target.value = '';
   if (!file) return;
@@ -4154,6 +4161,30 @@ document.getElementById('pin-file-input').addEventListener('change', async (e) =
     showToast('Pinned files must be under 25 MB');
     return;
   }
+
+  // Store file and show rename input
+  window._pendingPinFile = file;
+  const nameWithoutExt = file.name.replace(/\.[^.]+$/, '');
+  document.getElementById('pin-display-name').value = nameWithoutExt;
+  document.getElementById('pin-rename-section').style.display = 'block';
+  document.getElementById('pin-upload-btn').style.display = 'none';
+  document.getElementById('pin-display-name').focus();
+});
+
+function cancelPinUpload() {
+  window._pendingPinFile = null;
+  document.getElementById('pin-rename-section').style.display = 'none';
+  document.getElementById('pin-upload-btn').style.display = '';
+}
+
+async function confirmPinUpload() {
+  const file = window._pendingPinFile;
+  if (!file) return;
+
+  const displayName = document.getElementById('pin-display-name').value.trim() || file.name;
+  window._pendingPinFile = null;
+  document.getElementById('pin-rename-section').style.display = 'none';
+  document.getElementById('pin-upload-btn').style.display = '';
 
   try {
     const xhr = new XMLHttpRequest();
@@ -4165,6 +4196,7 @@ document.getElementById('pin-file-input').addEventListener('change', async (e) =
       xhr.addEventListener('error', () => reject({ error: 'Network error' }));
       xhr.open('POST', '/api/pin');
       xhr.setRequestHeader('X-Filename', encodeURIComponent(file.name));
+      xhr.setRequestHeader('X-Display-Name', encodeURIComponent(displayName));
       xhr.setRequestHeader('X-Mime-Type', file.type || 'application/octet-stream');
       xhr.send(file);
     });
@@ -4173,7 +4205,7 @@ document.getElementById('pin-file-input').addEventListener('change', async (e) =
   } catch (err) {
     showToast(err.error || 'Failed to pin file');
   }
-});
+}
 
 async function deletePin(id) {
   try {

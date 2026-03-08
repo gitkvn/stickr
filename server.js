@@ -120,6 +120,7 @@ try { db.exec('ALTER TABLE async_files ADD COLUMN batch_token TEXT'); } catch (e
 try { db.exec('ALTER TABLE async_files ADD COLUMN receive_link_id TEXT'); } catch (e) { /* already exists */ }
 try { db.exec('ALTER TABLE users ADD COLUMN username TEXT'); } catch (e) { /* already exists */ }
 try { db.exec('ALTER TABLE users ADD COLUMN profile_data TEXT'); } catch (e) { /* already exists */ }
+try { db.exec('ALTER TABLE pinned_files ADD COLUMN display_name TEXT'); } catch (e) { /* already exists */ }
 try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username)'); } catch (e) { /* already exists */ }
 
 // Verify username column exists
@@ -180,7 +181,7 @@ const stmts = {
   findPinnedFiles: db.prepare('SELECT * FROM pinned_files WHERE user_id = ? ORDER BY created_at ASC'),
   findPinnedFilesByUsername: db.prepare('SELECT pf.* FROM pinned_files pf JOIN users u ON pf.user_id = u.id WHERE u.username = ?'),
   countPinnedFiles: db.prepare('SELECT COUNT(*) as count FROM pinned_files WHERE user_id = ?'),
-  createPinnedFile: db.prepare('INSERT INTO pinned_files (id, user_id, filename, file_size, mime_type, r2_key) VALUES (?, ?, ?, ?, ?, ?)'),
+  createPinnedFile: db.prepare('INSERT INTO pinned_files (id, user_id, filename, file_size, mime_type, r2_key, display_name) VALUES (?, ?, ?, ?, ?, ?, ?)'),
   deletePinnedFile: db.prepare('DELETE FROM pinned_files WHERE id = ? AND user_id = ?'),
   findPinnedFileById: db.prepare('SELECT * FROM pinned_files WHERE id = ?'),
   // Stats queries
@@ -646,12 +647,13 @@ app.post('/api/pin', async (req, res) => {
   if (count.count >= 3) return res.status(400).json({ error: 'Maximum 3 pinned files' });
 
   const filename = decodeURIComponent(req.headers['x-filename'] || '');
+  const displayName = decodeURIComponent(req.headers['x-display-name'] || '') || filename;
   const mimeType = req.headers['x-mime-type'] || 'application/octet-stream';
   const declaredSize = parseInt(req.headers['content-length'], 10);
 
   if (!filename) return res.status(400).json({ error: 'Missing filename' });
 
-  const MAX_PIN_SIZE = 25 * 1024 * 1024; // 25MB max for pinned files
+  const MAX_PIN_SIZE = 25 * 1024 * 1024;
   if (declaredSize > MAX_PIN_SIZE) {
     return res.status(413).json({ error: 'Pinned files must be under 25 MB' });
   }
@@ -685,8 +687,8 @@ app.post('/api/pin', async (req, res) => {
 
     await upload.done();
 
-    stmts.createPinnedFile.run(id, user.id, filename, bytesReceived, mimeType, r2Key);
-    res.json({ id, filename, file_size: bytesReceived });
+    stmts.createPinnedFile.run(id, user.id, filename, bytesReceived, mimeType, r2Key, displayName);
+    res.json({ id, filename, display_name: displayName, file_size: bytesReceived });
   } catch (err) {
     console.error('Pin upload error:', err);
     res.status(500).json({ error: 'Upload failed' });
@@ -788,7 +790,7 @@ function getProfilePage(user, pinnedFiles) {
       ${pinnedFiles.map(f => `
         <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;background:#1a1a28;border:1px solid #2a2a3e;border-radius:10px;margin-bottom:8px;">
           <div style="min-width:0;">
-            <div style="font-size:13px;font-weight:600;color:#e8e8f0;">${f.filename}</div>
+            <div style="font-size:13px;font-weight:600;color:#e8e8f0;">${f.display_name || f.filename}</div>
             <div style="font-size:11px;color:#555570;margin-top:2px;">${formatBytes(f.file_size)}</div>
           </div>
           <a href="/api/pin/${f.id}/download" style="flex-shrink:0;margin-left:12px;width:34px;height:34px;border-radius:8px;background:#6c5ce715;display:flex;align-items:center;justify-content:center;color:#a29bfe;text-decoration:none;">
