@@ -434,6 +434,21 @@ header {
   flex-shrink: 0;
 }
 .pinned-file-del:hover { color: #e05555; }
+.profile-edit-input {
+  width: 100%;
+  padding: 8px 10px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 12px;
+  outline: none;
+  margin-bottom: 6px;
+  transition: border-color 0.2s;
+}
+.profile-edit-input:focus { border-color: var(--accent); }
+.profile-edit-input::placeholder { color: var(--text-muted); }
 
 .btn-sign-in {
   font-family: var(--font-body);
@@ -1831,6 +1846,20 @@ header {
             <div class="pinned-files-list" id="pinned-files-list"></div>
             <button class="profile-menu-small-btn" onclick="event.stopPropagation();document.getElementById('pin-file-input').click();" id="pin-upload-btn" style="margin-top:8px;width:100%;text-align:center;">+ Add file (max 25 MB)</button>
             <input type="file" id="pin-file-input" style="display:none">
+          </div>
+          <div class="profile-menu-divider"></div>
+          <div class="profile-menu-section">
+            <div class="profile-menu-item" style="margin-bottom:8px;">
+              <span class="profile-menu-label">Edit profile</span>
+              <button class="profile-menu-small-btn" onclick="event.stopPropagation();toggleEditProfile();" id="edit-profile-btn">Edit</button>
+            </div>
+            <div id="edit-profile-form" style="display:none;">
+              <input type="text" id="edit-bio" placeholder="Bio (160 chars max)" maxlength="160" class="profile-edit-input">
+              <input type="url" id="edit-link-1" placeholder="Link 1 (e.g. twitter.com/you)" class="profile-edit-input">
+              <input type="url" id="edit-link-2" placeholder="Link 2 (e.g. linkedin.com/in/you)" class="profile-edit-input">
+              <input type="url" id="edit-link-3" placeholder="Link 3 (e.g. github.com/you)" class="profile-edit-input">
+              <button class="profile-menu-small-btn" onclick="event.stopPropagation();saveProfile();" style="width:100%;text-align:center;margin-top:6px;padding:6px;">Save</button>
+            </div>
           </div>
           <div class="profile-menu-divider"></div>
           <button class="profile-menu-btn" onclick="logout()">Sign out</button>
@@ -4033,6 +4062,61 @@ function getExpiresIn(dateStr) {
   const mins = Math.floor((diff % (1000 * 60 * 60)) / 60000);
   if (hours > 0) return 'expires in ' + hours + 'h';
   return 'expires in ' + mins + 'm';
+}
+
+// ═══════════════════════════════════════════
+// PINNED FILES
+// ═══════════════════════════════════════════
+// ═══════════════════════════════════════════
+// EDIT PROFILE
+// ═══════════════════════════════════════════
+function toggleEditProfile() {
+  const form = document.getElementById('edit-profile-form');
+  const btn = document.getElementById('edit-profile-btn');
+  if (form.style.display === 'none') {
+    form.style.display = 'block';
+    btn.textContent = 'Cancel';
+    // Populate from current data
+    if (currentUser && currentUser.profile_data) {
+      document.getElementById('edit-bio').value = currentUser.profile_data.bio || '';
+      const links = currentUser.profile_data.links || [];
+      document.getElementById('edit-link-1').value = links[0] ? links[0].url : '';
+      document.getElementById('edit-link-2').value = links[1] ? links[1].url : '';
+      document.getElementById('edit-link-3').value = links[2] ? links[2].url : '';
+    }
+  } else {
+    form.style.display = 'none';
+    btn.textContent = 'Edit';
+  }
+}
+
+async function saveProfile() {
+  const bio = document.getElementById('edit-bio').value.trim();
+  const links = [
+    document.getElementById('edit-link-1').value.trim(),
+    document.getElementById('edit-link-2').value.trim(),
+    document.getElementById('edit-link-3').value.trim(),
+  ].filter(u => u).map(url => {
+    if (url && !url.startsWith('http')) url = 'https://' + url;
+    return { url };
+  });
+
+  try {
+    const res = await fetch('/api/profile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ bio, links }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      currentUser.profile_data = data;
+      document.getElementById('edit-profile-form').style.display = 'none';
+      document.getElementById('edit-profile-btn').textContent = 'Edit';
+      showToast('Profile updated');
+    }
+  } catch {
+    showToast('Failed to save profile');
+  }
 }
 
 // ═══════════════════════════════════════════

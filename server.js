@@ -119,6 +119,7 @@ db.exec(`
 try { db.exec('ALTER TABLE async_files ADD COLUMN batch_token TEXT'); } catch (e) { /* already exists */ }
 try { db.exec('ALTER TABLE async_files ADD COLUMN receive_link_id TEXT'); } catch (e) { /* already exists */ }
 try { db.exec('ALTER TABLE users ADD COLUMN username TEXT'); } catch (e) { /* already exists */ }
+try { db.exec('ALTER TABLE users ADD COLUMN profile_data TEXT'); } catch (e) { /* already exists */ }
 try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username)'); } catch (e) { /* already exists */ }
 
 // Verify username column exists
@@ -140,7 +141,7 @@ const stmts = {
   updateUser: db.prepare('UPDATE users SET name = ?, picture = ?, email = ? WHERE google_id = ?'),
   createSession: db.prepare('INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)'),
   findSession: db.prepare(`SELECT s.token as session_token, s.user_id, s.expires_at,
-    u.id, u.google_id, u.email, u.name, u.picture, u.username, u.transfer_balance, u.created_at
+    u.id, u.google_id, u.email, u.name, u.picture, u.username, u.profile_data, u.transfer_balance, u.created_at
     FROM sessions s JOIN users u ON s.user_id = u.id
     WHERE s.token = ? AND s.expires_at > datetime('now')`),
   deleteSession: db.prepare('DELETE FROM sessions WHERE token = ?'),
@@ -165,6 +166,7 @@ const stmts = {
   // Username queries
   findUserByUsername: db.prepare('SELECT * FROM users WHERE username = ?'),
   setUsername: db.prepare('UPDATE users SET username = ? WHERE id = ?'),
+  updateProfileData: db.prepare('UPDATE users SET profile_data = ? WHERE id = ?'),
   // Receive link queries
   createReceiveLink: db.prepare('INSERT INTO receive_links (id, user_id, passkey, expires_at) VALUES (?, ?, ?, ?)'),
   deactivateUserReceiveLinks: db.prepare('UPDATE receive_links SET active = 0 WHERE user_id = ?'),
@@ -287,6 +289,7 @@ function getUserFromCookie(req) {
     name: row.name,
     picture: row.picture,
     username: row.username,
+    profile_data: row.profile_data ? JSON.parse(row.profile_data) : null,
     transfer_balance: row.transfer_balance,
     created_at: row.created_at,
   };
@@ -384,6 +387,7 @@ app.get('/auth/me', (req, res) => {
     email: user.email,
     picture: user.picture,
     username: user.username,
+    profile_data: user.profile_data,
     transfer_balance: user.transfer_balance,
     receiveLink: receiveLink ? { passkey: receiveLink.passkey, expiresAt: receiveLink.expires_at } : null,
   });
@@ -703,6 +707,23 @@ app.delete('/api/pin/:id', async (req, res) => {
   res.json({ success: true });
 });
 
+// Update profile (bio + social links)
+app.post('/api/profile', (req, res) => {
+  const user = getUserFromCookie(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+
+  const { bio, links } = req.body;
+  const profileData = {
+    bio: typeof bio === 'string' ? bio.slice(0, 160) : '',
+    links: Array.isArray(links) ? links.slice(0, 3).map(l => ({
+      url: typeof l.url === 'string' ? l.url.slice(0, 500) : '',
+    })).filter(l => l.url) : [],
+  };
+
+  stmts.updateProfileData.run(JSON.stringify(profileData), user.id);
+  res.json(profileData);
+});
+
 // Download pinned file
 app.get('/api/pin/:id/download', async (req, res) => {
   if (!s3) return res.status(503).send('Storage not available');
@@ -732,6 +753,35 @@ app.get('/api/pin/:id/download', async (req, res) => {
 // ═══════════════════════════════════════════
 
 function getProfilePage(user, pinnedFiles) {
+  const profile = user.profile_data ? (typeof user.profile_data === 'string' ? JSON.parse(user.profile_data) : user.profile_data) : {};
+  const bio = profile.bio || '';
+  const links = profile.links || [];
+
+  const socialIcons = {
+    'twitter.com': '<svg width="18" height="18" viewBox="0 0 24 24" fill="#8888a8"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>',
+    'x.com': '<svg width="18" height="18" viewBox="0 0 24 24" fill="#8888a8"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>',
+    'linkedin.com': '<svg width="18" height="18" viewBox="0 0 24 24" fill="#8888a8"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>',
+    'github.com': '<svg width="18" height="18" viewBox="0 0 24 24" fill="#8888a8"><path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/></svg>',
+    'discord': '<svg width="18" height="18" viewBox="0 0 24 24" fill="#8888a8"><path d="M20.317 4.37a19.791 19.791 0 00-4.885-1.515.074.074 0 00-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 00-5.487 0 12.64 12.64 0 00-.617-1.25.077.077 0 00-.079-.037A19.736 19.736 0 003.677 4.37a.07.07 0 00-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 00.031.057 19.9 19.9 0 005.993 3.03.078.078 0 00.084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 00-.041-.106 13.107 13.107 0 01-1.872-.892.077.077 0 01-.008-.128 10.2 10.2 0 00.372-.292.074.074 0 01.077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 01.078.01c.12.098.246.198.373.292a.077.077 0 01-.006.127 12.299 12.299 0 01-1.873.892.077.077 0 00-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 00.084.028 19.839 19.839 0 006.002-3.03.077.077 0 00.032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 00-.031-.03z"/></svg>',
+    'instagram.com': '<svg width="18" height="18" viewBox="0 0 24 24" fill="#8888a8"><path d="M12 0C8.74 0 8.333.015 7.053.072 5.775.132 4.905.333 4.14.63c-.789.306-1.459.717-2.126 1.384S.935 3.35.63 4.14C.333 4.905.131 5.775.072 7.053.012 8.333 0 8.74 0 12s.015 3.667.072 4.947c.06 1.277.261 2.148.558 2.913.306.788.717 1.459 1.384 2.126.667.666 1.336 1.079 2.126 1.384.766.296 1.636.499 2.913.558C8.333 23.988 8.74 24 12 24s3.667-.015 4.947-.072c1.277-.06 2.148-.262 2.913-.558.788-.306 1.459-.718 2.126-1.384.666-.667 1.079-1.335 1.384-2.126.296-.765.499-1.636.558-2.913.06-1.28.072-1.687.072-4.947s-.015-3.667-.072-4.947c-.06-1.277-.262-2.149-.558-2.913-.306-.789-.718-1.459-1.384-2.126C21.319 1.347 20.651.935 19.86.63c-.765-.297-1.636-.499-2.913-.558C15.667.012 15.26 0 12 0zm0 2.16c3.203 0 3.585.016 4.85.071 1.17.055 1.805.249 2.227.415.562.217.96.477 1.382.896.419.42.679.819.896 1.381.164.422.36 1.057.413 2.227.057 1.266.07 1.646.07 4.85s-.015 3.585-.074 4.85c-.061 1.17-.256 1.805-.421 2.227-.224.562-.479.96-.899 1.382-.419.419-.824.679-1.38.896-.42.164-1.065.36-2.235.413-1.274.057-1.649.07-4.859.07-3.211 0-3.586-.015-4.859-.074-1.171-.061-1.816-.256-2.236-.421-.569-.224-.96-.479-1.379-.899-.421-.419-.69-.824-.9-1.38-.165-.42-.359-1.065-.42-2.235-.045-1.26-.061-1.649-.061-4.844 0-3.196.016-3.586.061-4.861.061-1.17.255-1.814.42-2.234.21-.57.479-.96.9-1.381.419-.419.81-.689 1.379-.898.42-.166 1.051-.361 2.221-.421 1.275-.045 1.65-.06 4.859-.06l.045.03zm0 3.678a6.162 6.162 0 100 12.324 6.162 6.162 0 100-12.324zM12 16c-2.21 0-4-1.79-4-4s1.79-4 4-4 4 1.79 4 4-1.79 4-4 4zm7.846-10.405a1.441 1.441 0 11-2.88 0 1.441 1.441 0 012.88 0z"/></svg>',
+    'youtube.com': '<svg width="18" height="18" viewBox="0 0 24 24" fill="#8888a8"><path d="M23.498 6.186a3.016 3.016 0 00-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 00.502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 002.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 002.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>',
+  };
+
+  function getLinkIcon(url) {
+    for (const [domain, svg] of Object.entries(socialIcons)) {
+      if (url.includes(domain)) return svg;
+    }
+    return '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8888a8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>';
+  }
+
+  const bioHtml = bio ? `<p style="font-size:14px;color:#8888a8;margin-top:10px;line-height:1.5;">${bio.replace(/</g,'&lt;')}</p>` : '';
+
+  const linksHtml = links.length > 0 ? `
+    <div style="display:flex;justify-content:center;gap:12px;margin-top:14px;">
+      ${links.map(l => `<a href="${l.url}" target="_blank" rel="noopener" style="width:40px;height:40px;border-radius:10px;background:#1a1a28;border:1px solid #2a2a3e;display:flex;align-items:center;justify-content:center;transition:border-color .2s;text-decoration:none;" onmouseover="this.style.borderColor='#6c5ce7'" onmouseout="this.style.borderColor='#2a2a3e'">${getLinkIcon(l.url)}</a>`).join('')}
+    </div>
+  ` : '';
+
   const pinsHtml = pinnedFiles.length > 0 ? `
     <div style="margin-top:24px;">
       <div style="font-size:11px;font-weight:600;color:#555570;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:12px;">Pinned files</div>
@@ -757,7 +807,7 @@ body{font-family:-apple-system,system-ui,sans-serif;background:#0a0a0f;color:#e8
 body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse at 30% 20%,#6c5ce708 0%,transparent 50%),radial-gradient(ellipse at 70% 80%,#00d2a005 0%,transparent 50%);pointer-events:none}
 .card{background:#12121a;border:1px solid #2a2a3e;border-radius:20px;padding:44px 36px;max-width:400px;width:100%;animation:cardIn .4s ease both}
 @keyframes cardIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
-.profile{text-align:center;margin-bottom:24px}
+.profile{text-align:center}
 .avatar{width:72px;height:72px;border-radius:50%;border:3px solid #2a2a3e;margin-bottom:14px;object-fit:cover;background:#1a1a28}
 .name{font-size:22px;font-weight:700;margin-bottom:4px}
 .handle{font-size:13px;color:#555570;font-family:'SF Mono','Fira Code',monospace}
@@ -772,6 +822,8 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
     ${user.picture ? `<img class="avatar" src="${user.picture}" alt="">` : '<div class="avatar"></div>'}
     <div class="name">${user.name || user.username}</div>
     <div class="handle">@${user.username}</div>
+    ${bioHtml}
+    ${linksHtml}
   </div>
   ${pinsHtml}
   <div class="footer">
