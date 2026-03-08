@@ -761,42 +761,11 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 .avatar{width:72px;height:72px;border-radius:50%;border:3px solid #2a2a3e;margin-bottom:14px;object-fit:cover;background:#1a1a28}
 .name{font-size:22px;font-weight:700;margin-bottom:4px}
 .handle{font-size:13px;color:#555570;font-family:'SF Mono','Fira Code',monospace}
-.action-btn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;padding:16px;background:linear-gradient(135deg,#6c5ce7,#a29bfe);color:white;border:none;border-radius:12px;font-family:inherit;font-size:15px;font-weight:600;cursor:pointer;transition:all .2s;text-decoration:none;margin-top:24px}
-.action-btn:hover{transform:translateY(-1px);box-shadow:0 4px 20px #6c5ce730}
 .footer{border-top:1px solid #2a2a3e;padding-top:20px;margin-top:28px;text-align:center}
 .footer-logo{font-size:16px;font-weight:800;background:linear-gradient(135deg,#6c5ce7,#a29bfe);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:6px}
 .footer p{font-size:11px;color:#555570}
 .footer a{color:#a29bfe;text-decoration:none;font-weight:600}
 .footer a:hover{text-decoration:underline}
-/* Passkey modal */
-.passkey-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(8px);align-items:center;justify-content:center;z-index:200}
-.passkey-overlay.active{display:flex}
-.passkey-modal{background:#12121a;border:1px solid #2a2a3e;border-radius:16px;padding:36px;max-width:380px;width:90%;text-align:center}
-.passkey-input-group{display:flex;justify-content:center;gap:8px;margin:20px 0}
-.passkey-digit{width:48px;height:56px;background:#1a1a28;border:1.5px solid #2a2a3e;border-radius:10px;color:#e8e8f0;font-size:22px;font-weight:700;text-align:center;font-family:'SF Mono','Fira Code',monospace;outline:none;transition:border-color .2s}
-.passkey-digit:focus{border-color:#6c5ce7;box-shadow:0 0 0 3px #6c5ce720}
-.verify-btn{width:100%;padding:14px;background:linear-gradient(135deg,#6c5ce7,#a29bfe);color:white;border:none;border-radius:12px;font-size:15px;font-weight:600;cursor:pointer;transition:all .2s}
-.verify-btn:disabled{opacity:.5;cursor:not-allowed}
-.verify-btn:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 4px 20px #6c5ce730}
-.cancel-btn{width:100%;padding:12px;background:#1a1a28;color:#8888a8;border:1px solid #2a2a3e;border-radius:12px;font-size:14px;font-weight:500;cursor:pointer;margin-top:8px;transition:all .2s;font-family:inherit}
-.cancel-btn:hover{color:#e8e8f0;border-color:#555570}
-.error-msg{color:#e05555;font-size:12px;margin-top:8px;display:none}
-.error-msg.active{display:block}
-/* Upload section */
-.upload-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(8px);align-items:center;justify-content:center;z-index:200}
-.upload-overlay.active{display:flex}
-.upload-modal{background:#12121a;border:1px solid #2a2a3e;border-radius:16px;padding:36px;max-width:440px;width:90%}
-.upload-modal h2{text-align:center;margin-bottom:20px;font-size:18px}
-.drop-zone{border:2px dashed #2a2a3e;border-radius:14px;padding:32px 20px;text-align:center;cursor:pointer;transition:all .3s;margin-bottom:12px}
-.drop-zone:hover{border-color:#6c5ce7;background:#6c5ce708}
-.drop-zone h3{font-size:15px;font-weight:600;margin-top:12px;margin-bottom:4px}
-.drop-zone p{font-size:12px;color:#555570}
-.upload-file-list{display:flex;flex-direction:column;gap:8px;margin-bottom:12px;max-height:200px;overflow-y:auto}
-.upload-file-item{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:#1a1a28;border:1px solid #2a2a3e;border-radius:8px;font-size:13px}
-.upload-done{text-align:center;padding:24px 0}
-.upload-done .check{font-size:48px;color:#00d2a0;margin-bottom:12px}
-.upload-done h3{font-size:18px;margin-bottom:4px}
-.upload-done p{font-size:13px;color:#8888a8}
 </style></head><body>
 <div class="card">
   <div class="profile">
@@ -804,178 +773,14 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
     <div class="name">${user.name || user.username}</div>
     <div class="handle">@${user.username}</div>
   </div>
-  <button class="action-btn" onclick="resetAndOpenPasskey()">
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-    Send files to ${user.name || user.username}
-  </button>
   ${pinsHtml}
   <div class="footer">
     <div class="footer-logo">Stickr</div>
     <p>Share files directly. <a href="/">Get your own link</a></p>
   </div>
 </div>
-
-<!-- Passkey overlay -->
-<div class="passkey-overlay" id="passkey-overlay">
-  <div class="passkey-modal">
-    <h2>Enter passkey</h2>
-    <p style="color:#8888a8;font-size:13px;">Ask ${user.name || user.username} for the 4-digit passkey</p>
-    <div class="passkey-input-group">
-      <input class="passkey-digit" type="text" maxlength="1" inputmode="numeric">
-      <input class="passkey-digit" type="text" maxlength="1" inputmode="numeric">
-      <input class="passkey-digit" type="text" maxlength="1" inputmode="numeric">
-      <input class="passkey-digit" type="text" maxlength="1" inputmode="numeric">
-    </div>
-    <div class="error-msg" id="passkey-error">Incorrect passkey. Try again.</div>
-    <button class="verify-btn" id="verify-btn" disabled onclick="verifyPasskey()">Verify</button>
-    <button class="cancel-btn" onclick="document.getElementById('passkey-overlay').classList.remove('active')">Cancel</button>
-  </div>
-</div>
-
-<!-- Upload overlay -->
-<div class="upload-overlay" id="upload-overlay">
-  <div class="upload-modal">
-    <h2>Send files to ${user.name || user.username}</h2>
-    <div id="upload-area">
-      <div class="drop-zone" id="recv-drop-zone" onclick="document.getElementById('recv-file-input').click()">
-        <input type="file" id="recv-file-input" multiple style="display:none">
-        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#555570" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 16l-4-4-4 4"/><path d="M12 12v9"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/><polyline points="16 16 12 12 8 16"/></svg>
-        <h3>Drop files here</h3>
-        <p>Files expire in 24 hours</p>
-      </div>
-      <div class="upload-file-list" id="recv-file-list"></div>
-    </div>
-    <div class="upload-done" id="upload-done" style="display:none">
-      <div class="check">✓</div>
-      <h3>Files sent!</h3>
-      <p>${user.name || user.username} will see them in their inbox.</p>
-    </div>
-    <button class="cancel-btn" onclick="document.getElementById('upload-overlay').classList.remove('active');document.getElementById('upload-area').style.display='';document.getElementById('upload-done').style.display='none';document.getElementById('recv-file-list').innerHTML='';" style="margin-top:16px">Close</button>
-  </div>
-</div>
-
-<script>
-const USERNAME = '${user.username}';
-let verifiedLinkId = null;
-
-function resetAndOpenPasskey() {
-  // Reset passkey inputs
-  document.querySelectorAll('.passkey-digit').forEach(d => { d.value = ''; d.classList.remove('filled'); });
-  document.getElementById('verify-btn').disabled = true;
-  document.getElementById('passkey-error').classList.remove('active');
-  // Reset upload state
-  document.getElementById('upload-area').style.display = '';
-  document.getElementById('upload-done').style.display = 'none';
-  document.getElementById('recv-file-list').innerHTML = '';
-  // Reset overlays
-  document.getElementById('upload-overlay').classList.remove('active');
-  verifiedLinkId = null;
-  // Open passkey
-  document.getElementById('passkey-overlay').classList.add('active');
-  setTimeout(() => document.querySelector('.passkey-digit').focus(), 100);
-}
-
-// Passkey input logic
-const digits = document.querySelectorAll('.passkey-digit');
-const verifyBtnEl = document.getElementById('verify-btn');
-digits.forEach((input, i) => {
-  input.addEventListener('input', (e) => {
-    e.target.value = e.target.value.replace(/\\D/g, '');
-    if (e.target.value && i < digits.length - 1) digits[i + 1].focus();
-    verifyBtnEl.disabled = ![...digits].every(d => d.value.length === 1);
-    document.getElementById('passkey-error').classList.remove('active');
-  });
-  input.addEventListener('keydown', (e) => {
-    if (e.key === 'Backspace' && !input.value && i > 0) { digits[i - 1].focus(); digits[i - 1].value = ''; }
-  });
-  input.addEventListener('paste', (e) => {
-    e.preventDefault();
-    const p = e.clipboardData.getData('text').replace(/\\D/g, '').slice(0, 4);
-    p.split('').forEach((c, j) => { if (digits[j]) digits[j].value = c; });
-    if (p.length === 4) { digits[3].focus(); verifyBtnEl.disabled = false; }
-  });
-});
-
-async function verifyPasskey() {
-  const passkey = [...digits].map(d => d.value).join('');
-  try {
-    const res = await fetch('/api/receive-link/verify', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: USERNAME, passkey }),
-    });
-    const data = await res.json();
-    if (data.valid) {
-      verifiedLinkId = data.linkId;
-      document.getElementById('passkey-overlay').classList.remove('active');
-      document.getElementById('upload-overlay').classList.add('active');
-    } else {
-      document.getElementById('passkey-error').classList.add('active');
-    }
-  } catch {
-    document.getElementById('passkey-error').classList.add('active');
-  }
-}
-
-// File upload logic
-const recvDropZone = document.getElementById('recv-drop-zone');
-const recvFileInput = document.getElementById('recv-file-input');
-
-recvFileInput.addEventListener('change', (e) => {
-  uploadRecvFiles(Array.from(e.target.files));
-  e.target.value = '';
-});
-recvDropZone.addEventListener('dragover', (e) => { e.preventDefault(); recvDropZone.style.borderColor = '#6c5ce7'; });
-recvDropZone.addEventListener('dragleave', () => { recvDropZone.style.borderColor = '#2a2a3e'; });
-recvDropZone.addEventListener('drop', (e) => {
-  e.preventDefault();
-  recvDropZone.style.borderColor = '#2a2a3e';
-  uploadRecvFiles(Array.from(e.dataTransfer.files));
-});
-
-async function uploadRecvFiles(files) {
-  for (const file of files) {
-    await uploadRecvFile(file);
-  }
-  // Show done
-  document.getElementById('upload-area').style.display = 'none';
-  document.getElementById('upload-done').style.display = 'block';
-}
-
-async function uploadRecvFile(file) {
-  const list = document.getElementById('recv-file-list');
-  const id = 'rf-' + Date.now();
-  const item = document.createElement('div');
-  item.className = 'upload-file-item';
-  item.id = id;
-  const sizeMB = (file.size / 1024 / 1024).toFixed(1);
-  item.innerHTML = '<span style="word-break:break-all">' + file.name + '</span><span style="color:#8888a8;flex-shrink:0;margin-left:8px">' + sizeMB + ' MB</span>';
-  list.appendChild(item);
-
-  try {
-    const xhr = new XMLHttpRequest();
-    await new Promise((resolve, reject) => {
-      xhr.addEventListener('load', () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          item.innerHTML = '<span style="word-break:break-all">' + file.name + '</span><span style="color:#00d2a0;flex-shrink:0;margin-left:8px">✓ Sent</span>';
-          resolve();
-        } else { reject(); }
-      });
-      xhr.addEventListener('error', reject);
-      xhr.open('POST', '/api/receive/upload');
-      xhr.setRequestHeader('X-Filename', encodeURIComponent(file.name));
-      xhr.setRequestHeader('X-Mime-Type', file.type || 'application/octet-stream');
-      xhr.setRequestHeader('X-Receive-Link-Id', verifiedLinkId);
-      xhr.send(file);
-    });
-  } catch {
-    item.innerHTML = '<span>' + file.name + '</span><span style="color:#e05555;flex-shrink:0;margin-left:8px">✕ Failed</span>';
-  }
-}
-</script>
 </body></html>`;
 }
-
 // Create a batch for grouping multiple files
 app.post('/api/batch/create', (req, res) => {
   const user = getUserFromCookie(req);
@@ -1660,4 +1465,11 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`Stickr server running on http://localhost:${PORT}`);
   startSelfPing();
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received, shutting down gracefully');
+  server.close(() => process.exit(0));
+  setTimeout(() => process.exit(0), 5000);
 });

@@ -1823,25 +1823,6 @@ header {
             <span class="profile-menu-value" id="profile-menu-link"></span>
           </div>
           <div class="profile-menu-divider"></div>
-          <div class="profile-menu-section" id="receive-link-section">
-            <div class="profile-menu-item">
-              <span class="profile-menu-label">Receive link</span>
-              <button class="profile-menu-small-btn" onclick="event.stopPropagation();generateReceiveLink();" id="receive-link-btn">Generate</button>
-            </div>
-            <div class="receive-link-result" id="receive-link-result" style="display:none">
-              <div class="receive-link-passkey">Passkey: <strong id="receive-link-passkey"></strong></div>
-              <div class="receive-link-actions">
-                <span id="receive-link-copy" onclick="event.stopPropagation();copyReceiveLink();">Copy</span>
-                <span onclick="event.stopPropagation();shareReceiveLink();">Share</span>
-              </div>
-            </div>
-          </div>
-          <div class="profile-menu-divider"></div>
-          <div class="profile-menu-item clickable" onclick="event.stopPropagation();showInbox();">
-            <span class="profile-menu-label">Inbox</span>
-            <span class="profile-menu-badge" id="inbox-badge" style="display:none">0</span>
-          </div>
-          <div class="profile-menu-divider"></div>
           <div class="profile-menu-section">
             <div class="profile-menu-item">
               <span class="profile-menu-label">Pinned files</span>
@@ -1906,23 +1887,6 @@ header {
       <span class="footer-sep">·</span>
       <span class="footer-note">Encrypted end-to-end. Fast. Private.</span>
     </footer>
-  </div>
-
-  <!-- ═══ INBOX VIEW ═══ -->
-  <div id="inbox-view" class="view inbox-view">
-    <div class="link-view-header">
-      <div style="display:flex;align-items:center;gap:12px;">
-        <h2>Inbox</h2>
-        <span class="inbox-count-label" id="inbox-count-label"></span>
-      </div>
-      <button class="btn-back" onclick="closeInbox()">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
-        Back
-      </button>
-    </div>
-    <div class="inbox-list" id="inbox-list">
-      <div class="inbox-empty" id="inbox-empty">No files received yet. Share your receive link to get started.</div>
-    </div>
   </div>
 
   <!-- ═══ GET A LINK VIEW ═══ -->
@@ -3989,77 +3953,10 @@ function toggleProfileMenu() {
   }
 }
 
-// Receive link
-let currentReceiveLink = null;
-
-async function generateReceiveLink() {
-  try {
-    const res = await fetch('/api/receive-link/create', { method: 'POST' });
-    if (!res.ok) {
-      const err = await res.json();
-      showToast(err.error || 'Failed to generate receive link');
-      return;
-    }
-    const data = await res.json();
-    currentReceiveLink = data;
-    document.getElementById('receive-link-passkey').textContent = data.passkey;
-    document.getElementById('receive-link-result').style.display = 'block';
-    document.getElementById('receive-link-btn').textContent = 'Regenerate';
-  } catch (err) {
-    console.error('Generate receive link error:', err);
-    showToast('Failed to generate receive link');
-  }
-}
-
-function copyReceiveLink() {
-  if (!currentReceiveLink || !currentUser) return;
-  const text = currentReceiveLink.url + '\nPasskey: ' + currentReceiveLink.passkey;
-  navigator.clipboard.writeText(text);
-  const el = document.getElementById('receive-link-copy');
-  el.textContent = 'Copied!';
-  setTimeout(() => el.textContent = 'Copy', 2000);
-}
-
-function shareReceiveLink() {
-  if (!currentReceiveLink || !currentUser) return;
-  const text = 'Send me files on Stickr: ' + currentReceiveLink.url + '\nPasskey: ' + currentReceiveLink.passkey;
-  if (navigator.share) {
-    navigator.share({ title: 'Send me files on Stickr', text }).catch(() => {});
-  } else {
-    navigator.clipboard.writeText(text);
-    showToast('Link copied to clipboard');
-  }
-}
-
-// Inbox
-async function checkInboxCount() {
-  try {
-    const res = await fetch('/api/inbox');
-    if (res.ok) {
-      const files = await res.json();
-      const badge = document.getElementById('inbox-badge');
-      if (files.length > 0) {
-        badge.textContent = files.length;
-        badge.style.display = '';
-      } else {
-        badge.style.display = 'none';
-      }
-    }
-  } catch {}
-}
-
-function showInbox() {
-  document.getElementById('profile-menu').classList.remove('active');
-  document.getElementById('home-view').classList.remove('active');
-  document.getElementById('link-view').classList.remove('active');
-  document.getElementById('inbox-view').classList.add('active');
-  loadInbox();
-}
-
-function closeInbox() {
-  document.getElementById('inbox-view').classList.remove('active');
-  document.getElementById('home-view').classList.add('active');
-}
+// Inbox — disabled for now
+async function checkInboxCount() {}
+function showInbox() {}
+function closeInbox() {}
 
 async function loadInbox() {
   const list = document.getElementById('inbox-list');
@@ -4238,18 +4135,7 @@ async function checkAuth() {
       document.getElementById('profile-menu-email').textContent = currentUser.email || '';
       document.getElementById('profile-menu-handle').textContent = currentUser.username ? '@' + currentUser.username : '';
       document.getElementById('profile-menu-link').textContent = currentUser.username ? '/' + currentUser.username : '';
-      // Show existing receive link if active
-      if (currentUser.receiveLink) {
-        currentReceiveLink = {
-          passkey: currentUser.receiveLink.passkey,
-          url: window.location.origin + '/' + currentUser.username,
-        };
-        document.getElementById('receive-link-passkey').textContent = currentUser.receiveLink.passkey;
-        document.getElementById('receive-link-result').style.display = 'block';
-        document.getElementById('receive-link-btn').textContent = 'Regenerate';
-      }
       updateUsageDisplay();
-      checkInboxCount();
       loadPinnedFiles();
     } else {
       currentUser = null;
