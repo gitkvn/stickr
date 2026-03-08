@@ -48,81 +48,7 @@
   --shadow-glow: 0 0 40px var(--accent-glow);
 }
 
-/* ─── Light Theme ─── */
-[data-theme="light"] {
-  --bg-primary: #f5f5f7;
-  --bg-secondary: #ffffff;
-  --bg-tertiary: #e8e8ed;
-  --bg-card: #ffffff80;
-  --border: #d2d2da;
-  --border-glow: #6c5ce730;
-  --text-primary: #1a1a2e;
-  --text-secondary: #5a5a78;
-  --text-muted: #8888a0;
-  --accent: #6c5ce7;
-  --accent-bright: #7c6cf0;
-  --accent-glow: #6c5ce720;
-  --success: #00b894;
-  --success-glow: #00b89420;
-  --warning: #e8a800;
-  --danger: #e05555;
-  --gradient-hero: radial-gradient(ellipse at 30% 20%, #6c5ce70a 0%, transparent 50%),
-                   radial-gradient(ellipse at 70% 80%, #00d2a006 0%, transparent 50%);
-  --shadow: 0 4px 30px rgba(0,0,0,0.08);
-  --shadow-glow: 0 0 40px var(--accent-glow);
-}
-
-[data-theme="light"] .grain-overlay { opacity: 0.015; }
-[data-theme="light"] .grid-bg { opacity: 0.03; }
-[data-theme="light"] header { background: var(--bg-primary)ee; }
-[data-theme="light"] .logo-text .peel::before {
-  background: linear-gradient(225deg, var(--bg-primary) 40%, var(--accent) 42%, var(--accent-bright) 60%, #c4b5fd 80%);
-  box-shadow: -2px 2px 4px rgba(0,0,0,0.12);
-}
-[data-theme="light"] .logo-text .base {
-  background: linear-gradient(135deg, #5a4bd6, #7c6cf0);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-[data-theme="light"] .btn-primary {
-  box-shadow: 0 4px 24px rgba(108,92,231,0.2), 0 0 0 1px rgba(108,92,231,0.2);
-}
-[data-theme="light"] .btn-primary:hover {
-  box-shadow: 0 8px 32px rgba(108,92,231,0.25), 0 0 0 1px rgba(108,92,231,0.3);
-}
-[data-theme="light"] .btn-copy.copied { color: white; }
-[data-theme="light"] .chat-msg.sent { background: var(--accent); color: white; }
-[data-theme="light"] .chat-msg.received { background: var(--bg-tertiary); }
-[data-theme="light"] .file-progress { background: var(--border); }
-[data-theme="light"] .drop-zone { border-color: var(--border); }
-[data-theme="light"] .drop-zone.dragover { border-color: var(--accent); background: rgba(108,92,231,0.05); }
-[data-theme="light"] .modal { background: var(--bg-secondary); box-shadow: 0 8px 40px rgba(0,0,0,0.15); }
-[data-theme="light"] .notif-banner-content { box-shadow: 0 8px 40px rgba(0,0,0,0.15); }
-[data-theme="light"] .session-ended-card { box-shadow: 0 4px 30px rgba(0,0,0,0.08); }
-
 /* ─── Theme Toggle ─── */
-.theme-toggle {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--bg-tertiary);
-  color: var(--text-secondary);
-  font-size: 16px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s;
-  flex-shrink: 0;
-  line-height: 1;
-  padding: 0;
-}
-.theme-toggle:hover {
-  border-color: var(--accent);
-  color: var(--text-primary);
-}
-
 .header-right {
   display: flex;
   align-items: center;
@@ -1703,7 +1629,6 @@ header {
         </div>
       </div>
       <button class="btn-sign-in" id="btn-sign-in" onclick="signIn()" style="display:none">Sign in</button>
-      <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Toggle light/dark mode">☀️</button>
     </div>
   </header>
 
@@ -2021,33 +1946,6 @@ function sendNotification(title, body) {
     // Notifications not supported — fail silently
   }
 }
-
-// ═══════════════════════════════════════════
-// THEME TOGGLE
-// ═══════════════════════════════════════════
-function initTheme() {
-  const saved = localStorage.getItem('stickr-theme');
-  const theme = saved || 'dark';
-  applyTheme(theme);
-}
-
-function applyTheme(theme) {
-  document.documentElement.setAttribute('data-theme', theme);
-  const btn = document.getElementById('theme-toggle');
-  if (btn) btn.textContent = theme === 'dark' ? '☀️' : '🌙';
-  // Update meta theme-color
-  const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.content = theme === 'dark' ? '#0a0a0f' : '#f5f5f7';
-}
-
-function toggleTheme() {
-  const current = document.documentElement.getAttribute('data-theme') || 'dark';
-  const next = current === 'dark' ? 'light' : 'dark';
-  applyTheme(next);
-  localStorage.setItem('stickr-theme', next);
-}
-
-initTheme();
 
 // ═══════════════════════════════════════════
 // SERVICE WORKER (PWA)
@@ -3945,7 +3843,7 @@ function generateInlineQR() {
     text: link,
     width: 160,
     height: 160,
-    colorDark: document.documentElement.getAttribute('data-theme') === 'light' ? '#1a1a2e' : '#0a0a0f',
+    colorDark: '#0a0a0f',
     colorLight: '#ffffff',
     correctLevel: QRCode.CorrectLevel.M,
   });
