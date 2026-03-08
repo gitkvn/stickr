@@ -804,7 +804,7 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
     <div class="name">${user.name || user.username}</div>
     <div class="handle">@${user.username}</div>
   </div>
-  <button class="action-btn" onclick="document.getElementById('passkey-overlay').classList.add('active');document.querySelector('.passkey-digit').focus();">
+  <button class="action-btn" onclick="resetAndOpenPasskey()">
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
     Send files to ${user.name || user.username}
   </button>
@@ -850,13 +850,30 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
       <h3>Files sent!</h3>
       <p>${user.name || user.username} will see them in their inbox.</p>
     </div>
-    <button class="cancel-btn" onclick="document.getElementById('upload-overlay').classList.remove('active')" style="margin-top:16px">Close</button>
+    <button class="cancel-btn" onclick="document.getElementById('upload-overlay').classList.remove('active');document.getElementById('upload-area').style.display='';document.getElementById('upload-done').style.display='none';document.getElementById('recv-file-list').innerHTML='';" style="margin-top:16px">Close</button>
   </div>
 </div>
 
 <script>
 const USERNAME = '${user.username}';
 let verifiedLinkId = null;
+
+function resetAndOpenPasskey() {
+  // Reset passkey inputs
+  document.querySelectorAll('.passkey-digit').forEach(d => { d.value = ''; d.classList.remove('filled'); });
+  document.getElementById('verify-btn').disabled = true;
+  document.getElementById('passkey-error').classList.remove('active');
+  // Reset upload state
+  document.getElementById('upload-area').style.display = '';
+  document.getElementById('upload-done').style.display = 'none';
+  document.getElementById('recv-file-list').innerHTML = '';
+  // Reset overlays
+  document.getElementById('upload-overlay').classList.remove('active');
+  verifiedLinkId = null;
+  // Open passkey
+  document.getElementById('passkey-overlay').classList.add('active');
+  setTimeout(() => document.querySelector('.passkey-digit').focus(), 100);
+}
 
 // Passkey input logic
 const digits = document.querySelectorAll('.passkey-digit');
