@@ -82,9 +82,20 @@ db.exec(`
     r2_key TEXT NOT NULL,
     expires_at TEXT NOT NULL,
     download_count INTEGER DEFAULT 0,
+    batch_token TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS batches (
+    token TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    expires_at TEXT NOT NULL,
     created_at TEXT DEFAULT (datetime('now'))
   );
 `);
+
+// Migrate: add batch_token column if missing
+try { db.exec('ALTER TABLE async_files ADD COLUMN batch_token TEXT'); } catch {}
 
 // Prepared statements
 const stmts = {
@@ -105,11 +116,17 @@ const stmts = {
   markRefunded: db.prepare('UPDATE pending_transfers SET refunded = 1 WHERE file_id = ? AND user_id = ?'),
   cleanOldTransfers: db.prepare("DELETE FROM pending_transfers WHERE created_at < datetime('now', '-1 day')"),
   // Async file queries
-  createAsyncFile: db.prepare('INSERT INTO async_files (token, user_id, filename, file_size, mime_type, r2_key, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)'),
+  createAsyncFile: db.prepare('INSERT INTO async_files (token, user_id, filename, file_size, mime_type, r2_key, expires_at, batch_token) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'),
   findAsyncFile: db.prepare('SELECT * FROM async_files WHERE token = ?'),
   incrementDownloadCount: db.prepare('UPDATE async_files SET download_count = download_count + 1 WHERE token = ?'),
   findExpiredFiles: db.prepare("SELECT * FROM async_files WHERE expires_at < datetime('now')"),
   deleteAsyncFile: db.prepare('DELETE FROM async_files WHERE token = ?'),
+  // Batch queries
+  createBatch: db.prepare('INSERT INTO batches (token, user_id, expires_at) VALUES (?, ?, ?)'),
+  findBatch: db.prepare('SELECT * FROM batches WHERE token = ?'),
+  findBatchFiles: db.prepare('SELECT * FROM async_files WHERE batch_token = ? ORDER BY created_at ASC'),
+  findExpiredBatches: db.prepare("SELECT * FROM batches WHERE expires_at < datetime('now')"),
+  deleteBatch: db.prepare('DELETE FROM batches WHERE token = ?'),
   // Stats queries
   totalUsers: db.prepare('SELECT COUNT(*) as count FROM users'),
   totalTransfers: db.prepare('SELECT COUNT(*) as count, COALESCE(SUM(file_size), 0) as total_bytes FROM pending_transfers'),
@@ -137,6 +154,11 @@ setInterval(async () => {
       stmts.deleteAsyncFile.run(file.token);
     }
     if (expired.length > 0) console.log(`Cleaned ${expired.length} expired async files`);
+    // Clean expired batches
+    const expiredBatches = stmts.findExpiredBatches.all();
+    for (const batch of expiredBatches) {
+      stmts.deleteBatch.run(batch.token);
+    }
   }
 }, 60 * 60 * 1000);
 
@@ -361,6 +383,21 @@ app.post('/api/transfer/refund', (req, res) => {
 // ASYNC FILE TRANSFER (R2)
 // ═══════════════════════════════════════════
 
+// Create a batch for grouping multiple files
+app.post('/api/batch/create', (req, res) => {
+  const user = getUserFromCookie(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+
+  const token = crypto.randomBytes(16).toString('hex');
+  const expiresAt = new Date(Date.now() + ASYNC_FILE_EXPIRY).toISOString();
+  stmts.createBatch.run(token, user.id, expiresAt);
+
+  const host = req.headers.host;
+  const protocol = req.headers['x-forwarded-proto'] || 'https';
+
+  res.json({ token, url: `${protocol}://${host}/dl/b/${token}`, expiresAt });
+});
+
 // Upload a file to R2 (authenticated, streams to R2)
 const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB per file
 
@@ -444,7 +481,8 @@ app.post('/api/upload', async (req, res) => {
     }
 
     // Record in database
-    stmts.createAsyncFile.run(token, user.id, filename, fileSize, mimeType, r2Key, expiresAt);
+    const batchToken = req.headers['x-batch-token'] || null;
+    stmts.createAsyncFile.run(token, user.id, filename, fileSize, mimeType, r2Key, expiresAt, batchToken);
 
     // Track as pending transfer for stats
     const fileId = 'async-' + token;
@@ -466,7 +504,22 @@ app.post('/api/upload', async (req, res) => {
   }
 });
 
-// Download page (public, branded)
+// Batch download page
+app.get('/dl/b/:token', (req, res) => {
+  const batch = stmts.findBatch.get(req.params.token);
+  if (!batch) return res.status(404).send(getDownloadPage(null));
+
+  if (new Date(batch.expires_at) < new Date()) {
+    return res.status(410).send(getDownloadPage(null, true));
+  }
+
+  const files = stmts.findBatchFiles.all(req.params.token);
+  if (files.length === 0) return res.status(404).send(getDownloadPage(null));
+
+  res.send(getBatchDownloadPage(batch, files));
+});
+
+// Single file download page
 app.get('/dl/:token', (req, res) => {
   const file = stmts.findAsyncFile.get(req.params.token);
   if (!file) {
@@ -588,6 +641,55 @@ function getTimeRemaining(expiresAt) {
   const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
   if (hours > 0) return hours + 'h ' + minutes + 'm';
   return minutes + 'm';
+}
+
+function getBatchDownloadPage(batch, files) {
+  const totalSize = files.reduce((sum, f) => sum + f.file_size, 0);
+  const expiresIn = getTimeRemaining(batch.expires_at);
+  const fileListHtml = files.map(f => `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;background:var(--bg);border:1px solid #2a2a3e;border-radius:10px;">
+      <div style="min-width:0;flex:1;">
+        <div style="font-size:14px;font-weight:600;color:#e8e8f0;word-break:break-all;">${f.filename}</div>
+        <div style="font-size:12px;color:#8888a8;margin-top:2px;">${formatBytes(f.file_size)}</div>
+      </div>
+      <a href="/api/download/${f.token}" style="flex-shrink:0;margin-left:16px;padding:8px 16px;background:linear-gradient(135deg,#6c5ce7,#a29bfe);color:white;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600;">Download</a>
+    </div>
+  `).join('');
+
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stickr — ${files.length} files</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#12121a}
+body{font-family:-apple-system,system-ui,sans-serif;background:#0a0a0f;color:#e8e8f0;min-height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;padding:24px}
+.card{background:#12121a;border:1px solid #2a2a3e;border-radius:16px;padding:36px;max-width:480px;width:100%}
+h1{font-size:22px;margin-bottom:4px;text-align:center}
+.meta{color:#8888a8;font-size:13px;text-align:center;margin-bottom:4px}
+.expiry{color:#555570;font-size:11px;text-align:center;margin-bottom:20px}
+.files{display:flex;flex-direction:column;gap:8px;margin-bottom:20px}
+.btn-all{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:14px;border-radius:12px;font-size:15px;font-weight:600;text-decoration:none;background:linear-gradient(135deg,#6c5ce7,#a29bfe);color:white;border:none;cursor:pointer;transition:all 0.2s;margin-bottom:20px}
+.btn-all:hover{transform:translateY(-1px);box-shadow:0 4px 20px #6c5ce730}
+.logo{font-size:28px;font-weight:800;margin-bottom:24px;text-align:center;background:linear-gradient(135deg,#6c5ce7,#a29bfe);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.promo{border-top:1px solid #2a2a3e;padding-top:20px;text-align:center}
+.promo p{color:#8888a8;font-size:13px;margin-bottom:12px}
+.promo a{color:#a29bfe;text-decoration:none;font-weight:600;font-size:14px}
+.promo a:hover{text-decoration:underline}
+</style></head><body>
+<div class="card">
+<div class="logo">Stickr</div>
+<h1>${files.length} file${files.length > 1 ? 's' : ''}</h1>
+<p class="meta">${formatBytes(totalSize)} total</p>
+<p class="expiry">Expires in ${expiresIn}</p>
+<button class="btn-all" onclick="document.querySelectorAll('.dl-link').forEach((a,i)=>setTimeout(()=>a.click(),i*500))">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+Download All
+</button>
+<div class="files">${fileListHtml.replace(/href="/g, 'class="dl-link" href="')}</div>
+<div class="promo">
+<p>Want to share files too?</p>
+<a href="/">Start free with 500 MB on Stickr</a>
+</div>
+</div></body></html>`;
 }
 
 app.use(express.static(path.join(__dirname, 'public')));

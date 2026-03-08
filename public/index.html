@@ -2702,12 +2702,47 @@ linkDropZone.addEventListener('drop', (e) => {
 });
 
 async function uploadLinkFiles(files) {
+  let batchToken = null;
+  let batchUrl = null;
+
+  // Create a batch if multiple files
+  if (files.length > 1) {
+    try {
+      const res = await fetch('/api/batch/create', { method: 'POST' });
+      const data = await res.json();
+      batchToken = data.token;
+      batchUrl = data.url;
+    } catch (err) {
+      console.error('Failed to create batch:', err);
+    }
+  }
+
   for (const file of files) {
-    await uploadLinkFile(file);
+    await uploadLinkFile(file, batchToken);
+  }
+
+  // After all uploads, show the batch link if batch was created
+  if (batchToken && batchUrl) {
+    const list = document.getElementById('link-file-list');
+    const batchItem = document.createElement('div');
+    batchItem.className = 'link-file-item';
+    batchItem.style.borderColor = 'var(--accent)';
+    batchItem.innerHTML = `
+      <div class="link-file-top">
+        <span class="link-file-name">${files.length} files — one link</span>
+      </div>
+      <div class="link-file-status done">✓ Ready to share</div>
+      <div class="link-file-actions">
+        <span onclick="navigator.clipboard.writeText('${batchUrl}');this.textContent='Copied!';setTimeout(()=>this.textContent='Copy',2000);">Copy</span>
+        <span onclick="shareAsyncLink('${batchUrl}','batch')">Share</span>
+      </div>
+    `;
+    list.appendChild(batchItem);
+    batchItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 }
 
-async function uploadLinkFile(file) {
+async function uploadLinkFile(file, batchToken) {
   const MAX_FILE_SIZE = 500 * 1024 * 1024;
   if (file.size > MAX_FILE_SIZE) {
     showToast('Maximum file size is 500 MB');
@@ -2756,6 +2791,7 @@ async function uploadLinkFile(file) {
       xhr.open('POST', '/api/upload');
       xhr.setRequestHeader('X-Filename', encodeURIComponent(file.name));
       xhr.setRequestHeader('X-Mime-Type', file.type || 'application/octet-stream');
+      if (batchToken) xhr.setRequestHeader('X-Batch-Token', batchToken);
       xhr.send(file);
     });
 
@@ -2765,19 +2801,22 @@ async function uploadLinkFile(file) {
       updateUsageDisplay();
     }
 
-    // Show success with copy/share
+    // Show success
     document.getElementById('bar-' + id).style.width = '100%';
     const statusEl = document.getElementById('status-' + id);
     statusEl.className = 'link-file-status done';
-    statusEl.textContent = '✓ Ready';
+    statusEl.textContent = '✓ Uploaded';
 
-    const actionsDiv = document.createElement('div');
-    actionsDiv.className = 'link-file-actions';
-    actionsDiv.innerHTML = `
-      <span onclick="navigator.clipboard.writeText('${result.url}');this.textContent='Copied!';setTimeout(()=>this.textContent='Copy',2000);">Copy</span>
-      <span onclick="shareAsyncLink('${result.url}','${id}')">Share</span>
-    `;
-    document.getElementById(id).appendChild(actionsDiv);
+    // Show individual Copy/Share only for single file (no batch)
+    if (!batchToken) {
+      const actionsDiv = document.createElement('div');
+      actionsDiv.className = 'link-file-actions';
+      actionsDiv.innerHTML = `
+        <span onclick="navigator.clipboard.writeText('${result.url}');this.textContent='Copied!';setTimeout(()=>this.textContent='Copy',2000);">Copy</span>
+        <span onclick="shareAsyncLink('${result.url}','${id}')">Share</span>
+      `;
+      document.getElementById(id).appendChild(actionsDiv);
+    }
 
   } catch (err) {
     const statusEl = document.getElementById('status-' + id);
