@@ -1269,18 +1269,6 @@ Download All
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Profile page catch-all (must be after all other routes)
-app.get('/:username', (req, res) => {
-  const username = req.params.username.toLowerCase();
-  if (RESERVED_USERNAMES.has(username)) return res.status(404).send('Not found');
-
-  const user = stmts.findUserByUsername.get(username);
-  if (!user) return res.status(404).send('Not found');
-
-  const pinnedFiles = stmts.findPinnedFilesByUsername.all(username);
-  res.send(getProfilePage(user, pinnedFiles));
-});
-
 // ═══════════════════════════════════════════
 // TURN SESSION TOKENS
 // ═══════════════════════════════════════════
@@ -1628,6 +1616,18 @@ function generateRoomId() {
   } while (rooms.has(id));
   return id;
 }
+
+// Profile page catch-all (MUST be the very last route)
+app.get('/:username', (req, res) => {
+  const username = req.params.username.toLowerCase();
+  if (RESERVED_USERNAMES.has(username)) return res.status(404).send('Not found');
+
+  const user = stmts.findUserByUsername.get(username);
+  if (!user) return res.status(404).send('Not found');
+
+  const pinnedFiles = stmts.findPinnedFilesByUsername.all(username);
+  res.send(getProfilePage(user, pinnedFiles));
+});
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
