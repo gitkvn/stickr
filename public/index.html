@@ -401,6 +401,39 @@ header {
   min-width: 20px;
   text-align: center;
 }
+.pinned-files-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+.pinned-file-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px;
+  background: var(--bg-tertiary);
+  border-radius: 6px;
+  font-size: 12px;
+}
+.pinned-file-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-secondary);
+}
+.pinned-file-del {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0 4px;
+  flex-shrink: 0;
+}
+.pinned-file-del:hover { color: #e05555; }
 
 .btn-sign-in {
   font-family: var(--font-body);
@@ -1807,6 +1840,16 @@ header {
           <div class="profile-menu-item clickable" onclick="event.stopPropagation();showInbox();">
             <span class="profile-menu-label">Inbox</span>
             <span class="profile-menu-badge" id="inbox-badge" style="display:none">0</span>
+          </div>
+          <div class="profile-menu-divider"></div>
+          <div class="profile-menu-section">
+            <div class="profile-menu-item">
+              <span class="profile-menu-label">Pinned files</span>
+              <span class="profile-menu-value" id="pin-count">0 / 3</span>
+            </div>
+            <div class="pinned-files-list" id="pinned-files-list"></div>
+            <button class="profile-menu-small-btn" onclick="event.stopPropagation();document.getElementById('pin-file-input').click();" id="pin-upload-btn" style="margin-top:8px;width:100%;text-align:center;">+ Add file (max 25 MB)</button>
+            <input type="file" id="pin-file-input" style="display:none">
           </div>
           <div class="profile-menu-divider"></div>
           <button class="profile-menu-btn" onclick="logout()">Sign out</button>
@@ -3952,12 +3995,18 @@ let currentReceiveLink = null;
 async function generateReceiveLink() {
   try {
     const res = await fetch('/api/receive-link/create', { method: 'POST' });
+    if (!res.ok) {
+      const err = await res.json();
+      showToast(err.error || 'Failed to generate receive link');
+      return;
+    }
     const data = await res.json();
     currentReceiveLink = data;
     document.getElementById('receive-link-passkey').textContent = data.passkey;
     document.getElementById('receive-link-result').style.display = 'block';
     document.getElementById('receive-link-btn').textContent = 'Regenerate';
   } catch (err) {
+    console.error('Generate receive link error:', err);
     showToast('Failed to generate receive link');
   }
 }
@@ -4095,6 +4144,72 @@ function getExpiresIn(dateStr) {
   return 'expires in ' + mins + 'm';
 }
 
+// ═══════════════════════════════════════════
+// PINNED FILES
+// ═══════════════════════════════════════════
+async function loadPinnedFiles() {
+  try {
+    const res = await fetch('/api/pins');
+    if (!res.ok) return;
+    const pins = await res.json();
+    document.getElementById('pin-count').textContent = pins.length + ' / 3';
+    const list = document.getElementById('pinned-files-list');
+    if (pins.length === 0) {
+      list.innerHTML = '';
+      document.getElementById('pin-upload-btn').style.display = '';
+      return;
+    }
+    list.innerHTML = pins.map(p => `
+      <div class="pinned-file-item" id="pin-${p.id}">
+        <span class="pinned-file-name" title="${escapeHtml(p.filename)}">${escapeHtml(p.filename)}</span>
+        <button class="pinned-file-del" onclick="event.stopPropagation();deletePin('${p.id}');" title="Remove">✕</button>
+      </div>
+    `).join('');
+    document.getElementById('pin-upload-btn').style.display = pins.length >= 3 ? 'none' : '';
+  } catch {}
+}
+
+document.getElementById('pin-file-input').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+
+  const MAX_PIN = 25 * 1024 * 1024;
+  if (file.size > MAX_PIN) {
+    showToast('Pinned files must be under 25 MB');
+    return;
+  }
+
+  try {
+    const xhr = new XMLHttpRequest();
+    const result = await new Promise((resolve, reject) => {
+      xhr.addEventListener('load', () => {
+        if (xhr.status >= 200 && xhr.status < 300) resolve(JSON.parse(xhr.responseText));
+        else { try { reject(JSON.parse(xhr.responseText)); } catch { reject({ error: 'Upload failed' }); } }
+      });
+      xhr.addEventListener('error', () => reject({ error: 'Network error' }));
+      xhr.open('POST', '/api/pin');
+      xhr.setRequestHeader('X-Filename', encodeURIComponent(file.name));
+      xhr.setRequestHeader('X-Mime-Type', file.type || 'application/octet-stream');
+      xhr.send(file);
+    });
+    showToast('File pinned');
+    loadPinnedFiles();
+  } catch (err) {
+    showToast(err.error || 'Failed to pin file');
+  }
+});
+
+async function deletePin(id) {
+  try {
+    const res = await fetch('/api/pin/' + id, { method: 'DELETE' });
+    if (res.ok) {
+      loadPinnedFiles();
+      showToast('Pin removed');
+    }
+  } catch {}
+}
+
 // Close profile menu on outside click
 document.addEventListener('click', (e) => {
   const menu = document.getElementById('profile-menu');
@@ -4141,6 +4256,7 @@ async function checkAuth() {
       }
       updateUsageDisplay();
       checkInboxCount();
+      loadPinnedFiles();
     } else {
       currentUser = null;
       document.getElementById('user-menu').style.display = 'none';
