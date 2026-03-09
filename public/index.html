@@ -1938,6 +1938,27 @@ header {
             </div>
           </div>
           <div class="profile-menu-divider"></div>
+          <div class="profile-menu-section">
+            <div class="profile-menu-item" style="margin-bottom:8px;">
+              <span class="profile-menu-label">My Card</span>
+              <button class="profile-menu-small-btn" onclick="event.stopPropagation();toggleMyCard();" id="mycard-btn">Edit</button>
+            </div>
+            <div id="mycard-form" style="display:none;">
+              <input type="text" id="card-name" placeholder="Full name" maxlength="100" class="profile-edit-input">
+              <input type="tel" id="card-phone" placeholder="Phone" maxlength="30" class="profile-edit-input">
+              <input type="email" id="card-email" placeholder="Email" maxlength="100" class="profile-edit-input">
+              <input type="text" id="card-company" placeholder="Company" maxlength="100" class="profile-edit-input">
+              <input type="text" id="card-title" placeholder="Title" maxlength="100" class="profile-edit-input">
+              <input type="url" id="card-website" placeholder="Website" maxlength="200" class="profile-edit-input">
+              <button class="profile-menu-small-btn" onclick="event.stopPropagation();saveMyCard();" style="width:100%;text-align:center;margin-top:6px;padding:6px;">Save</button>
+            </div>
+            <div id="mycard-qr" style="display:none;text-align:center;margin-top:8px;">
+              <div id="mycard-qr-canvas" style="display:inline-block;padding:12px;background:white;border-radius:10px;"></div>
+              <div style="font-size:11px;color:var(--text-muted);margin-top:8px;">Scan to save contact</div>
+              <div style="margin-top:6px;"><span style="font-size:12px;color:var(--accent-bright);cursor:pointer;" onclick="event.stopPropagation();editMyCard();">Edit card</span></div>
+            </div>
+          </div>
+          <div class="profile-menu-divider"></div>
           <button class="profile-menu-btn" onclick="logout()">Sign out</button>
         </div>
       </div>
@@ -4227,6 +4248,135 @@ async function saveProfile() {
 }
 
 // ═══════════════════════════════════════════
+// MY CARD
+// ═══════════════════════════════════════════
+function toggleMyCard() {
+  const form = document.getElementById('mycard-form');
+  const qr = document.getElementById('mycard-qr');
+  const btn = document.getElementById('mycard-btn');
+
+  if (form.style.display !== 'none') {
+    // Close edit mode
+    form.style.display = 'none';
+    qr.style.display = 'none';
+    btn.textContent = currentUser && currentUser.profile_data && currentUser.profile_data.card ? 'Show QR' : 'Edit';
+    return;
+  }
+
+  if (qr.style.display !== 'none') {
+    // Close QR
+    qr.style.display = 'none';
+    btn.textContent = 'Show QR';
+    return;
+  }
+
+  // Has card? Show QR. No card? Show edit form.
+  if (currentUser && currentUser.profile_data && currentUser.profile_data.card) {
+    generateCardQR(currentUser.profile_data.card);
+    btn.textContent = 'Edit';
+    // Long press Edit to re-edit
+  } else {
+    form.style.display = 'block';
+    btn.textContent = 'Cancel';
+    if (currentUser) {
+      document.getElementById('card-name').value = currentUser.name || '';
+      document.getElementById('card-email').value = currentUser.email || '';
+    }
+  }
+}
+
+async function saveMyCard() {
+  const card = {
+    name: document.getElementById('card-name').value.trim(),
+    phone: document.getElementById('card-phone').value.trim(),
+    email: document.getElementById('card-email').value.trim(),
+    company: document.getElementById('card-company').value.trim(),
+    title: document.getElementById('card-title').value.trim(),
+    website: document.getElementById('card-website').value.trim(),
+  };
+
+  if (!card.name) {
+    showToast('Name is required');
+    return;
+  }
+
+  // Save card data alongside existing profile data
+  const existing = (currentUser && currentUser.profile_data) || {};
+  const profileData = {
+    bio: existing.bio || '',
+    links: existing.links || [],
+    card: card,
+  };
+
+  try {
+    const res = await fetch('/api/profile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(profileData),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      currentUser.profile_data = data;
+      document.getElementById('mycard-form').style.display = 'none';
+      document.getElementById('mycard-btn').textContent = 'Show QR';
+      generateCardQR(card);
+      showToast('Card saved');
+    }
+  } catch {
+    showToast('Failed to save card');
+  }
+}
+
+function editMyCard() {
+  const form = document.getElementById('mycard-form');
+  const qr = document.getElementById('mycard-qr');
+  qr.style.display = 'none';
+  form.style.display = 'block';
+  document.getElementById('mycard-btn').textContent = 'Cancel';
+  if (currentUser && currentUser.profile_data && currentUser.profile_data.card) {
+    const c = currentUser.profile_data.card;
+    document.getElementById('card-name').value = c.name || '';
+    document.getElementById('card-phone').value = c.phone || '';
+    document.getElementById('card-email').value = c.email || '';
+    document.getElementById('card-company').value = c.company || '';
+    document.getElementById('card-title').value = c.title || '';
+    document.getElementById('card-website').value = c.website || '';
+  }
+}
+
+function generateCardQR(card) {
+  const vcard = [
+    'BEGIN:VCARD',
+    'VERSION:3.0',
+    'FN:' + card.name,
+    card.phone ? 'TEL:' + card.phone : '',
+    card.email ? 'EMAIL:' + card.email : '',
+    card.company ? 'ORG:' + card.company : '',
+    card.title ? 'TITLE:' + card.title : '',
+    card.website ? 'URL:' + card.website : '',
+    'END:VCARD',
+  ].filter(l => l).join('\n');
+
+  const container = document.getElementById('mycard-qr-canvas');
+  container.innerHTML = '';
+  new QRCode(container, {
+    text: vcard,
+    width: 160,
+    height: 160,
+    colorDark: '#000000',
+    colorLight: '#ffffff',
+    correctLevel: QRCode.CorrectLevel.M,
+  });
+  document.getElementById('mycard-qr').style.display = 'block';
+}
+
+function loadMyCard() {
+  if (currentUser && currentUser.profile_data && currentUser.profile_data.card) {
+    document.getElementById('mycard-btn').textContent = 'Show QR';
+  }
+}
+
+// ═══════════════════════════════════════════
 // PINNED FILES
 // ═══════════════════════════════════════════
 async function loadPinnedFiles() {
@@ -4353,6 +4503,7 @@ async function checkAuth() {
       document.getElementById('profile-menu-link').textContent = currentUser.username ? '/' + currentUser.username : '';
       updateUsageDisplay();
       loadPinnedFiles();
+      loadMyCard();
     } else {
       currentUser = null;
       document.getElementById('user-menu').style.display = 'none';

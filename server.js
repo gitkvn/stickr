@@ -595,13 +595,24 @@ app.post('/api/profile', (req, res) => {
   const user = getUserFromCookie(req);
   if (!user) return res.status(401).json({ error: 'Not authenticated' });
 
-  const { bio, links } = req.body;
+  const { bio, links, card } = req.body;
   const profileData = {
     bio: typeof bio === 'string' ? bio.slice(0, 160) : '',
     links: Array.isArray(links) ? links.slice(0, 3).map(l => ({
       url: typeof l.url === 'string' ? l.url.slice(0, 500) : '',
     })).filter(l => l.url && (l.url.startsWith('https://') || l.url.startsWith('http://'))) : [],
   };
+
+  if (card && typeof card === 'object') {
+    profileData.card = {
+      name: typeof card.name === 'string' ? card.name.slice(0, 100) : '',
+      phone: typeof card.phone === 'string' ? card.phone.slice(0, 30) : '',
+      email: typeof card.email === 'string' ? card.email.slice(0, 100) : '',
+      company: typeof card.company === 'string' ? card.company.slice(0, 100) : '',
+      title: typeof card.title === 'string' ? card.title.slice(0, 100) : '',
+      website: typeof card.website === 'string' ? card.website.slice(0, 200) : '',
+    };
+  }
 
   stmts.updateProfileData.run(JSON.stringify(profileData), user.id);
   res.json(profileData);
