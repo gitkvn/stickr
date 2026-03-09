@@ -150,6 +150,7 @@ const stmts = {
   deleteSession: db.prepare('DELETE FROM sessions WHERE token = ?'),
   cleanExpiredSessions: db.prepare("DELETE FROM sessions WHERE expires_at < datetime('now')"),
   updateBalance: db.prepare('UPDATE users SET transfer_balance = ? WHERE id = ?'),
+  deductBalance: db.prepare('UPDATE users SET transfer_balance = transfer_balance - ? WHERE id = ? AND transfer_balance >= ?'),
   createPendingTransfer: db.prepare('INSERT INTO pending_transfers (file_id, user_id, file_size) VALUES (?, ?, ?)'),
   findPendingTransfer: db.prepare('SELECT * FROM pending_transfers WHERE file_id = ? AND user_id = ?'),
   markRefunded: db.prepare('UPDATE pending_transfers SET refunded = 1 WHERE file_id = ? AND user_id = ?'),
@@ -452,28 +453,25 @@ app.post('/api/transfer/start', (req, res) => {
     return res.status(400).json({ error: 'Invalid file ID' });
   }
 
-  // Check balance
-  const currentUser = stmts.findUserById.get(user.id);
-  if (!currentUser) return res.status(401).json({ error: 'User not found' });
-
-  if (currentUser.transfer_balance < fileSize) {
+  // Atomic deduct — check and subtract in one step
+  const result = stmts.deductBalance.run(fileSize, user.id, fileSize);
+  if (result.changes === 0) {
+    const currentUser = stmts.findUserById.get(user.id);
     return res.status(403).json({
       error: 'insufficient_balance',
-      balance: currentUser.transfer_balance,
+      balance: currentUser ? currentUser.transfer_balance : 0,
       required: fileSize,
     });
   }
 
-  // Deduct and record pending transfer
-  const newBalance = currentUser.transfer_balance - fileSize;
-  stmts.updateBalance.run(newBalance, user.id);
   try {
     stmts.createPendingTransfer.run(fileId, user.id, fileSize);
   } catch (e) {
     // Duplicate fileId — ignore, deduction still stands
   }
 
-  res.json({ balance: newBalance });
+  const updatedUser = stmts.findUserById.get(user.id);
+  res.json({ balance: updatedUser.transfer_balance });
 });
 
 // Refund a failed/cancelled transfer — only refunds what was actually deducted
@@ -754,16 +752,17 @@ app.post('/api/upload', rateLimit('upload', 20, 60 * 1000), async (req, res) => 
     return res.status(413).json({ error: 'file_too_large', maxSize: MAX_FILE_SIZE });
   }
 
-  // Check balance using declared size
-  const currentUser = stmts.findUserById.get(user.id);
-  if (!currentUser) return res.status(401).json({ error: 'User not found' });
-
-  if (declaredSize && currentUser.transfer_balance < declaredSize) {
-    return res.status(403).json({
-      error: 'insufficient_balance',
-      balance: currentUser.transfer_balance,
-      required: declaredSize,
-    });
+  // Pre-check balance using declared size (soft check — real enforcement after upload)
+  if (declaredSize) {
+    const currentUser = stmts.findUserById.get(user.id);
+    if (!currentUser) return res.status(401).json({ error: 'User not found' });
+    if (currentUser.transfer_balance < declaredSize) {
+      return res.status(403).json({
+        error: 'insufficient_balance',
+        balance: currentUser.transfer_balance,
+        required: declaredSize,
+      });
+    }
   }
 
   const token = crypto.randomBytes(16).toString('hex');
@@ -804,14 +803,17 @@ app.post('/api/upload', rateLimit('upload', 20, 60 * 1000), async (req, res) => 
 
     const fileSize = bytesReceived;
 
-    // Deduct actual bytes from balance
-    if (currentUser.transfer_balance < fileSize) {
-      // Edge case: balance dipped between check and completion
-      // Still save the file but set balance to 0
-      stmts.updateBalance.run(0, user.id);
-    } else {
-      const newBalance = currentUser.transfer_balance - fileSize;
-      stmts.updateBalance.run(newBalance, user.id);
+    // Atomic deduction based on actual bytes received
+    const deductResult = stmts.deductBalance.run(fileSize, user.id, fileSize);
+    if (deductResult.changes === 0) {
+      // Insufficient balance — delete from R2 and reject
+      try { await s3.send(new DeleteObjectCommand({ Bucket: R2_BUCKET_NAME, Key: r2Key })); } catch {}
+      const currentUser = stmts.findUserById.get(user.id);
+      return res.status(403).json({
+        error: 'insufficient_balance',
+        balance: currentUser ? currentUser.transfer_balance : 0,
+        required: fileSize,
+      });
     }
 
     // Record in database
