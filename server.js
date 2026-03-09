@@ -301,6 +301,37 @@ function getUserFromCookie(req) {
 // ═══════════════════════════════════════════
 // GOOGLE OAUTH ROUTES
 // ═══════════════════════════════════════════
+// ═══════════════════════════════════════════
+// RATE LIMITING
+// ═══════════════════════════════════════════
+const rateLimitBuckets = {};
+function rateLimit(name, maxRequests, windowMs) {
+  if (!rateLimitBuckets[name]) rateLimitBuckets[name] = new Map();
+  const bucket = rateLimitBuckets[name];
+  return (req, res, next) => {
+    const ip = req.ip;
+    const now = Date.now();
+    let entry = bucket.get(ip);
+    if (!entry || now > entry.resetAt) {
+      entry = { count: 0, resetAt: now + windowMs };
+      bucket.set(ip, entry);
+    }
+    entry.count++;
+    if (entry.count > maxRequests) {
+      return res.status(429).json({ error: 'Too many requests' });
+    }
+    next();
+  };
+}
+setInterval(() => {
+  const now = Date.now();
+  for (const name in rateLimitBuckets) {
+    for (const [ip, entry] of rateLimitBuckets[name]) {
+      if (now > entry.resetAt) rateLimitBuckets[name].delete(ip);
+    }
+  }
+}, 5 * 60 * 1000);
+
 app.use(express.json());
 
 app.get('/auth/google', (req, res) => {
@@ -997,40 +1028,6 @@ Download All
 }
 
 app.use(express.static(path.join(__dirname, 'public')));
-
-// ═══════════════════════════════════════════
-// RATE LIMITING
-// ═══════════════════════════════════════════
-const rateLimitBuckets = {};
-function rateLimit(name, maxRequests, windowMs) {
-  if (!rateLimitBuckets[name]) rateLimitBuckets[name] = new Map();
-  const bucket = rateLimitBuckets[name];
-  return (req, res, next) => {
-    const ip = req.ip;
-    const now = Date.now();
-    let entry = bucket.get(ip);
-    if (!entry || now > entry.resetAt) {
-      entry = { count: 0, resetAt: now + windowMs };
-      bucket.set(ip, entry);
-    }
-    entry.count++;
-    if (entry.count > maxRequests) {
-      return res.status(429).json({ error: 'Too many requests' });
-    }
-    next();
-  };
-}
-// Clean all rate limit buckets periodically
-setInterval(() => {
-  const now = Date.now();
-  for (const name in rateLimitBuckets) {
-    for (const [ip, entry] of rateLimitBuckets[name]) {
-      if (now > entry.resetAt) rateLimitBuckets[name].delete(ip);
-    }
-  }
-}, 5 * 60 * 1000);
-
-// ═══════════════════════════════════════════
 // TURN SESSION TOKENS
 // ═══════════════════════════════════════════
 const turnSessionTokens = new Map();
