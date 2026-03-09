@@ -261,7 +261,7 @@ function getBaseUrl(req) {
 }
 
 function setSessionCookie(res, token) {
-  res.setHeader('Set-Cookie', cookie.serialize(SESSION_COOKIE, token, {
+  res.append('Set-Cookie', cookie.serialize(SESSION_COOKIE, token, {
     httpOnly: true,
     secure: true,
     sameSite: 'lax',
@@ -271,7 +271,7 @@ function setSessionCookie(res, token) {
 }
 
 function clearSessionCookie(res) {
-  res.setHeader('Set-Cookie', cookie.serialize(SESSION_COOKIE, '', {
+  res.append('Set-Cookie', cookie.serialize(SESSION_COOKIE, '', {
     httpOnly: true,
     secure: true,
     sameSite: 'lax',
@@ -340,6 +340,15 @@ app.get('/auth/google', (req, res) => {
     return res.status(500).send('Google OAuth not configured');
   }
   const redirectUri = `${getBaseUrl(req)}/auth/callback`;
+  const state = crypto.randomBytes(16).toString('hex');
+  // Store state in cookie for verification on callback
+  res.append('Set-Cookie', cookie.serialize('oauth_state', state, {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 600, // 10 minutes
+  }));
   const params = new URLSearchParams({
     client_id: GOOGLE_CLIENT_ID,
     redirect_uri: redirectUri,
@@ -347,13 +356,29 @@ app.get('/auth/google', (req, res) => {
     scope: 'openid email profile',
     access_type: 'online',
     prompt: 'select_account',
+    state: state,
   });
   res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`);
 });
 
 app.get('/auth/callback', rateLimit('auth', 10, 60 * 1000), async (req, res) => {
-  const { code } = req.query;
+  const { code, state } = req.query;
   if (!code) return res.redirect('/?error=no_code');
+
+  // Verify OAuth state to prevent CSRF
+  const cookies = cookie.parse(req.headers.cookie || '');
+  const storedState = cookies.oauth_state;
+  if (!state || !storedState || state !== storedState) {
+    return res.redirect('/?error=invalid_state');
+  }
+  // Clear the state cookie
+  res.append('Set-Cookie', cookie.serialize('oauth_state', '', {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 0,
+  }));
 
   try {
     const redirectUri = `${getBaseUrl(req)}/auth/callback`;
@@ -673,7 +698,7 @@ function getProfilePage(user, pinnedFiles) {
 
   const linksHtml = links.length > 0 ? `
     <div style="display:flex;justify-content:center;gap:12px;margin-top:14px;">
-      ${links.map(l => `<a href="${l.url}" target="_blank" rel="noopener" style="width:40px;height:40px;border-radius:10px;background:#1a1a28;border:1px solid #2a2a3e;display:flex;align-items:center;justify-content:center;transition:border-color .2s;text-decoration:none;" onmouseover="this.style.borderColor='#6c5ce7'" onmouseout="this.style.borderColor='#2a2a3e'">${getLinkIcon(l.url)}</a>`).join('')}
+      ${links.map(l => `<a href="${escapeHtml(l.url)}" target="_blank" rel="noopener" style="width:40px;height:40px;border-radius:10px;background:#1a1a28;border:1px solid #2a2a3e;display:flex;align-items:center;justify-content:center;transition:border-color .2s;text-decoration:none;" onmouseover="this.style.borderColor='#6c5ce7'" onmouseout="this.style.borderColor='#2a2a3e'">${getLinkIcon(l.url)}</a>`).join('')}
     </div>
   ` : '';
 
@@ -714,9 +739,9 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 </style></head><body>
 <div class="card">
   <div class="profile">
-    ${user.picture ? `<img class="avatar" src="${user.picture}" alt="">` : '<div class="avatar"></div>'}
-    <div class="name">${user.name || user.username}</div>
-    <div class="handle">@${user.username}</div>
+    ${user.picture ? `<img class="avatar" src="${escapeHtml(user.picture)}" alt="">` : '<div class="avatar"></div>'}
+    <div class="name">${escapeHtml(user.name || user.username)}</div>
+    <div class="handle">@${escapeHtml(user.username)}</div>
     ${bioHtml}
     ${linksHtml}
   </div>
@@ -1353,6 +1378,11 @@ wss.on('connection', (ws, req) => {
         const room = rooms.get(msg.roomId);
         if (!room) {
           ws.send(JSON.stringify({ type: 'error', message: 'Room not found' }));
+          return;
+        }
+        // Verify this is the original host
+        if (room.hostUserId !== ws.user.id) {
+          ws.send(JSON.stringify({ type: 'error', message: 'Not authorized to rejoin as host' }));
           return;
         }
         if (room.hostGraceTimer) {
