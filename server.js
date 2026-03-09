@@ -8,6 +8,7 @@ const Database = require('better-sqlite3');
 const cookie = require('cookie');
 const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const { Upload } = require('@aws-sdk/lib-storage');
+const { PassThrough } = require('stream');
 
 const app = express();
 const server = http.createServer(app);
@@ -22,6 +23,7 @@ const R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY;
 const R2_BUCKET_NAME = process.env.R2_BUCKET_NAME || 'stickr-files';
 const ASYNC_FILE_EXPIRY = 24 * 60 * 60 * 1000; // 24 hours
 const ASYNC_THRESHOLD = 25 * 1024 * 1024; // 25MB
+const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB per file
 
 let s3 = null;
 if (R2_ACCOUNT_ID && R2_ACCESS_KEY_ID && R2_SECRET_ACCESS_KEY) {
@@ -299,6 +301,8 @@ function getUserFromCookie(req) {
 // ═══════════════════════════════════════════
 // GOOGLE OAUTH ROUTES
 // ═══════════════════════════════════════════
+app.use(express.json());
+
 app.get('/auth/google', (req, res) => {
   if (!GOOGLE_CLIENT_ID) {
     return res.status(500).send('Google OAuth not configured');
@@ -315,7 +319,7 @@ app.get('/auth/google', (req, res) => {
   res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`);
 });
 
-app.get('/auth/callback', async (req, res) => {
+app.get('/auth/callback', rateLimit('auth', 10, 60 * 1000), async (req, res) => {
   const { code } = req.query;
   if (!code) return res.redirect('/?error=no_code');
 
@@ -381,7 +385,6 @@ app.get('/auth/callback', async (req, res) => {
 app.get('/auth/me', (req, res) => {
   const user = getUserFromCookie(req);
   if (!user) return res.status(401).json({ error: 'Not authenticated' });
-  const receiveLink = stmts.findActiveReceiveLink.get(user.id);
   res.json({
     id: user.id,
     name: user.name,
@@ -390,7 +393,6 @@ app.get('/auth/me', (req, res) => {
     username: user.username,
     profile_data: user.profile_data,
     transfer_balance: user.transfer_balance,
-    receiveLink: receiveLink ? { passkey: receiveLink.passkey, expiresAt: receiveLink.expires_at } : null,
   });
 });
 
@@ -405,7 +407,6 @@ app.get('/auth/logout', (req, res) => {
 // ═══════════════════════════════════════════
 // TRANSFER TRACKING API
 // ═══════════════════════════════════════════
-app.use(express.json());
 
 // Start a transfer — deduct bytes upfront
 app.post('/api/transfer/start', (req, res) => {
@@ -479,154 +480,6 @@ app.post('/api/transfer/refund', (req, res) => {
 // ═══════════════════════════════════════════
 // ASYNC FILE TRANSFER (R2)
 // ═══════════════════════════════════════════
-
-// ═══════════════════════════════════════════
-// RECEIVE LINKS
-// ═══════════════════════════════════════════
-
-// Generate a new receive link (passkey)
-app.post('/api/receive-link/create', (req, res) => {
-  const user = getUserFromCookie(req);
-  if (!user) return res.status(401).json({ error: 'Not authenticated' });
-  if (!user.username) return res.status(400).json({ error: 'No username set' });
-
-  // Deactivate old receive links
-  stmts.deactivateUserReceiveLinks.run(user.id);
-
-  const id = crypto.randomBytes(8).toString('hex');
-  const passkey = String(Math.floor(1000 + Math.random() * 9000)); // 4-digit
-  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(); // 7 days
-
-  stmts.createReceiveLink.run(id, user.id, passkey, expiresAt);
-
-  const host = req.headers.host;
-  const protocol = req.headers['x-forwarded-proto'] || 'https';
-
-  res.json({
-    passkey,
-    url: `${protocol}://${host}/${user.username}`,
-    expiresAt,
-  });
-});
-
-// Verify passkey for a username
-app.post('/api/receive-link/verify', (req, res) => {
-  const { username, passkey } = req.body;
-  if (!username || !passkey) return res.status(400).json({ error: 'Missing username or passkey' });
-
-  const link = stmts.findReceiveLinkByUserAndPasskey.get(username, passkey);
-  if (!link) return res.status(403).json({ error: 'Invalid passkey' });
-
-  if (new Date(link.expires_at) < new Date()) {
-    return res.status(410).json({ error: 'Passkey expired' });
-  }
-
-  res.json({ valid: true, linkId: link.id });
-});
-
-// Upload to someone's receive link (public, no auth needed)
-app.post('/api/receive/upload', async (req, res) => {
-  if (!s3) return res.status(503).json({ error: 'Async transfers not available' });
-
-  const linkId = req.headers['x-receive-link-id'];
-  const filename = decodeURIComponent(req.headers['x-filename'] || '');
-  const mimeType = req.headers['x-mime-type'] || 'application/octet-stream';
-  const declaredSize = parseInt(req.headers['content-length'], 10);
-
-  if (!linkId || !filename) return res.status(400).json({ error: 'Missing link ID or filename' });
-
-  const link = stmts.findReceiveLinkById.get(linkId);
-  if (!link || !link.active) return res.status(403).json({ error: 'Invalid receive link' });
-  if (new Date(link.expires_at) < new Date()) return res.status(410).json({ error: 'Link expired' });
-
-  // Check owner's balance
-  const owner = stmts.findUserById.get(link.user_id);
-  if (!owner) return res.status(400).json({ error: 'User not found' });
-
-  if (declaredSize && owner.transfer_balance < declaredSize) {
-    return res.status(403).json({ error: 'Recipient has insufficient balance' });
-  }
-
-  const MAX_FILE_SIZE = 500 * 1024 * 1024;
-  if (declaredSize > MAX_FILE_SIZE) {
-    return res.status(413).json({ error: 'file_too_large' });
-  }
-
-  const token = crypto.randomBytes(16).toString('hex');
-  const r2Key = `received/${link.user_id}/${token}/${filename}`;
-  const expiresAt = new Date(Date.now() + ASYNC_FILE_EXPIRY).toISOString();
-
-  let bytesReceived = 0;
-  const { PassThrough } = require('stream');
-  const passthrough = new PassThrough();
-
-  req.on('data', (chunk) => {
-    bytesReceived += chunk.length;
-    if (bytesReceived > MAX_FILE_SIZE) {
-      passthrough.destroy(new Error('File too large'));
-      req.destroy();
-      return;
-    }
-    passthrough.write(chunk);
-  });
-  req.on('end', () => passthrough.end());
-  req.on('error', (err) => passthrough.destroy(err));
-
-  try {
-    const upload = new Upload({
-      client: s3,
-      params: { Bucket: R2_BUCKET_NAME, Key: r2Key, Body: passthrough, ContentType: mimeType },
-      queueSize: 4,
-      partSize: 5 * 1024 * 1024,
-    });
-
-    await upload.done();
-
-    const fileSize = bytesReceived;
-
-    // Deduct from owner's balance
-    const newBalance = Math.max(0, owner.transfer_balance - fileSize);
-    stmts.updateBalance.run(newBalance, owner.id);
-
-    // Record as received file
-    stmts.createReceivedFile.run(token, owner.id, filename, fileSize, mimeType, r2Key, expiresAt, link.id);
-
-    res.json({ success: true });
-  } catch (err) {
-    console.error('Receive upload error:', err);
-    res.status(500).json({ error: 'Upload failed' });
-  }
-});
-
-// ═══════════════════════════════════════════
-// INBOX
-// ═══════════════════════════════════════════
-
-app.get('/api/inbox', (req, res) => {
-  const user = getUserFromCookie(req);
-  if (!user) return res.status(401).json({ error: 'Not authenticated' });
-
-  const files = stmts.findReceivedFiles.all(user.id);
-  // Filter out expired
-  const active = files.filter(f => new Date(f.expires_at) > new Date());
-  res.json(active);
-});
-
-app.delete('/api/inbox/:token', async (req, res) => {
-  const user = getUserFromCookie(req);
-  if (!user) return res.status(401).json({ error: 'Not authenticated' });
-
-  const file = stmts.findAsyncFile.get(req.params.token);
-  if (!file || file.user_id !== user.id) return res.status(404).json({ error: 'File not found' });
-
-  // Delete from R2
-  if (s3) {
-    try { await s3.send(new DeleteObjectCommand({ Bucket: R2_BUCKET_NAME, Key: file.r2_key })); } catch {}
-  }
-  stmts.deleteAsyncFile.run(req.params.token);
-  res.json({ success: true });
-});
-
 // ═══════════════════════════════════════════
 // PINNED FILES
 // ═══════════════════════════════════════════
@@ -637,7 +490,7 @@ app.get('/api/pins', (req, res) => {
   res.json(stmts.findPinnedFiles.all(user.id));
 });
 
-app.post('/api/pin', async (req, res) => {
+app.post('/api/pin', rateLimit('pin', 10, 60 * 1000), async (req, res) => {
   if (!s3) return res.status(503).json({ error: 'Storage not available' });
 
   const user = getUserFromCookie(req);
@@ -662,7 +515,6 @@ app.post('/api/pin', async (req, res) => {
   const r2Key = `pinned/${user.id}/${id}/${filename}`;
 
   let bytesReceived = 0;
-  const { PassThrough } = require('stream');
   const passthrough = new PassThrough();
 
   req.on('data', (chunk) => {
@@ -719,7 +571,7 @@ app.post('/api/profile', (req, res) => {
     bio: typeof bio === 'string' ? bio.slice(0, 160) : '',
     links: Array.isArray(links) ? links.slice(0, 3).map(l => ({
       url: typeof l.url === 'string' ? l.url.slice(0, 500) : '',
-    })).filter(l => l.url) : [],
+    })).filter(l => l.url && (l.url.startsWith('https://') || l.url.startsWith('http://'))) : [],
   };
 
   stmts.updateProfileData.run(JSON.stringify(profileData), user.id);
@@ -791,7 +643,7 @@ function getProfilePage(user, pinnedFiles) {
       ${pinnedFiles.map(f => `
         <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;background:#1a1a28;border:1px solid #2a2a3e;border-radius:10px;margin-bottom:8px;">
           <div style="min-width:0;">
-            <div style="font-size:13px;font-weight:600;color:#e8e8f0;">${f.display_name || f.filename}</div>
+            <div style="font-size:13px;font-weight:600;color:#e8e8f0;">${escapeHtml(f.display_name || f.filename)}</div>
             <div style="font-size:11px;color:#555570;margin-top:2px;">${formatBytes(f.file_size)}</div>
           </div>
           <a href="/api/pin/${f.id}/download" style="flex-shrink:0;margin-left:12px;width:34px;height:34px;border-radius:8px;background:#6c5ce715;display:flex;align-items:center;justify-content:center;color:#a29bfe;text-decoration:none;">
@@ -803,7 +655,7 @@ function getProfilePage(user, pinnedFiles) {
   ` : '';
 
   return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>${user.name || user.username} — Stickr</title>
+<title>${escapeHtml(user.name || user.username)} — Stickr</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:-apple-system,system-ui,sans-serif;background:#0a0a0f;color:#e8e8f0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
@@ -852,9 +704,8 @@ app.post('/api/batch/create', (req, res) => {
 });
 
 // Upload a file to R2 (authenticated, streams to R2)
-const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB per file
 
-app.post('/api/upload', async (req, res) => {
+app.post('/api/upload', rateLimit('upload', 20, 60 * 1000), async (req, res) => {
   if (!s3) return res.status(503).json({ error: 'Async transfers not available' });
 
   const user = getUserFromCookie(req);
@@ -890,7 +741,6 @@ app.post('/api/upload', async (req, res) => {
 
   // Track bytes as they stream through
   let bytesReceived = 0;
-  const { PassThrough } = require('stream');
   const passthrough = new PassThrough();
 
   req.on('data', (chunk) => {
@@ -1053,7 +903,7 @@ p{color:#8888a8;font-size:14px;line-height:1.6;margin-bottom:24px}
   }
 
   return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Stickr — Download ${file.filename}</title>
+<title>Stickr — Download ${escapeHtml(file.filename)}</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:-apple-system,system-ui,sans-serif;background:#0a0a0f;color:#e8e8f0;min-height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;padding:24px}
@@ -1074,7 +924,7 @@ h1{font-size:20px;margin-bottom:4px;word-break:break-all}
 <div class="card">
 <div class="logo">Stickr</div>
 <div class="file-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#a29bfe" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><polyline points="9 15 12 18 15 15"/></svg></div>
-<h1>${file.filename}</h1>
+<h1>${escapeHtml(file.filename)}</h1>
 <p class="meta">${sizeFormatted}</p>
 <p class="expiry">Expires in ${expiresIn}</p>
 <a class="btn" href="/api/download/${file.token}">
@@ -1103,7 +953,7 @@ function getBatchDownloadPage(batch, files) {
   const fileListHtml = files.map(f => `
     <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;background:var(--bg);border:1px solid #2a2a3e;border-radius:10px;">
       <div style="min-width:0;flex:1;">
-        <div style="font-size:14px;font-weight:600;color:#e8e8f0;word-break:break-all;">${f.filename}</div>
+        <div style="font-size:14px;font-weight:600;color:#e8e8f0;word-break:break-all;">${escapeHtml(f.filename)}</div>
         <div style="font-size:12px;color:#8888a8;margin-top:2px;">${formatBytes(f.file_size)}</div>
       </div>
       <a href="/api/download/${f.token}" style="flex-shrink:0;margin-left:16px;padding:8px 16px;background:linear-gradient(135deg,#6c5ce7,#a29bfe);color:white;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600;">Download</a>
@@ -1147,6 +997,38 @@ Download All
 }
 
 app.use(express.static(path.join(__dirname, 'public')));
+
+// ═══════════════════════════════════════════
+// RATE LIMITING
+// ═══════════════════════════════════════════
+const rateLimitBuckets = {};
+function rateLimit(name, maxRequests, windowMs) {
+  if (!rateLimitBuckets[name]) rateLimitBuckets[name] = new Map();
+  const bucket = rateLimitBuckets[name];
+  return (req, res, next) => {
+    const ip = req.ip;
+    const now = Date.now();
+    let entry = bucket.get(ip);
+    if (!entry || now > entry.resetAt) {
+      entry = { count: 0, resetAt: now + windowMs };
+      bucket.set(ip, entry);
+    }
+    entry.count++;
+    if (entry.count > maxRequests) {
+      return res.status(429).json({ error: 'Too many requests' });
+    }
+    next();
+  };
+}
+// Clean all rate limit buckets periodically
+setInterval(() => {
+  const now = Date.now();
+  for (const name in rateLimitBuckets) {
+    for (const [ip, entry] of rateLimitBuckets[name]) {
+      if (now > entry.resetAt) rateLimitBuckets[name].delete(ip);
+    }
+  }
+}, 5 * 60 * 1000);
 
 // ═══════════════════════════════════════════
 // TURN SESSION TOKENS
@@ -1305,18 +1187,14 @@ function formatBytes(bytes) {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
 }
 
+function escapeHtml(str) {
+  if (!str) return '';
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 // ═══════════════════════════════════════════
 // HEALTH CHECK + SELF-PING
 // ═══════════════════════════════════════════
-// DEBUG: check raw user data — REMOVE LATER
-app.get('/api/debug/user', (req, res) => {
-  const user = getUserFromCookie(req);
-  if (!user) return res.status(401).json({ error: 'Not authenticated' });
-  const rawUser = stmts.findUserById.get(user.id);
-  const columns = db.prepare('PRAGMA table_info(users)').all().map(c => c.name);
-  res.json({ cookieUser: user, rawUser, columns });
-});
-
 app.get('/health', (req, res) => {
   res.status(200).json({
     status: 'ok',
