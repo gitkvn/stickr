@@ -4259,6 +4259,7 @@ function toggleMyCard() {
     // Close edit mode
     form.style.display = 'none';
     qr.style.display = 'none';
+    btn.style.display = '';
     btn.textContent = currentUser && currentUser.profile_data && currentUser.profile_data.card ? 'Show QR' : 'Edit';
     return;
   }
@@ -4266,6 +4267,7 @@ function toggleMyCard() {
   if (qr.style.display !== 'none') {
     // Close QR
     qr.style.display = 'none';
+    btn.style.display = '';
     btn.textContent = 'Show QR';
     return;
   }
@@ -4273,7 +4275,7 @@ function toggleMyCard() {
   // Has card? Show QR. No card? Show edit form.
   if (currentUser && currentUser.profile_data && currentUser.profile_data.card) {
     generateCardQR(currentUser.profile_data.card);
-    btn.textContent = 'Edit';
+    btn.style.display = 'none';
     // Long press Edit to re-edit
   } else {
     form.style.display = 'block';
@@ -4330,9 +4332,11 @@ async function saveMyCard() {
 function editMyCard() {
   const form = document.getElementById('mycard-form');
   const qr = document.getElementById('mycard-qr');
+  const btn = document.getElementById('mycard-btn');
   qr.style.display = 'none';
   form.style.display = 'block';
-  document.getElementById('mycard-btn').textContent = 'Cancel';
+  btn.style.display = '';
+  btn.textContent = 'Cancel';
   if (currentUser && currentUser.profile_data && currentUser.profile_data.card) {
     const c = currentUser.profile_data.card;
     document.getElementById('card-name').value = c.name || '';
