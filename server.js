@@ -735,9 +735,10 @@ app.get('/api/pin/:id/download', async (req, res) => {
 
   try {
     const obj = await s3.send(new GetObjectCommand({ Bucket: R2_BUCKET_NAME, Key: pin.r2_key }));
+    const safePinName = pin.filename.replace(/[^\x20-\x7E]/g, '_').replace(/"/g, "'");
     res.set({
       'Content-Type': pin.mime_type || 'application/octet-stream',
-      'Content-Disposition': `attachment; filename="${encodeURIComponent(pin.filename)}"`,
+      'Content-Disposition': `attachment; filename="${safePinName}"; filename*=UTF-8''${encodeURIComponent(pin.filename)}`,
       'Content-Length': pin.file_size,
     });
     const stream = obj.Body;
@@ -1005,9 +1006,10 @@ app.get('/api/download/:token', async (req, res) => {
 
     stmts.incrementDownloadCount.run(req.params.token);
 
+    const safeName = file.filename.replace(/[^\x20-\x7E]/g, '_').replace(/"/g, "'");
     res.set({
       'Content-Type': file.mime_type || 'application/octet-stream',
-      'Content-Disposition': `attachment; filename="${encodeURIComponent(file.filename)}"`,
+      'Content-Disposition': `attachment; filename="${safeName}"; filename*=UTF-8''${encodeURIComponent(file.filename)}`,
       'Content-Length': file.file_size,
     });
 
