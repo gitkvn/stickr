@@ -630,6 +630,65 @@ header {
 }
 .link-file-actions span:hover { text-decoration: underline; }
 
+/* QR Code Modal */
+.qr-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.7);
+  backdrop-filter: blur(8px);
+  align-items: center;
+  justify-content: center;
+  z-index: 300;
+}
+.qr-overlay.active { display: flex; }
+.qr-modal {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 32px;
+  text-align: center;
+  max-width: 320px;
+  width: 90%;
+  animation: cardIn 0.3s ease both;
+}
+.qr-modal h3 {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 16px;
+  color: var(--text-primary);
+}
+.qr-modal #qr-canvas {
+  display: inline-block;
+  padding: 16px;
+  background: white;
+  border-radius: 12px;
+  margin-bottom: 16px;
+}
+.qr-modal #qr-canvas img {
+  display: block;
+}
+.qr-modal .qr-url {
+  font-size: 11px;
+  color: var(--text-muted);
+  word-break: break-all;
+  margin-bottom: 16px;
+  font-family: var(--font-mono);
+}
+.qr-close-btn {
+  width: 100%;
+  padding: 10px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 14px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.qr-close-btn:hover { color: var(--text-primary); border-color: var(--text-muted); }
+
 /* ─── Inbox View ─── */
 .inbox-view {
   padding: 40px 20px;
@@ -1814,6 +1873,7 @@ header {
 }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
 <body>
 
@@ -2072,6 +2132,16 @@ header {
 
 <!-- Toast -->
 <div class="toast" id="toast"></div>
+
+<!-- QR Code Modal -->
+<div class="qr-overlay" id="qr-overlay" onclick="if(event.target===this)closeQrModal()">
+  <div class="qr-modal">
+    <h3>Scan to download</h3>
+    <div id="qr-canvas"></div>
+    <div class="qr-url" id="qr-url"></div>
+    <button class="qr-close-btn" onclick="closeQrModal()">Close</button>
+  </div>
+</div>
 
 <script>
 // ═══════════════════════════════════════════
@@ -2929,6 +2999,25 @@ function shareAsyncLink(url, fileId) {
   }
 }
 
+function showQrCode(url) {
+  const container = document.getElementById('qr-canvas');
+  container.innerHTML = '';
+  document.getElementById('qr-url').textContent = url;
+  new QRCode(container, {
+    text: url,
+    width: 180,
+    height: 180,
+    colorDark: '#000000',
+    colorLight: '#ffffff',
+    correctLevel: QRCode.CorrectLevel.M,
+  });
+  document.getElementById('qr-overlay').classList.add('active');
+}
+
+function closeQrModal() {
+  document.getElementById('qr-overlay').classList.remove('active');
+}
+
 // ═══════════════════════════════════════════
 // GET A LINK FLOW
 // ═══════════════════════════════════════════
@@ -2999,6 +3088,7 @@ async function uploadLinkFiles(files) {
       <div class="link-file-actions">
         <span onclick="navigator.clipboard.writeText('${batchUrl}');this.textContent='Copied!';setTimeout(()=>this.textContent='Copy',2000);">Copy</span>
         <span onclick="shareAsyncLink('${batchUrl}','batch')">Share</span>
+        <span onclick="showQrCode('${batchUrl}')">QR</span>
       </div>
     `;
     list.appendChild(batchItem);
@@ -3078,6 +3168,7 @@ async function uploadLinkFile(file, batchToken) {
       actionsDiv.innerHTML = `
         <span onclick="navigator.clipboard.writeText('${result.url}');this.textContent='Copied!';setTimeout(()=>this.textContent='Copy',2000);">Copy</span>
         <span onclick="shareAsyncLink('${result.url}','${id}')">Share</span>
+        <span onclick="showQrCode('${result.url}')">QR</span>
       `;
       document.getElementById(id).appendChild(actionsDiv);
     }
@@ -3340,7 +3431,7 @@ function updateFileStatus(id, status, pct, url) {
     } else if (status === 'uploading') {
       el.textContent = '⬆ Uploading...';
     } else if (status === 'link-ready') {
-      el.innerHTML = '✓ <span class="download-link" onclick="event.stopPropagation();navigator.clipboard.writeText(\'' + url + '\');this.textContent=\'Copied!\';setTimeout(()=>this.textContent=\'Copy\',2000);">Copy</span> · <span class="download-link" onclick="event.stopPropagation();shareAsyncLink(\'' + url + '\',\'' + id + '\');">Share</span>';
+      el.innerHTML = '✓ <span class="download-link" onclick="event.stopPropagation();navigator.clipboard.writeText(\'' + url + '\');this.textContent=\'Copied!\';setTimeout(()=>this.textContent=\'Copy\',2000);">Copy</span> · <span class="download-link" onclick="event.stopPropagation();shareAsyncLink(\'' + url + '\',\'' + id + '\');">Share</span> · <span class="download-link" onclick="event.stopPropagation();showQrCode(\'' + url + '\');">QR</span>';
     } else if (status === 'interrupted') {
       el.textContent = pct !== undefined ? `✕ Failed at ${pct}%` : '✕ Failed';
     } else if (status === 'cancelled') {
