@@ -23,7 +23,7 @@ const R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY;
 const R2_BUCKET_NAME = process.env.R2_BUCKET_NAME || 'stickr-files';
 const ASYNC_FILE_EXPIRY = 24 * 60 * 60 * 1000; // 24 hours
 const ASYNC_THRESHOLD = 25 * 1024 * 1024; // 25MB
-const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB per file
+const MAX_FILE_SIZE = 250 * 1024 * 1024; // 250MB per file (free tier)
 
 let s3 = null;
 if (R2_ACCOUNT_ID && R2_ACCESS_KEY_ID && R2_SECRET_ACCESS_KEY) {
@@ -449,7 +449,6 @@ app.get('/auth/me', (req, res) => {
     picture: user.picture,
     username: user.username,
     profile_data: user.profile_data,
-    transfer_balance: user.transfer_balance,
   });
 });
 
@@ -459,73 +458,6 @@ app.get('/auth/logout', (req, res) => {
   if (token) stmts.deleteSession.run(token);
   clearSessionCookie(res);
   res.redirect('/');
-});
-
-// ═══════════════════════════════════════════
-// TRANSFER TRACKING API
-// ═══════════════════════════════════════════
-
-// Start a transfer — deduct bytes upfront
-app.post('/api/transfer/start', (req, res) => {
-  const user = getUserFromCookie(req);
-  if (!user) return res.status(401).json({ error: 'Not authenticated' });
-
-  const { fileSize, fileId } = req.body;
-  if (!fileSize || !fileId || typeof fileSize !== 'number' || fileSize <= 0) {
-    return res.status(400).json({ error: 'Invalid file size' });
-  }
-  if (typeof fileId !== 'string' || fileId.length > 100) {
-    return res.status(400).json({ error: 'Invalid file ID' });
-  }
-
-  // Atomic deduct — check and subtract in one step
-  const result = stmts.deductBalance.run(fileSize, user.id, fileSize);
-  if (result.changes === 0) {
-    const currentUser = stmts.findUserById.get(user.id);
-    return res.status(403).json({
-      error: 'insufficient_balance',
-      balance: currentUser ? currentUser.transfer_balance : 0,
-      required: fileSize,
-    });
-  }
-
-  try {
-    stmts.createPendingTransfer.run(fileId, user.id, fileSize);
-  } catch (e) {
-    // Duplicate fileId — ignore, deduction still stands
-  }
-
-  const updatedUser = stmts.findUserById.get(user.id);
-  res.json({ balance: updatedUser.transfer_balance });
-});
-
-// Refund a failed/cancelled transfer — only refunds what was actually deducted
-app.post('/api/transfer/refund', (req, res) => {
-  const user = getUserFromCookie(req);
-  if (!user) return res.status(401).json({ error: 'Not authenticated' });
-
-  const { fileSize, fileId } = req.body;
-  if (!fileSize || !fileId || typeof fileSize !== 'number' || fileSize <= 0) {
-    return res.status(400).json({ error: 'Invalid file size' });
-  }
-
-  // Only refund if there's a matching pending transfer that hasn't been refunded
-  const pending = stmts.findPendingTransfer.get(fileId, user.id);
-  if (!pending || pending.refunded) {
-    return res.status(400).json({ error: 'No refundable transfer found' });
-  }
-
-  // Refund at most the original deducted amount
-  const refundAmount = Math.min(fileSize, pending.file_size);
-
-  const currentUser = stmts.findUserById.get(user.id);
-  if (!currentUser) return res.status(401).json({ error: 'User not found' });
-
-  const newBalance = currentUser.transfer_balance + refundAmount;
-  stmts.updateBalance.run(newBalance, user.id);
-  stmts.markRefunded.run(fileId, user.id);
-
-  res.json({ balance: newBalance });
 });
 
 // ═══════════════════════════════════════════
@@ -788,19 +720,6 @@ app.post('/api/upload', rateLimit('upload', 20, 60 * 1000), async (req, res) => 
     return res.status(413).json({ error: 'file_too_large', maxSize: MAX_FILE_SIZE });
   }
 
-  // Pre-check balance using declared size (soft check — real enforcement after upload)
-  if (declaredSize) {
-    const currentUser = stmts.findUserById.get(user.id);
-    if (!currentUser) return res.status(401).json({ error: 'User not found' });
-    if (currentUser.transfer_balance < declaredSize) {
-      return res.status(403).json({
-        error: 'insufficient_balance',
-        balance: currentUser.transfer_balance,
-        required: declaredSize,
-      });
-    }
-  }
-
   const token = crypto.randomBytes(16).toString('hex');
   const r2Key = `${user.id}/${token}/${sanitizeFilename(filename)}`;
   const expiresAt = new Date(Date.now() + ASYNC_FILE_EXPIRY).toISOString();
@@ -839,24 +758,11 @@ app.post('/api/upload', rateLimit('upload', 20, 60 * 1000), async (req, res) => 
 
     const fileSize = bytesReceived;
 
-    // Atomic deduction based on actual bytes received
-    const deductResult = stmts.deductBalance.run(fileSize, user.id, fileSize);
-    if (deductResult.changes === 0) {
-      // Insufficient balance — delete from R2 and reject
-      try { await s3.send(new DeleteObjectCommand({ Bucket: R2_BUCKET_NAME, Key: r2Key })); } catch {}
-      const currentUser = stmts.findUserById.get(user.id);
-      return res.status(403).json({
-        error: 'insufficient_balance',
-        balance: currentUser ? currentUser.transfer_balance : 0,
-        required: fileSize,
-      });
-    }
-
     // Record in database
     const batchToken = req.headers['x-batch-token'] || null;
     stmts.createAsyncFile.run(token, user.id, filename, fileSize, mimeType, r2Key, expiresAt, batchToken);
 
-    // Track as pending transfer for stats
+    // Track transfer for stats
     const fileId = 'async-' + token;
     try { stmts.createPendingTransfer.run(fileId, user.id, fileSize); } catch {}
 
@@ -867,7 +773,6 @@ app.post('/api/upload', rateLimit('upload', 20, 60 * 1000), async (req, res) => 
     res.json({
       token,
       url: downloadUrl,
-      balance: stmts.findUserById.get(user.id).transfer_balance,
       expiresAt,
     });
   } catch (err) {
