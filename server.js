@@ -12,7 +12,7 @@ const { PassThrough } = require('stream');
 
 const app = express();
 const server = http.createServer(app);
-const wss = new WebSocket.Server({ server });
+const wss = new WebSocket.Server({ server, maxPayload: 1024 * 1024 }); // 1MB max message
 
 // ═══════════════════════════════════════════
 // R2 OBJECT STORAGE
@@ -541,7 +541,7 @@ app.post('/api/pin', rateLimit('pin', 10, 60 * 1000), async (req, res) => {
   }
 
   const id = crypto.randomBytes(8).toString('hex');
-  const r2Key = `pinned/${user.id}/${id}/${filename}`;
+  const r2Key = `pinned/${user.id}/${id}/${sanitizeFilename(filename)}`;
 
   let bytesReceived = 0;
   const passthrough = new PassThrough();
@@ -718,7 +718,7 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 </body></html>`;
 }
 // Create a batch for grouping multiple files
-app.post('/api/batch/create', (req, res) => {
+app.post('/api/batch/create', rateLimit('batch', 20, 60 * 1000), (req, res) => {
   const user = getUserFromCookie(req);
   if (!user) return res.status(401).json({ error: 'Not authenticated' });
 
@@ -766,7 +766,7 @@ app.post('/api/upload', rateLimit('upload', 20, 60 * 1000), async (req, res) => 
   }
 
   const token = crypto.randomBytes(16).toString('hex');
-  const r2Key = `${user.id}/${token}/${filename}`;
+  const r2Key = `${user.id}/${token}/${sanitizeFilename(filename)}`;
   const expiresAt = new Date(Date.now() + ASYNC_FILE_EXPIRY).toISOString();
 
   // Track bytes as they stream through
@@ -1191,6 +1191,11 @@ function escapeHtml(str) {
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
+function sanitizeFilename(name) {
+  if (!name) return 'unnamed';
+  return name.replace(/\.\./g, '').replace(/[\/\\]/g, '_').replace(/[\x00-\x1f]/g, '').slice(0, 255) || 'unnamed';
+}
+
 // ═══════════════════════════════════════════
 // HEALTH CHECK + SELF-PING
 // ═══════════════════════════════════════════
@@ -1283,6 +1288,20 @@ wss.on('connection', (ws, req) => {
       case 'create-room': {
         if (!ws.user) {
           ws.send(JSON.stringify({ type: 'error', message: 'auth-required' }));
+          return;
+        }
+        // Cap total rooms to prevent memory abuse
+        if (rooms.size >= 1000) {
+          ws.send(JSON.stringify({ type: 'error', message: 'Server is busy, try again later' }));
+          return;
+        }
+        // Cap rooms per user to 3
+        let userRoomCount = 0;
+        for (const [, room] of rooms) {
+          if (room.hostUserId === ws.user.id) userRoomCount++;
+        }
+        if (userRoomCount >= 3) {
+          ws.send(JSON.stringify({ type: 'error', message: 'Too many active rooms' }));
           return;
         }
         cleanupExistingRoom(ws);
@@ -1405,4 +1424,13 @@ process.on('SIGTERM', () => {
   console.log('SIGTERM received, shutting down gracefully');
   server.close(() => process.exit(0));
   setTimeout(() => process.exit(0), 5000);
+});
+
+process.on('unhandledRejection', (err) => {
+  console.error('Unhandled rejection:', err);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught exception:', err);
+  process.exit(1);
 });
