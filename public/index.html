@@ -756,6 +756,29 @@ header {
 .inbox-action-btn.del { background: #e0555508; color: #e05555; opacity: 0.4; }
 .inbox-action-btn.del:hover { opacity: 1; background: #e0555515; }
 
+.signed-in-hero {
+  text-align: center;
+  max-width: 700px;
+  margin-bottom: 8px;
+}
+.signed-in-hero h1 {
+  font-family: var(--font-display);
+  font-size: clamp(32px, 5vw, 48px);
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -1px;
+  margin-bottom: 8px;
+}
+.signed-in-hero h1 span {
+  background: var(--gradient-1);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.signed-in-hero .landing-sub {
+  font-size: 16px;
+  margin-bottom: 0;
+}
+
 .landing-hero {
   text-align: center;
   max-width: 700px;
@@ -2275,7 +2298,14 @@ header {
 
   <!-- ═══ HOME VIEW ═══ -->
   <div id="home-view" class="view home-view active">
-    <div class="landing-hero">
+    <!-- Signed-in greeting (hidden by default) -->
+    <div class="signed-in-hero" id="signed-in-hero" style="display:none;">
+      <h1>Hi, <span id="greeting-name"></span></h1>
+      <p class="landing-sub">What would you like to do?</p>
+    </div>
+
+    <!-- Landing hero (shown to visitors) -->
+    <div class="landing-hero" id="landing-hero">
       <div class="landing-badge">
         <span class="landing-dot"></span>
         P2P encrypted · free to start
@@ -2307,6 +2337,8 @@ header {
       </button>
     </div>
 
+    <!-- Marketing content (hidden when signed in) -->
+    <div id="landing-content">
     <!-- Demo Card -->
     <div class="landing-demo">
       <div class="demo-card">
@@ -2433,6 +2465,7 @@ header {
       </div>
       <p class="footer-copy">© 2026 Stickr. Built in India.</p>
     </footer>
+    </div><!-- end landing-content -->
   </div>
 
   <!-- ═══ INBOX VIEW ═══ -->
@@ -4938,6 +4971,11 @@ async function checkAuth() {
       document.getElementById('user-menu').style.display = 'flex';
       document.getElementById('btn-sign-in').style.display = 'none';
       document.getElementById('user-name').textContent = currentUser.name || currentUser.email;
+      // Switch to signed-in hero
+      document.getElementById('landing-hero').style.display = 'none';
+      document.getElementById('landing-content').style.display = 'none';
+      document.getElementById('signed-in-hero').style.display = '';
+      document.getElementById('greeting-name').textContent = (currentUser.name || 'there').split(' ')[0];
       const avatar = document.getElementById('user-avatar');
       if (currentUser.picture) {
         avatar.src = currentUser.picture;
@@ -4964,6 +5002,10 @@ async function checkAuth() {
       currentUser = null;
       document.getElementById('user-menu').style.display = 'none';
       document.getElementById('btn-sign-in').style.display = '';
+      // Show landing content
+      document.getElementById('landing-hero').style.display = '';
+      document.getElementById('landing-content').style.display = '';
+      document.getElementById('signed-in-hero').style.display = 'none';
     }
   } catch {
     currentUser = null;
