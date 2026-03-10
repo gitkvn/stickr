@@ -122,6 +122,7 @@ try { db.exec('ALTER TABLE async_files ADD COLUMN batch_token TEXT'); } catch (e
 try { db.exec('ALTER TABLE async_files ADD COLUMN receive_link_id TEXT'); } catch (e) { /* already exists */ }
 try { db.exec('ALTER TABLE users ADD COLUMN username TEXT'); } catch (e) { /* already exists */ }
 try { db.exec('ALTER TABLE users ADD COLUMN profile_data TEXT'); } catch (e) { /* already exists */ }
+try { db.exec('ALTER TABLE users ADD COLUMN last_inbox_seen TEXT'); } catch (e) { /* already exists */ }
 try { db.exec('ALTER TABLE pinned_files ADD COLUMN display_name TEXT'); } catch (e) { /* already exists */ }
 try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username)'); } catch (e) { /* already exists */ }
 
@@ -171,6 +172,8 @@ const stmts = {
   findUserByUsername: db.prepare('SELECT * FROM users WHERE username = ?'),
   setUsername: db.prepare('UPDATE users SET username = ? WHERE id = ?'),
   updateProfileData: db.prepare('UPDATE users SET profile_data = ? WHERE id = ?'),
+  updateLastInboxSeen: db.prepare("UPDATE users SET last_inbox_seen = datetime('now') WHERE id = ?"),
+  getLastInboxSeen: db.prepare('SELECT last_inbox_seen FROM users WHERE id = ?'),
   // Receive link queries
   createReceiveLink: db.prepare('INSERT INTO receive_links (id, user_id, passkey, expires_at) VALUES (?, ?, ?, ?)'),
   deactivateUserReceiveLinks: db.prepare('UPDATE receive_links SET active = 0 WHERE user_id = ?'),
@@ -576,6 +579,25 @@ app.get('/api/inbox', (req, res) => {
   const files = stmts.findReceivedFiles.all(user.id);
   const active = files.filter(f => new Date(f.expires_at) > new Date());
   res.json(active);
+});
+
+// Mark inbox as seen
+app.post('/api/inbox/seen', (req, res) => {
+  const user = getUserFromCookie(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  stmts.updateLastInboxSeen.run(user.id);
+  res.json({ ok: true });
+});
+
+// Get unseen inbox count
+app.get('/api/inbox/unseen', (req, res) => {
+  const user = getUserFromCookie(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  const lastSeen = stmts.getLastInboxSeen.get(user.id);
+  const lastSeenTime = lastSeen && lastSeen.last_inbox_seen ? lastSeen.last_inbox_seen : '1970-01-01';
+  const files = stmts.findReceivedFiles.all(user.id);
+  const count = files.filter(f => new Date(f.expires_at) > new Date() && f.created_at > lastSeenTime).length;
+  res.json({ count });
 });
 
 // Delete from inbox
@@ -1513,8 +1535,10 @@ function cleanupExistingRoom(ws) {
 
 // Push inbox notification to a user's active WebSocket connections
 function notifyInbox(userId) {
+  const lastSeen = stmts.getLastInboxSeen.get(userId);
+  const lastSeenTime = lastSeen && lastSeen.last_inbox_seen ? lastSeen.last_inbox_seen : '1970-01-01';
   const files = stmts.findReceivedFiles.all(userId);
-  const count = files.filter(f => new Date(f.expires_at) > new Date()).length;
+  const count = files.filter(f => new Date(f.expires_at) > new Date() && f.created_at > lastSeenTime).length;
   let notified = 0;
   let withUser = 0;
   wss.clients.forEach((ws) => {

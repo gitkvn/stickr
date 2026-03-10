@@ -4073,8 +4073,9 @@ function showInbox() {
   document.getElementById('home-view').classList.remove('active');
   document.getElementById('link-view').classList.remove('active');
   document.getElementById('inbox-view').classList.add('active');
-  // Clear badge
+  // Clear badge and mark as seen
   document.getElementById('inbox-badge').style.display = 'none';
+  fetch('/api/inbox/seen', { method: 'POST' }).catch(() => {});
   loadInbox();
 }
 
@@ -4135,11 +4136,11 @@ async function deleteInboxFile(token) {
 
 async function checkInboxCount() {
   try {
-    const res = await fetch('/api/inbox');
+    const res = await fetch('/api/inbox/unseen');
     if (!res.ok) return;
-    const files = await res.json();
+    const { count } = await res.json();
     const badge = document.getElementById('inbox-badge');
-    if (files.length > 0) { badge.textContent = files.length; badge.style.display = ''; }
+    if (count > 0) { badge.textContent = count; badge.style.display = ''; }
     else { badge.style.display = 'none'; }
   } catch {}
 }
