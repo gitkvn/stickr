@@ -887,104 +887,104 @@ header {
 
 .landing-hero {
   text-align: center;
-  max-width: 700px;
+  max-width: 600px;
   margin-bottom: 8px;
 }
-.frustrations {
+.pain-pills {
   display: flex;
-  gap: 12px;
-  margin-bottom: 28px;
-  flex-wrap: wrap;
   justify-content: center;
-}
-.frust {
-  display: flex;
-  align-items: center;
   gap: 8px;
-  padding: 8px 16px;
+  margin-bottom: 28px;
+}
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 5px 12px;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: 100px;
-  font-size: 13px;
-  color: var(--text-secondary);
 }
-.frust .x { color: var(--danger, #e05555); font-weight: 700; font-size: 14px; }
-.frust .limit { color: var(--text-muted); font-family: var(--font-mono); font-size: 12px; }
+.pill-x { color: var(--danger, #f87171); font-weight: 600; }
+.pill-cap { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); }
 .landing-hero h1 {
-  font-family: var(--font-display);
-  font-size: clamp(24px, 4vw, 36px);
-  font-weight: 600;
-  line-height: 1.2;
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-size: clamp(28px, 5vw, 42px);
+  font-weight: 400;
+  line-height: 1.15;
   margin-bottom: 14px;
   letter-spacing: -0.5px;
 }
 .landing-hero h1 .highlight {
-  background: var(--gradient-1);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  font-style: italic;
+  color: var(--accent-bright);
 }
 .landing-sub {
   font-size: 14px;
   color: var(--text-secondary);
-  max-width: 400px;
+  max-width: 380px;
   margin: 0 auto;
-  line-height: 1.6;
+  line-height: 1.7;
 }
-
 .actions {
   display: flex;
-  gap: 16px;
+  gap: 12px;
   flex-wrap: wrap;
   justify-content: center;
 }
+.landing-divider {
+  max-width: 800px;
+  margin: 0 auto;
+  border: none;
+  border-top: 1px solid var(--border);
+}
 
 /* Comparison table */
-.compare-table-wrap { overflow-x: auto; }
-.compare-table {
-  width: 100%;
-  border-collapse: collapse;
-  text-align: left;
-}
+.compare-table-wrap { overflow-x: auto; max-width: 520px; margin: 0 auto; }
+.compare-table { width: 100%; border-collapse: collapse; text-align: left; }
 .compare-table th {
-  padding: 10px 14px;
-  font-size: 11px;
-  color: var(--text-muted);
+  text-align: left;
+  font-size: 10px;
   font-weight: 600;
+  color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 1px;
+  padding: 10px 0;
   border-bottom: 1px solid var(--border);
 }
-.compare-table th:last-child { color: var(--accent-bright); }
+.compare-table th:last-child { color: var(--accent-bright); text-align: right; }
 .compare-table td {
-  padding: 12px 14px;
   font-size: 13px;
   color: var(--text-secondary);
-  border-bottom: 1px solid rgba(26,26,46,0.5);
+  padding: 11px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
 }
-.cmp-check { color: var(--success); font-weight: 600; }
-
+.compare-table td:last-child { text-align: right; }
+.cmp-check { color: var(--success); font-weight: 500; font-size: 12px; }
 
 /* Landing Sections */
 .landing-section {
   width: 100%;
-  max-width: 800px;
+  max-width: 680px;
   margin: 0 auto;
-  padding: 64px 0 0;
+  padding: 56px 0 0;
   text-align: center;
 }
 .landing-tag {
   font-family: var(--font-mono);
   font-size: 10px;
   text-transform: uppercase;
-  letter-spacing: 2.5px;
+  letter-spacing: 2px;
   color: var(--accent-bright);
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 .landing-section-title {
-  font-family: var(--font-display);
-  font-size: clamp(20px, 3vw, 28px);
-  font-weight: 700;
-  letter-spacing: -0.5px;
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-size: clamp(20px, 3vw, 26px);
+  font-weight: 400;
+  letter-spacing: -0.3px;
   margin-bottom: 36px;
 }
 
@@ -992,180 +992,125 @@ header {
 .landing-steps {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 20px;
+  gap: 14px;
   text-align: left;
 }
 .landing-step {
-  padding: 28px;
+  padding: 22px 18px;
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 14px;
-  transition: all 0.3s;
-  position: relative;
+  border-radius: 12px;
 }
-.landing-step:hover { border-color: var(--accent); transform: translateY(-3px); }
 .step-num {
-  font-family: var(--font-display);
-  font-size: 28px;
-  color: var(--accent);
-  opacity: 0.2;
-  position: absolute;
-  top: 16px;
-  right: 20px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--accent-bright);
+  opacity: 0.5;
+  margin-bottom: 10px;
 }
-.landing-step h3 { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
-.landing-step p { font-size: 12px; color: var(--text-secondary); line-height: 1.6; }
-
-/* Features */
-.landing-features {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 16px;
-  text-align: left;
-}
-.landing-feature {
-  padding: 24px;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  transition: all 0.2s;
-}
-.landing-feature:hover { border-color: rgba(108,92,231,0.3); }
-.lf-icon {
-  width: 36px; height: 36px; border-radius: 9px;
-  display: flex; align-items: center; justify-content: center;
-  margin-bottom: 14px;
-}
-.landing-feature h4 { font-size: 13px; font-weight: 600; margin-bottom: 5px; }
-.landing-feature p { font-size: 12px; color: var(--text-secondary); line-height: 1.5; }
+.landing-step h3 { font-size: 13px; font-weight: 600; margin-bottom: 5px; }
+.landing-step p { font-size: 12px; color: var(--text-secondary); line-height: 1.5; }
 
 /* Pricing */
 .pricing-cards {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 20px;
+  gap: 14px;
   text-align: left;
 }
 .price-card {
-  padding: 32px;
+  padding: 26px 22px;
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 18px;
+  border-radius: 14px;
   position: relative;
-  transition: all 0.3s;
 }
-.price-card:hover { transform: translateY(-3px); }
 .price-card.pro {
-  border-color: var(--accent);
-  background: linear-gradient(180deg, rgba(108,92,231,0.05) 0%, var(--bg-card) 100%);
+  border-color: rgba(108,92,231,0.25);
+  background: linear-gradient(180deg, rgba(108,92,231,0.04) 0%, var(--bg-card) 100%);
 }
 .price-label {
   position: absolute;
-  top: -11px;
+  top: -10px;
   left: 50%;
   transform: translateX(-50%);
   background: var(--accent);
   color: white;
   font-size: 9px;
   font-weight: 700;
-  letter-spacing: 1.5px;
-  padding: 4px 14px;
-  border-radius: 100px;
-}
-.price-name {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  text-transform: uppercase;
   letter-spacing: 1px;
-  margin-bottom: 6px;
+  padding: 3px 12px;
+  border-radius: 100px;
+  text-transform: uppercase;
 }
+.price-name { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
 .price-amount {
-  font-family: var(--font-display);
-  font-size: 32px;
-  font-weight: 700;
-  margin-bottom: 4px;
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-size: 30px;
+  margin-bottom: 2px;
 }
-.price-amount span { font-size: 14px; color: var(--text-muted); font-weight: 400; }
-.price-desc {
-  font-size: 12px;
-  color: var(--text-muted);
-  margin-bottom: 20px;
-}
-.price-features {
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-bottom: 28px;
-}
+.price-amount span { font-size: 13px; color: var(--text-muted); font-family: 'DM Sans', sans-serif; }
+.price-desc { font-size: 12px; color: var(--text-muted); margin-bottom: 18px; }
+.price-features { list-style: none; display: flex; flex-direction: column; gap: 6px; margin-bottom: 22px; }
 .price-features li {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
   font-size: 12px;
   color: var(--text-secondary);
+  padding-left: 18px;
+  position: relative;
 }
 .price-features li::before {
   content: '✓';
+  position: absolute;
+  left: 0;
   color: var(--success);
+  font-size: 11px;
   font-weight: 700;
-  flex-shrink: 0;
 }
 .price-btn {
   display: block;
   width: 100%;
-  padding: 12px;
+  padding: 10px;
   text-align: center;
-  border-radius: 10px;
+  border-radius: 8px;
   font-family: var(--font-body);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.15s;
   border: none;
 }
-.price-btn.free {
-  background: transparent;
-  border: 1px solid var(--border);
-  color: var(--text-primary);
-}
+.price-btn.free { background: transparent; border: 1px solid var(--border); color: var(--text-primary); }
 .price-btn.free:hover { border-color: var(--accent); }
-.price-btn.upgrade {
-  background: linear-gradient(135deg, var(--accent), var(--accent-bright));
-  color: white;
-}
-.price-btn.upgrade:hover { transform: translateY(-1px); box-shadow: 0 4px 20px rgba(108,92,231,0.3); }
+.price-btn.upgrade { background: var(--accent); color: white; }
+.price-btn.upgrade:hover { background: var(--accent-bright); }
 
 /* Landing footer */
 .landing-footer {
-  flex-direction: column;
-  gap: 6px;
-  padding-top: 48px;
-  margin-top: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 28px 0;
+  margin-top: 56px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text-muted);
+  max-width: 680px;
+  margin-left: auto;
+  margin-right: auto;
 }
-.footer-brand {
-  font-family: var(--font-display);
-  font-size: 20px;
-  font-weight: 800;
-  background: var(--gradient-1);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-.landing-footer p { font-size: 13px; color: var(--text-muted); }
-.footer-links { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
-.footer-links a { color: var(--text-secondary); text-decoration: none; font-size: 13px; }
+.footer-links { display: flex; gap: 6px; align-items: center; }
+.footer-links a { color: var(--text-secondary); text-decoration: none; font-size: 12px; }
 .footer-links a:hover { color: var(--text-primary); }
-.footer-copy { font-size: 11px; color: var(--text-muted); margin-top: 16px; }
-
-.feature-card p { font-size: 12px; color: var(--text-secondary); }
+.footer-sep { color: var(--text-muted); }
 
 @media (max-width: 640px) {
   .landing-steps { grid-template-columns: 1fr; }
-  .landing-features { grid-template-columns: 1fr; }
   .pricing-cards { grid-template-columns: 1fr; }
   .price-card.pro { order: -1; }
+  .pain-pills { flex-wrap: wrap; }
+  .landing-footer { flex-direction: column; gap: 10px; text-align: center; }
 }
+
 
 .btn {
   font-family: var(--font-body);
@@ -2412,64 +2357,70 @@ header {
 
     <!-- Landing hero (shown to visitors) -->
     <div class="landing-hero" id="landing-hero">
-      <div class="frustrations">
-        <div class="frust"><span class="x">✕</span> Email <span class="limit">25 MB</span></div>
-        <div class="frust"><span class="x">✕</span> WhatsApp <span class="limit">2 GB compressed</span></div>
+      <div class="pain-pills">
+        <div class="pill"><span class="pill-x">✕</span> Email <span class="pill-cap">25 MB</span></div>
+        <div class="pill"><span class="pill-x">✕</span> WhatsApp <span class="pill-cap">compressed</span></div>
       </div>
       <h1>Too big to send?<br><span class="highlight">Stickr it.</span></h1>
-      <p class="landing-sub">Drop a file, get a link, send it anywhere. No compression, no sign-up for recipients, no nonsense.</p>
+      <p class="landing-sub">Drop a file, get a link, send it anywhere. No compression, no sign-up for recipients.</p>
     </div>
 
     <div class="actions" id="landing-actions">
       <button class="btn btn-primary" onclick="startGetLink()">
-        <span class="btn-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span> Send a file now
+        <span class="btn-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span> Send a file now
       </button>
       <button class="btn btn-secondary" onclick="createRoom()">
-        <span class="btn-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span> P2P Room
+        <span class="btn-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span> P2P Room
       </button>
     </div>
-    <p class="hero-note" id="landing-note" style="text-align:center;font-size:13px;color:var(--text-muted);margin-top:-30px;">Free up to 100 MB · No account needed to download</p>
+    <p class="hero-note" id="landing-note" style="text-align:center;font-size:12px;color:var(--text-muted);margin-top:-30px;">Free up to 100 MB · No account needed to download</p>
 
     <!-- Marketing content (hidden when signed in) -->
     <div id="landing-content">
 
-    <!-- How it works -->
+    <hr class="landing-divider">
+
+    <!-- Steps -->
     <div class="landing-section">
       <div class="landing-tag">How it works</div>
-      <h2 class="landing-section-title">Three seconds. Not three steps.</h2>
+      <h2 class="landing-section-title">Drop. Link. Send.</h2>
       <div class="landing-steps">
         <div class="landing-step">
-          <div class="step-num">1</div>
+          <div class="step-num">01</div>
           <h3>Drop your file</h3>
-          <p>Drag it onto Stickr or click to browse. Videos, photos, ZIPs, anything.</p>
+          <p>Any file type. Videos, photos, ZIPs, designs.</p>
         </div>
         <div class="landing-step">
-          <div class="step-num">2</div>
+          <div class="step-num">02</div>
           <h3>Get a link</h3>
-          <p>Stickr gives you a download link instantly. Copy it or share it directly.</p>
+          <p>Instant download link. Copy or share directly.</p>
         </div>
         <div class="landing-step">
-          <div class="step-num">3</div>
-          <h3>Send it anywhere</h3>
-          <p>Paste the link in WhatsApp, iMessage, Slack, email. The recipient downloads the original, uncompressed.</p>
+          <div class="step-num">03</div>
+          <h3>Send anywhere</h3>
+          <p>WhatsApp, iMessage, Slack, email. Original quality.</p>
         </div>
       </div>
     </div>
+
+    <hr class="landing-divider">
 
     <!-- Comparison -->
     <div class="landing-section">
       <div class="compare-table-wrap">
         <table class="compare-table">
-          <thead><tr><th></th><th>Limit</th><th>Stickr</th></tr></thead>
+          <thead><tr><th>Service</th><th>Limit</th><th>Stickr</th></tr></thead>
           <tbody>
             <tr><td>Email</td><td>25 MB</td><td><span class="cmp-check">100 MB free · 2 GB Pro</span></td></tr>
-            <tr><td>WhatsApp</td><td>2 GB (compressed)</td><td><span class="cmp-check">No compression</span></td></tr>
-            <tr><td>Google Drive</td><td>Needs permissions</td><td><span class="cmp-check">Just a link</span></td></tr>
-            <tr><td>AirDrop</td><td>Same room only</td><td><span class="cmp-check">P2P, any distance</span></td></tr>
+            <tr><td>WhatsApp</td><td>Compressed</td><td><span class="cmp-check">No compression</span></td></tr>
+            <tr><td>Google Drive</td><td>Permissions</td><td><span class="cmp-check">Just a link</span></td></tr>
+            <tr><td>AirDrop</td><td>Same room</td><td><span class="cmp-check">P2P, any distance</span></td></tr>
           </tbody>
         </table>
       </div>
     </div>
+
+    <hr class="landing-divider">
 
     <!-- Pricing -->
     <div class="landing-section" id="pricing-section">
@@ -2483,26 +2434,26 @@ header {
           <ul class="price-features">
             <li>100 MB per file</li>
             <li>1 GB lifetime transfers</li>
-            <li>24-hour download links</li>
+            <li>24-hour links</li>
             <li>P2P encrypted</li>
             <li>Receive files from anyone</li>
-            <li>Profile page + 3 pinned files</li>
+            <li>Profile + 3 pinned files</li>
           </ul>
-          <button class="price-btn free" onclick="signIn()">Get started — free</button>
+          <button class="price-btn free" onclick="signIn()">Get started</button>
         </div>
         <div class="price-card pro">
           <div class="price-label">POPULAR</div>
           <div class="price-name">Pro</div>
-          <div class="price-amount">$1.99 <span>/ month</span></div>
+          <div class="price-amount">$1.99 <span>/ mo</span></div>
           <div class="price-desc">For big files, regularly</div>
           <ul class="price-features">
             <li>2 GB per file</li>
             <li>100 GB monthly transfers</li>
-            <li>7-day download links</li>
+            <li>7-day links</li>
             <li>P2P encrypted</li>
             <li>Receive files from anyone</li>
-            <li>Profile page + 10 pinned files</li>
-            <li>No Stickr branding</li>
+            <li>Profile + 10 pinned files</li>
+            <li>No branding</li>
           </ul>
           <button class="price-btn upgrade" onclick="signIn()">Upgrade to Pro</button>
         </div>
@@ -2510,8 +2461,7 @@ header {
     </div>
 
     <footer class="site-footer landing-footer">
-      <div class="footer-brand">Stickr</div>
-      <p>Too big to send? Stickr it.</p>
+      <span>© 2026 Stickr · Built in India</span>
       <div class="footer-links">
         <a href="/privacy.html">Privacy</a>
         <span class="footer-sep">·</span>
@@ -2519,7 +2469,6 @@ header {
         <span class="footer-sep">·</span>
         <a href="#" onclick="event.preventDefault();showInstallGuide()">Install app</a>
       </div>
-      <p class="footer-copy">© 2026 Stickr. Built in India.</p>
     </footer>
     </div><!-- end landing-content -->
   </div>
