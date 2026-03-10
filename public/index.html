@@ -4522,6 +4522,10 @@ async function checkAuth() {
       loadMyCard();
       loadPasscode();
       checkInboxCount();
+      // Auto-connect WebSocket for inbox notifications
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        connectWS();
+      }
     } else {
       currentUser = null;
       document.getElementById('user-menu').style.display = 'none';

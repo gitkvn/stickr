@@ -1516,13 +1516,15 @@ function notifyInbox(userId) {
   const files = stmts.findReceivedFiles.all(userId);
   const count = files.filter(f => new Date(f.expires_at) > new Date()).length;
   let notified = 0;
+  let withUser = 0;
   wss.clients.forEach((ws) => {
+    if (ws.user) withUser++;
     if (ws.user && ws.user.id === userId && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: 'inbox-update', count }));
       notified++;
     }
   });
-  console.log(`Inbox notify: userId=${userId}, count=${count}, wsClients=${wss.clients.size}, notified=${notified}`);
+  console.log(`Inbox notify: userId=${userId}, count=${count}, wsClients=${wss.clients.size}, withUser=${withUser}, notified=${notified}`);
 }
 
 // ═══════════════════════════════════════════
@@ -1534,6 +1536,7 @@ wss.on('connection', (ws, req) => {
 
   // Attach user from cookie if authenticated
   ws.user = getUserFromCookie(req);
+  console.log(`WS connected: id=${ws.id}, user=${ws.user ? ws.user.email : 'anonymous'}, cookie=${req.headers.cookie ? 'yes' : 'no'}`);
 
   stats.wsConnections++;
   if (wss.clients.size > stats.peakConcurrentConnections) stats.peakConcurrentConnections = wss.clients.size;
