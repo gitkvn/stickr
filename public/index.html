@@ -868,6 +868,21 @@ header {
 .home-profile-link:hover { border-color: var(--accent); color: var(--accent-bright); }
 .home-profile-link svg { opacity: 0.5; }
 
+.install-hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 16px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 0.2s;
+}
+.install-hint:hover { color: var(--text-secondary); }
+.install-hint svg { opacity: 0.4; }
+
 .landing-hero {
   text-align: center;
   max-width: 700px;
@@ -2446,6 +2461,10 @@ header {
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
         <span id="home-profile-url"></span>
       </div>
+      <div class="install-hint" onclick="showInstallGuide()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Install Stickr on your device
+      </div>
     </div>
 
     <!-- Landing hero (shown to visitors) -->
@@ -2606,6 +2625,8 @@ header {
         <a href="/privacy.html">Privacy</a>
         <span class="footer-sep">·</span>
         <a href="mailto:privacy@getstickr.in">Contact</a>
+        <span class="footer-sep">·</span>
+        <a href="#" onclick="event.preventDefault();showInstallGuide()">Install app</a>
       </div>
       <p class="footer-copy">© 2026 Stickr. Built in India.</p>
     </footer>
@@ -4759,6 +4780,53 @@ async function checkInboxCount() {
       if (el) el.textContent = files.length;
     }
   } catch {}
+}
+
+function showInstallGuide() {
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  const isAndroid = /Android/.test(navigator.userAgent);
+  
+  let steps = '';
+  if (isIOS) {
+    steps = `
+      <div style="text-align:left;font-size:14px;color:var(--text-secondary);line-height:1.8;">
+        <p><strong style="color:var(--text-primary);">1.</strong> Tap the <strong style="color:var(--text-primary);">Share</strong> button <span style="font-size:18px;">⬆</span> in Safari</p>
+        <p><strong style="color:var(--text-primary);">2.</strong> Scroll down and tap <strong style="color:var(--text-primary);">"Add to Home Screen"</strong></p>
+        <p><strong style="color:var(--text-primary);">3.</strong> Tap <strong style="color:var(--text-primary);">"Add"</strong> in the top right</p>
+      </div>
+      <p style="font-size:12px;color:var(--text-muted);margin-top:16px;">Works best in Safari. If using Chrome, open in Safari first.</p>
+    `;
+  } else if (isAndroid) {
+    steps = `
+      <div style="text-align:left;font-size:14px;color:var(--text-secondary);line-height:1.8;">
+        <p><strong style="color:var(--text-primary);">1.</strong> Tap the <strong style="color:var(--text-primary);">⋮ menu</strong> in Chrome (top right)</p>
+        <p><strong style="color:var(--text-primary);">2.</strong> Tap <strong style="color:var(--text-primary);">"Add to Home screen"</strong></p>
+        <p><strong style="color:var(--text-primary);">3.</strong> Tap <strong style="color:var(--text-primary);">"Install"</strong></p>
+      </div>
+    `;
+  } else {
+    steps = `
+      <div style="text-align:left;font-size:14px;color:var(--text-secondary);line-height:1.8;">
+        <p><strong style="color:var(--text-primary);">Chrome:</strong> Click the install icon in the address bar, or go to ⋮ → "Install Stickr"</p>
+        <p style="margin-top:8px;"><strong style="color:var(--text-primary);">Edge:</strong> Click ⋯ → "Apps" → "Install this site as an app"</p>
+        <p style="margin-top:8px;"><strong style="color:var(--text-primary);">Safari (Mac):</strong> Not supported — use Chrome or Edge</p>
+      </div>
+    `;
+  }
+
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay active';
+  modal.id = 'install-modal';
+  modal.innerHTML = `
+    <div class="modal" style="max-width:400px;">
+      <h2 style="font-size:20px;margin-bottom:6px;">Install Stickr</h2>
+      <p style="color:var(--text-muted);font-size:13px;margin-bottom:20px;">Add Stickr to your home screen for quick access</p>
+      ${steps}
+      <button class="btn btn-secondary" style="width:100%;justify-content:center;margin-top:20px;" onclick="document.getElementById('install-modal').remove()">Got it</button>
+    </div>
+  `;
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
 }
 
 function showUpgradePrompt() {
