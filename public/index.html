@@ -531,7 +531,10 @@ header {
   justify-content: center;
   padding: 40px 20px;
   gap: 50px;
+  opacity: 0;
+  transition: opacity 0.2s;
 }
+.home-view.ready { opacity: 1; }
 
 /* ─── Get a Link View ─── */
 .link-view {
@@ -2401,7 +2404,7 @@ header {
   </header>
 
   <!-- ═══ HOME VIEW ═══ -->
-  <div id="home-view" class="view home-view active" style="opacity:0;transition:opacity 0.2s;">
+  <div id="home-view" class="view home-view active">
     <!-- Signed-in dashboard (hidden by default) -->
     <div class="signed-in-home" id="signed-in-hero" style="display:none;">
       <div class="greeting">
@@ -5307,7 +5310,7 @@ function updateUsageDisplay() {} // No-op — balance system removed
 
 // Check auth on page load
 checkAuth().finally(() => {
-  document.getElementById('home-view').style.opacity = '1';
+  document.getElementById('home-view').classList.add('ready');
 });
 
 // ─── Auto-join from URL hash ───
