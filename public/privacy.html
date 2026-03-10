@@ -5,32 +5,26 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Privacy — Stickr</title>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-<meta name="description" content="Stickr's privacy policy. We don't track you, store your files, or collect personal data.">
+<meta name="description" content="Stickr's privacy policy. How we handle your data, files, and account information.">
 <meta name="theme-color" content="#0a0a0f">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Space+Grotesk:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
 <style>
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
 :root {
-  --bg-primary: #0a0a0f;
-  --bg-secondary: #12121a;
-  --bg-tertiary: #1a1a2e;
-  --border: rgba(255,255,255,0.06);
-  --text-primary: #f0f0f0;
-  --text-secondary: #b0b0b8;
-  --text-muted: #6b6b78;
-  --accent: #6c5ce7;
-  --accent-bright: #a78bfa;
-  --font-display: 'Outfit', sans-serif;
-  --font-body: 'Space Grotesk', sans-serif;
-  --font-mono: 'JetBrains Mono', monospace;
+  --bg: #06060a;
+  --surface: #0c0c14;
+  --border: #1a1a2e;
+  --text: #eaeaf2;
+  --text-secondary: #9898b8;
+  --text-muted: #55556e;
+  --accent: #a29bfe;
 }
 
 body {
-  font-family: var(--font-body);
-  background: var(--bg-primary);
-  color: var(--text-primary);
+  font-family: 'DM Sans', sans-serif;
+  background: var(--bg);
+  color: var(--text);
   min-height: 100vh;
   line-height: 1.7;
 }
@@ -43,34 +37,31 @@ body {
 
 .back-link {
   display: inline-block;
-  color: var(--accent-bright);
+  color: var(--accent);
   text-decoration: none;
   font-size: 14px;
   margin-bottom: 32px;
-  transition: opacity 0.2s;
 }
-
 .back-link:hover { opacity: 0.8; }
 
 h1 {
-  font-family: var(--font-display);
+  font-family: 'Instrument Serif', Georgia, serif;
   font-size: 32px;
-  font-weight: 700;
+  font-weight: 400;
   margin-bottom: 8px;
 }
 
 .updated {
   font-size: 13px;
   color: var(--text-muted);
-  font-family: var(--font-mono);
+  font-family: 'JetBrains Mono', monospace;
   margin-bottom: 40px;
 }
 
 h2 {
-  font-family: var(--font-display);
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--accent-bright);
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--accent);
   margin-top: 36px;
   margin-bottom: 12px;
 }
@@ -82,7 +73,7 @@ p {
 }
 
 .tldr {
-  background: var(--bg-tertiary);
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 20px 24px;
@@ -90,28 +81,21 @@ p {
 }
 
 .tldr-label {
-  font-family: var(--font-mono);
+  font-family: 'JetBrains Mono', monospace;
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 1.5px;
-  color: var(--accent-bright);
+  color: var(--accent);
   margin-bottom: 8px;
 }
 
 .tldr p {
-  color: var(--text-primary);
+  color: var(--text);
   margin-bottom: 0;
-  font-size: 15px;
 }
 
-a {
-  color: var(--accent-bright);
-  text-decoration: none;
-}
-
-a:hover {
-  text-decoration: underline;
-}
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
 
 .footer {
   margin-top: 48px;
@@ -127,49 +111,83 @@ a:hover {
   <a href="/" class="back-link">← Back to Stickr</a>
 
   <h1>Privacy Policy</h1>
-  <p class="updated">Last updated: March 2, 2026</p>
+  <p class="updated">Last updated: March 10, 2026</p>
 
   <div class="tldr">
     <div class="tldr-label">TL;DR</div>
-    <p>Stickr doesn't track you, doesn't store your files, doesn't read your messages, and doesn't require an account. Your data goes directly from your device to the recipient's device.</p>
+    <p>Stickr uses Google sign-in for accounts, stores your files temporarily on Cloudflare R2 (24 hours for free, 7 days for Pro), transfers small files directly between devices via encrypted P2P, and never reads your file contents. We collect only what's needed to make the service work.</p>
   </div>
 
-  <h2>How Stickr works</h2>
-  <p>Stickr uses WebRTC to create direct, encrypted connections between browsers. When you share a file or send a message, the data travels directly from your device to the recipient's device. Our server's only role is to help the two devices find each other — it never sees, stores, or processes your files or messages.</p>
+  <h2>Your account</h2>
+  <p>Stickr uses Google OAuth for authentication. When you sign in, we receive and store your name, email address, and profile picture from Google. This information is used to create your Stickr profile and identify you in the service. We also generate a unique username for your profile URL.</p>
+  <p>Your account data is stored in a SQLite database on our server hosted on Railway. Session tokens are stored in secure, HTTP-only cookies.</p>
 
-  <h2>What we don't collect</h2>
-  <p>We don't collect personal information. There are no accounts, no email addresses, no names, and no passwords. We don't use cookies. We don't use analytics or tracking scripts. We don't store your files on any server. We don't store or have access to your chat messages. We don't share any data with third parties.</p>
-
-  <h2>What our server handles</h2>
-  <p>Our signaling server facilitates the initial connection between two devices. During this process, your IP address is temporarily visible to our server for the duration of the WebSocket connection. This is how all internet connections work — it's not something we log or store. Once the peer-to-peer connection is established, the signaling server is no longer involved.</p>
+  <h2>Peer-to-peer file transfers</h2>
+  <p>When you share files using the "Share Files" or "Join Room" features, Stickr establishes a direct peer-to-peer connection between browsers using WebRTC. Files under 100 MB travel directly from the sender's device to the recipient's device. Our server only facilitates the initial connection — it never sees, stores, or processes your file contents.</p>
+  <p>All P2P data is encrypted using DTLS (Datagram Transport Layer Security), which is built into WebRTC. Neither our signaling server nor any relay server can decrypt your data.</p>
 
   <h2>TURN relay</h2>
-  <p>In some cases (roughly 10–20% of connections), a direct peer-to-peer connection isn't possible due to network restrictions. In these cases, data is relayed through <a href="https://developers.cloudflare.com/realtime/turn/" target="_blank" rel="noopener">Cloudflare's TURN service</a>, which runs on their global network. The relayed data remains encrypted via DTLS — the relay server cannot read the contents of your files or messages. TURN credentials are ephemeral (short-lived) and generated fresh for each session. Cloudflare's privacy policy applies to their infrastructure.</p>
+  <p>In approximately 10–20% of connections, a direct P2P connection isn't possible due to network restrictions (firewalls, symmetric NATs). In these cases, data is relayed through <a href="https://developers.cloudflare.com/calls/turn/" target="_blank" rel="noopener">Cloudflare's TURN service</a>. The relayed data remains encrypted — the relay cannot read your file contents. TURN credentials are ephemeral (short-lived) and generated fresh for each session.</p>
 
-  <h2>Encryption</h2>
-  <p>All data transferred through Stickr is encrypted using DTLS (Datagram Transport Layer Security), which is built into WebRTC. This encryption is applied automatically to every file transfer and chat message. Neither our signaling server nor any relay server can decrypt your data.</p>
+  <h2>Cloud-uploaded files (Get a Link, profile uploads)</h2>
+  <p>When you use "Get a Link" or when someone sends you files via your upload link, those files are uploaded to <a href="https://www.cloudflare.com/developer-platform/products/r2/" target="_blank" rel="noopener">Cloudflare R2</a> object storage. These files are:</p>
+  <p>— Stored temporarily: 24 hours on the free plan, 7 days on Pro</p>
+  <p>— Accessible only via a unique, unguessable download token</p>
+  <p>— Automatically deleted after expiry</p>
+  <p>— Not encrypted at the application level (Cloudflare R2 encrypts data at rest on their infrastructure)</p>
+  <p>We do not read, scan, or analyze the contents of uploaded files. File metadata (name, size, MIME type, upload time) is stored in our database to manage the service.</p>
+
+  <h2>Pinned files</h2>
+  <p>Pinned files on your profile are stored on Cloudflare R2 and do not expire. They are publicly downloadable by anyone who visits your profile page. You can remove pinned files at any time.</p>
+
+  <h2>Your profile page</h2>
+  <p>Your Stickr profile (getstickr.in/username) displays your name, profile picture, bio, social links, and pinned files. This information is publicly visible to anyone who visits your profile URL. You control what appears on your profile through the edit profile settings.</p>
+
+  <h2>Upload links and inbox</h2>
+  <p>When you generate an upload link, anyone with that link can send you files. These files are stored on Cloudflare R2 and appear in your inbox. Upload links expire after 24 hours. Files received via upload links follow the same expiry rules as other cloud-uploaded files.</p>
+
+  <h2>What we store in our database</h2>
+  <p>— Account information: Google ID, name, email, profile picture, username</p>
+  <p>— Profile data: bio, social links, business card info (if you set these up)</p>
+  <p>— Session tokens for authentication</p>
+  <p>— File metadata: filename, size, upload time, expiry time, download tokens</p>
+  <p>— Transfer records for usage tracking</p>
+  <p>— Plan status (free or Pro)</p>
+
+  <h2>What we don't do</h2>
+  <p>— We don't read or scan your file contents</p>
+  <p>— We don't use analytics or third-party tracking scripts</p>
+  <p>— We don't sell your data to anyone</p>
+  <p>— We don't show advertisements</p>
+  <p>— We don't share your data with third parties except as described (Google for auth, Cloudflare for storage/relay, Dodo Payments for billing)</p>
+
+  <h2>Payments</h2>
+  <p>Pro subscriptions are processed through <a href="https://dodopayments.com" target="_blank" rel="noopener">Dodo Payments</a>, which acts as our Merchant of Record. When you upgrade to Pro, your email and name are shared with Dodo Payments to create your subscription. Dodo Payments handles all payment processing, tax calculation, and billing. We store your Dodo customer ID and subscription status in our database. We do not store credit card numbers or payment details.</p>
 
   <h2>Data retention</h2>
-  <p>There is nothing to retain. Files and messages exist only in the browsers of the sender and recipient during an active session. When the session ends, the data exists only on the devices where it was sent or received. Our server retains no record of what was shared, who shared it, or when.</p>
+  <p>— Cloud-uploaded files: automatically deleted after 24 hours (free) or 7 days (Pro)</p>
+  <p>— Pinned files: stored until you remove them or delete your account</p>
+  <p>— P2P transferred files: never stored on our servers</p>
+  <p>— Account data: stored as long as your account exists</p>
+  <p>— Session data: expires after 30 days of inactivity</p>
 
-  <h2>Room codes</h2>
-  <p>Room codes are randomly generated 6-character identifiers used to connect two devices. They exist only in server memory for the duration of the session and are discarded when the room is closed. They are not logged or stored persistently.</p>
+  <h2>Infrastructure</h2>
+  <p>Stickr runs on the following services, each with their own privacy policies:</p>
+  <p>— <a href="https://railway.app/legal/privacy" target="_blank" rel="noopener">Railway</a> (application hosting and database)</p>
+  <p>— <a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noopener">Cloudflare</a> (R2 storage, TURN relay, DNS, email routing)</p>
+  <p>— <a href="https://accounts.google.com" target="_blank" rel="noopener">Google</a> (OAuth authentication)</p>
+  <p>— <a href="https://dodopayments.com/legal/privacy-policy" target="_blank" rel="noopener">Dodo Payments</a> (payment processing)</p>
+
+  <h2>Your rights</h2>
+  <p>You can delete your pinned files and profile data at any time through the app. If you want your account fully deleted, contact us and we'll remove all your data from our database. Cloud-uploaded files are automatically deleted after their expiry period.</p>
 
   <h2>Changes to this policy</h2>
-  <p>If we ever change how Stickr handles data, we'll update this page. Given that privacy is the core principle behind Stickr, any changes would be toward collecting less, not more.</p>
+  <p>We'll update this page when the product changes. The "last updated" date at the top reflects the most recent revision.</p>
 
   <h2>Contact</h2>
-  <p>
-    Questions about this policy? Reach out at
-    <img
-      src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%22210%22%20height%3D%2220%22%20viewBox%3D%220%200%20210%2020%22%3E%3Ctext%20x%3D%220%22%20y%3D%2214%22%20font-family%3D%22JetBrains%20Mono%2C%20monospace%22%20font-size%3D%2214%22%20fill%3D%22%23a78bfa%22%3Eprivacy%40getstickr.in%3C/text%3E%3C/svg%3E"
-      alt="Privacy contact email image"
-      draggable="false"
-      style="height: 18px; width: 189px; vertical-align: -3px; user-select: none; -webkit-user-select: none; -webkit-user-drag: none;"
-    >
-  </p>
+  <p>Questions about privacy? Reach out at <a href="mailto:privacy@getstickr.in">privacy@getstickr.in</a>.</p>
 
-  <p class="footer">Stickr is designed to keep your data private by default.</p>
+  <p class="footer">Stickr is designed to keep your data private by default. We collect only what's needed and delete what we can.</p>
 </div>
 </body>
 </html>
