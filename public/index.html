@@ -912,11 +912,11 @@ header {
 .frust .limit { color: var(--text-muted); font-family: var(--font-mono); font-size: 12px; }
 .landing-hero h1 {
   font-family: var(--font-display);
-  font-size: clamp(40px, 7vw, 72px);
-  font-weight: 800;
-  line-height: 1.05;
-  margin-bottom: 20px;
-  letter-spacing: -2px;
+  font-size: clamp(24px, 4vw, 36px);
+  font-weight: 600;
+  line-height: 1.2;
+  margin-bottom: 14px;
+  letter-spacing: -0.5px;
 }
 .landing-hero h1 .highlight {
   background: var(--gradient-1);
@@ -924,11 +924,11 @@ header {
   -webkit-text-fill-color: transparent;
 }
 .landing-sub {
-  font-size: 17px;
+  font-size: 14px;
   color: var(--text-secondary);
-  max-width: 480px;
+  max-width: 400px;
   margin: 0 auto;
-  line-height: 1.7;
+  line-height: 1.6;
 }
 
 .actions {
@@ -946,8 +946,8 @@ header {
   text-align: left;
 }
 .compare-table th {
-  padding: 12px 16px;
-  font-size: 12px;
+  padding: 10px 14px;
+  font-size: 11px;
   color: var(--text-muted);
   font-weight: 600;
   text-transform: uppercase;
@@ -956,8 +956,8 @@ header {
 }
 .compare-table th:last-child { color: var(--accent-bright); }
 .compare-table td {
-  padding: 14px 16px;
-  font-size: 14px;
+  padding: 12px 14px;
+  font-size: 13px;
   color: var(--text-secondary);
   border-bottom: 1px solid rgba(26,26,46,0.5);
 }
@@ -974,18 +974,18 @@ header {
 }
 .landing-tag {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 10px;
   text-transform: uppercase;
-  letter-spacing: 3px;
+  letter-spacing: 2.5px;
   color: var(--accent-bright);
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 .landing-section-title {
   font-family: var(--font-display);
-  font-size: clamp(28px, 4vw, 40px);
-  font-weight: 800;
-  letter-spacing: -1px;
-  margin-bottom: 48px;
+  font-size: clamp(20px, 3vw, 28px);
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  margin-bottom: 36px;
 }
 
 /* Steps */
@@ -1006,15 +1006,15 @@ header {
 .landing-step:hover { border-color: var(--accent); transform: translateY(-3px); }
 .step-num {
   font-family: var(--font-display);
-  font-size: 36px;
+  font-size: 28px;
   color: var(--accent);
-  opacity: 0.25;
+  opacity: 0.2;
   position: absolute;
   top: 16px;
   right: 20px;
 }
-.landing-step h3 { font-size: 16px; font-weight: 700; margin-bottom: 8px; }
-.landing-step p { font-size: 13px; color: var(--text-secondary); line-height: 1.6; }
+.landing-step h3 { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+.landing-step p { font-size: 12px; color: var(--text-secondary); line-height: 1.6; }
 
 /* Features */
 .landing-features {
@@ -1036,8 +1036,8 @@ header {
   display: flex; align-items: center; justify-content: center;
   margin-bottom: 14px;
 }
-.landing-feature h4 { font-size: 14px; font-weight: 700; margin-bottom: 6px; }
-.landing-feature p { font-size: 13px; color: var(--text-secondary); line-height: 1.5; }
+.landing-feature h4 { font-size: 13px; font-weight: 600; margin-bottom: 5px; }
+.landing-feature p { font-size: 12px; color: var(--text-secondary); line-height: 1.5; }
 
 /* Pricing */
 .pricing-cards {
@@ -1073,7 +1073,7 @@ header {
   border-radius: 100px;
 }
 .price-name {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--text-secondary);
   text-transform: uppercase;
@@ -1082,15 +1082,15 @@ header {
 }
 .price-amount {
   font-family: var(--font-display);
-  font-size: 40px;
-  font-weight: 800;
+  font-size: 32px;
+  font-weight: 700;
   margin-bottom: 4px;
 }
-.price-amount span { font-size: 16px; color: var(--text-muted); font-weight: 400; }
+.price-amount span { font-size: 14px; color: var(--text-muted); font-weight: 400; }
 .price-desc {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--text-muted);
-  margin-bottom: 24px;
+  margin-bottom: 20px;
 }
 .price-features {
   list-style: none;
@@ -1103,7 +1103,7 @@ header {
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  font-size: 13px;
+  font-size: 12px;
   color: var(--text-secondary);
 }
 .price-features li::before {
@@ -2458,7 +2458,6 @@ header {
 
     <!-- Comparison -->
     <div class="landing-section">
-      <h2 class="landing-section-title">Why not just use...</h2>
       <div class="compare-table-wrap">
         <table class="compare-table">
           <thead><tr><th></th><th>Limit</th><th>Stickr</th></tr></thead>
