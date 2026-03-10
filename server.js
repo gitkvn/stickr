@@ -902,7 +902,7 @@ ${canUpload ? `<div class="drop-target" id="drop-target">
     <input type="file" id="recv-file-input" style="display:none">
     <div class="drop-hint-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
     <h3>Send files to ${userName}</h3>
-    <p>Drop here or click to browse · up to 100 MB</p>
+    <p>Drop here or click to browse · up to 100 MB · zip folders before uploading</p>
   </div>` : ''}
   ${pinsHtml}
   <div class="footer">
