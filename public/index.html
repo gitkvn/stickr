@@ -756,28 +756,117 @@ header {
 .inbox-action-btn.del { background: #e0555508; color: #e05555; opacity: 0.4; }
 .inbox-action-btn.del:hover { opacity: 1; background: #e0555515; }
 
-.signed-in-hero {
+.signed-in-home {
   text-align: center;
-  max-width: 700px;
-  margin-bottom: 8px;
+  max-width: 480px;
+  width: 100%;
+  margin: 0 auto;
 }
-.signed-in-hero h1 {
+.greeting { margin-bottom: 28px; }
+.greeting h1 {
   font-family: var(--font-display);
-  font-size: clamp(32px, 5vw, 48px);
+  font-size: 36px;
   font-weight: 800;
-  line-height: 1.1;
-  letter-spacing: -1px;
-  margin-bottom: 8px;
+  letter-spacing: -0.5px;
+  margin-bottom: 4px;
 }
-.signed-in-hero h1 span {
+.greeting h1 span {
   background: var(--gradient-1);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
-.signed-in-hero .landing-sub {
-  font-size: 16px;
-  margin-bottom: 0;
+.greeting p {
+  font-size: 15px;
+  color: var(--text-muted);
 }
+
+/* Action cards */
+.action-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 24px;
+}
+.action-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 20px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: left;
+}
+.action-card:hover {
+  border-color: var(--accent);
+  transform: translateX(4px);
+  background: var(--bg-tertiary);
+}
+.action-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.action-icon.purple { background: rgba(108,92,231,0.12); color: var(--accent-bright); }
+.action-icon.green { background: rgba(0,210,160,0.1); color: var(--success); }
+.action-icon.blue { background: rgba(116,185,255,0.1); color: #74b9ff; }
+.action-details { flex: 1; }
+.action-title { font-size: 15px; font-weight: 600; }
+.action-desc { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.action-arrow { color: var(--border); transition: color 0.2s; }
+.action-card:hover .action-arrow { color: var(--accent); }
+
+/* Quick stats */
+.quick-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.quick-stat {
+  padding: 14px 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: center;
+}
+.quick-stat:hover { border-color: var(--border-bright, #2a2a44); }
+.stat-value {
+  font-family: var(--font-mono);
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+.stat-value.purple { color: var(--accent-bright); }
+.stat-value.green { color: var(--success); }
+.stat-label { font-size: 11px; color: var(--text-muted); }
+
+/* Profile link */
+.home-profile-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.home-profile-link:hover { border-color: var(--accent); color: var(--accent-bright); }
+.home-profile-link svg { opacity: 0.5; }
 
 .landing-hero {
   text-align: center;
@@ -2298,10 +2387,65 @@ header {
 
   <!-- ═══ HOME VIEW ═══ -->
   <div id="home-view" class="view home-view active">
-    <!-- Signed-in greeting (hidden by default) -->
-    <div class="signed-in-hero" id="signed-in-hero" style="display:none;">
-      <h1>Hi, <span id="greeting-name"></span></h1>
-      <p class="landing-sub">What would you like to do?</p>
+    <!-- Signed-in dashboard (hidden by default) -->
+    <div class="signed-in-home" id="signed-in-hero" style="display:none;">
+      <div class="greeting">
+        <h1>Hi, <span id="greeting-name"></span></h1>
+        <p>What would you like to do?</p>
+      </div>
+
+      <div class="action-cards">
+        <div class="action-card" onclick="createRoom()">
+          <div class="action-icon purple">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          </div>
+          <div class="action-details">
+            <div class="action-title">Share Files</div>
+            <div class="action-desc">Create a room and send files peer-to-peer</div>
+          </div>
+          <div class="action-arrow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg></div>
+        </div>
+        <div class="action-card" onclick="showJoinModal()">
+          <div class="action-icon green">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          </div>
+          <div class="action-details">
+            <div class="action-title">Join Room</div>
+            <div class="action-desc">Enter a room code to receive files</div>
+          </div>
+          <div class="action-arrow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg></div>
+        </div>
+        <div class="action-card" onclick="startGetLink()">
+          <div class="action-icon blue">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+          </div>
+          <div class="action-details">
+            <div class="action-title">Get a Link</div>
+            <div class="action-desc">Upload a file and get a shareable download link</div>
+          </div>
+          <div class="action-arrow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg></div>
+        </div>
+      </div>
+
+      <div class="quick-stats">
+        <div class="quick-stat" onclick="showInbox()">
+          <div class="stat-value purple" id="home-inbox-count">0</div>
+          <div class="stat-label">Inbox</div>
+        </div>
+        <div class="quick-stat">
+          <div class="stat-value" id="home-pin-count">0</div>
+          <div class="stat-label">Pinned</div>
+        </div>
+        <div class="quick-stat">
+          <div class="stat-value green">Free</div>
+          <div class="stat-label">Plan</div>
+        </div>
+      </div>
+
+      <div class="home-profile-link" id="home-profile-link" onclick="if(currentUser&&currentUser.username)window.open('/'+currentUser.username,'_blank')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+        <span id="home-profile-url"></span>
+      </div>
     </div>
 
     <!-- Landing hero (shown to visitors) -->
@@ -2325,7 +2469,7 @@ header {
       <p class="landing-sub">Your personal sharing page. Send files peer-to-peer, pin downloads, receive uploads. Share it all from a single link.</p>
     </div>
 
-    <div class="actions">
+    <div class="actions" id="landing-actions">
       <button class="btn btn-primary" onclick="createRoom()">
         <span class="btn-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span> Share Files
       </button>
@@ -4607,7 +4751,22 @@ async function checkInboxCount() {
     const badge = document.getElementById('inbox-badge');
     if (count > 0) { badge.textContent = count; badge.style.display = ''; }
     else { badge.style.display = 'none'; }
+    // Also fetch total inbox count for home stat
+    const res2 = await fetch('/api/inbox');
+    if (res2.ok) {
+      const files = await res2.json();
+      const el = document.getElementById('home-inbox-count');
+      if (el) el.textContent = files.length;
+    }
   } catch {}
+}
+
+function updateHomeStats() {
+  // Pin count
+  const pinList = document.getElementById('pinned-file-list');
+  const pinCount = pinList ? pinList.querySelectorAll('.pinned-file-item').length : 0;
+  const el = document.getElementById('home-pin-count');
+  if (el) el.textContent = pinCount;
 }
 
 function getTimeAgo(dateStr) {
@@ -4881,6 +5040,7 @@ async function loadPinnedFiles() {
       </div>
     `).join('');
     document.getElementById('pin-upload-btn').style.display = pins.length >= 3 ? 'none' : '';
+    updateHomeStats();
   } catch {}
 }
 
@@ -4971,11 +5131,16 @@ async function checkAuth() {
       document.getElementById('user-menu').style.display = 'flex';
       document.getElementById('btn-sign-in').style.display = 'none';
       document.getElementById('user-name').textContent = currentUser.name || currentUser.email;
-      // Switch to signed-in hero
+      // Switch to signed-in dashboard
       document.getElementById('landing-hero').style.display = 'none';
       document.getElementById('landing-content').style.display = 'none';
+      document.getElementById('landing-actions').style.display = 'none';
       document.getElementById('signed-in-hero').style.display = '';
       document.getElementById('greeting-name').textContent = (currentUser.name || 'there').split(' ')[0];
+      // Profile link
+      if (currentUser.username) {
+        document.getElementById('home-profile-url').textContent = 'getstickr.in/' + currentUser.username;
+      }
       const avatar = document.getElementById('user-avatar');
       if (currentUser.picture) {
         avatar.src = currentUser.picture;
@@ -5005,6 +5170,7 @@ async function checkAuth() {
       // Show landing content
       document.getElementById('landing-hero').style.display = '';
       document.getElementById('landing-content').style.display = '';
+      document.getElementById('landing-actions').style.display = '';
       document.getElementById('signed-in-hero').style.display = 'none';
     }
   } catch {
