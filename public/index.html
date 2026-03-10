@@ -1909,15 +1909,15 @@ header {
           <div class="profile-menu-divider"></div>
           <div class="profile-menu-section">
             <div class="profile-menu-item">
-              <span class="profile-menu-label">Receive passkey</span>
-              <button class="profile-menu-small-btn" onclick="event.stopPropagation();generatePasscode();" id="passcode-gen-btn">Generate</button>
+              <span class="profile-menu-label">Upload link</span>
+              <button class="profile-menu-small-btn" onclick="event.stopPropagation();generateUploadLink();" id="upload-link-btn">Generate</button>
             </div>
-            <div id="passcode-display" style="display:none;margin-top:8px;">
-              <div style="display:flex;align-items:center;gap:10px;">
-                <span style="font-family:var(--font-mono);font-size:20px;font-weight:700;letter-spacing:4px;color:var(--accent-bright);" id="passcode-value"></span>
-                <span style="font-size:12px;color:var(--text-muted);cursor:pointer;" onclick="event.stopPropagation();copyPasscode();" id="passcode-copy">Copy</span>
+            <div id="upload-link-display" style="display:none;margin-top:8px;">
+              <div style="display:flex;align-items:center;gap:8px;">
+                <input type="text" id="upload-link-value" readonly style="flex:1;font-size:12px;font-family:var(--font-mono);background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text-primary);outline:none;min-width:0;">
+                <button class="profile-menu-small-btn" onclick="event.stopPropagation();copyUploadLink();" id="upload-link-copy">Copy</button>
               </div>
-              <p style="font-size:11px;color:var(--text-muted);margin-top:4px;">Share this with people who want to send you files</p>
+              <p style="font-size:11px;color:var(--text-muted);margin-top:4px;">Share this link so people can send you files · expires in 24h</p>
             </div>
           </div>
           <div class="profile-menu-divider"></div>
@@ -4170,33 +4170,34 @@ function getExpiresIn(dateStr) {
 }
 
 // ═══════════════════════════════════════════
-// PASSCODE
+// UPLOAD LINK
 // ═══════════════════════════════════════════
-async function generatePasscode() {
+async function generateUploadLink() {
   try {
     const res = await fetch('/api/receive-link/create', { method: 'POST' });
-    if (!res.ok) { const err = await res.json(); showToast(err.error || 'Failed to generate passkey'); return; }
+    if (!res.ok) { const err = await res.json(); showToast(err.error || 'Failed to generate link'); return; }
     const data = await res.json();
-    document.getElementById('passcode-value').textContent = data.passkey;
-    document.getElementById('passcode-display').style.display = 'block';
-    document.getElementById('passcode-gen-btn').textContent = 'Regenerate';
-    showToast('Passkey generated');
-  } catch { showToast('Failed to generate passkey'); }
+    document.getElementById('upload-link-value').value = data.url;
+    document.getElementById('upload-link-display').style.display = 'block';
+    document.getElementById('upload-link-btn').textContent = 'New link';
+    showToast('Upload link generated — expires in 24h');
+  } catch { showToast('Failed to generate link'); }
 }
 
-function copyPasscode() {
-  const code = document.getElementById('passcode-value').textContent;
-  const url = window.location.origin + '/' + currentUser.username;
-  navigator.clipboard.writeText(url + '\nPasscode: ' + code);
-  document.getElementById('passcode-copy').textContent = 'Copied!';
-  setTimeout(() => document.getElementById('passcode-copy').textContent = 'Copy', 2000);
+function copyUploadLink() {
+  const url = document.getElementById('upload-link-value').value;
+  navigator.clipboard.writeText(url);
+  document.getElementById('upload-link-copy').textContent = 'Copied!';
+  setTimeout(() => document.getElementById('upload-link-copy').textContent = 'Copy', 2000);
 }
 
-function loadPasscode() {
+function loadUploadLink() {
   if (currentUser && currentUser.receiveLink) {
-    document.getElementById('passcode-value').textContent = currentUser.receiveLink.passkey;
-    document.getElementById('passcode-display').style.display = 'block';
-    document.getElementById('passcode-gen-btn').textContent = 'Regenerate';
+    const host = window.location.origin;
+    const url = host + '/' + currentUser.username + '?key=' + currentUser.receiveLink.id;
+    document.getElementById('upload-link-value').value = url;
+    document.getElementById('upload-link-display').style.display = 'block';
+    document.getElementById('upload-link-btn').textContent = 'New link';
   }
 }
 
@@ -4521,7 +4522,7 @@ async function checkAuth() {
       updateUsageDisplay();
       loadPinnedFiles();
       loadMyCard();
-      loadPasscode();
+      loadUploadLink();
       checkInboxCount();
       // Auto-connect WebSocket for inbox notifications
       if (!ws || ws.readyState !== WebSocket.OPEN) {

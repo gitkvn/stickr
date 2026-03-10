@@ -454,7 +454,9 @@ app.get('/auth/me', (req, res) => {
     profile_data: user.profile_data,
     receiveLink: (() => {
       const rl = stmts.findActiveReceiveLink.get(user.id);
-      return rl ? { passkey: rl.passkey, expiresAt: rl.expires_at } : null;
+      if (!rl) return null;
+      if (new Date(rl.expires_at) < new Date()) return null;
+      return { id: rl.id, expiresAt: rl.expires_at };
     })(),
   });
 });
@@ -478,7 +480,7 @@ app.get('/auth/logout', (req, res) => {
 // RECEIVE LINKS + INBOX
 // ═══════════════════════════════════════════
 
-// Generate a new receive link (passcode)
+// Generate a new upload link
 app.post('/api/receive-link/create', (req, res) => {
   const user = getUserFromCookie(req);
   if (!user) return res.status(401).json({ error: 'Not authenticated' });
@@ -486,26 +488,27 @@ app.post('/api/receive-link/create', (req, res) => {
 
   stmts.deactivateUserReceiveLinks.run(user.id);
 
-  const id = crypto.randomBytes(8).toString('hex');
-  const passkey = crypto.randomBytes(3).toString('hex'); // 6-char hex
-  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(); // 30 days
+  const id = crypto.randomBytes(12).toString('hex'); // 24-char token
+  const passkey = id; // The key IS the link token
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(); // 24 hours
 
   stmts.createReceiveLink.run(id, user.id, passkey, expiresAt);
 
-  res.json({ passkey, expiresAt });
+  const host = req.headers.host;
+  const protocol = req.headers['x-forwarded-proto'] || 'https';
+  const url = `${protocol}://${host}/${user.username}?key=${id}`;
+
+  res.json({ url, expiresAt });
 });
 
-// Verify passcode for a username
-app.post('/api/receive-link/verify', (req, res) => {
-  const { username, passkey } = req.body;
-  if (!username || !passkey) return res.status(400).json({ error: 'Missing username or passkey' });
+// Validate an upload key
+app.post('/api/receive-link/validate', (req, res) => {
+  const { key } = req.body;
+  if (!key) return res.status(400).json({ error: 'Missing key' });
 
-  const link = stmts.findReceiveLinkByUserAndPasskey.get(username, passkey);
-  if (!link) return res.status(403).json({ error: 'Invalid passkey' });
-
-  if (new Date(link.expires_at) < new Date()) {
-    return res.status(410).json({ error: 'Passkey expired' });
-  }
+  const link = stmts.findReceiveLinkById.get(key);
+  if (!link || !link.active) return res.status(403).json({ error: 'Invalid or expired link' });
+  if (new Date(link.expires_at) < new Date()) return res.status(410).json({ error: 'Link expired' });
 
   res.json({ valid: true, linkId: link.id });
 });
@@ -753,10 +756,11 @@ app.get('/api/pin/:id/download', async (req, res) => {
 // PROFILE PAGE
 // ═══════════════════════════════════════════
 
-function getProfilePage(user, pinnedFiles) {
+function getProfilePage(user, pinnedFiles, validKey) {
   const profile = user.profile_data ? (typeof user.profile_data === 'string' ? JSON.parse(user.profile_data) : user.profile_data) : {};
   const bio = profile.bio || '';
   const links = profile.links || [];
+  const canUpload = !!validKey;
 
   const socialIcons = {
     'twitter.com': '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>',
@@ -764,39 +768,29 @@ function getProfilePage(user, pinnedFiles) {
     'linkedin.com': '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>',
     'github.com': '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/></svg>',
     'instagram.com': '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C8.74 0 8.333.015 7.053.072 5.775.132 4.905.333 4.14.63c-.789.306-1.459.717-2.126 1.384S.935 3.35.63 4.14C.333 4.905.131 5.775.072 7.053.012 8.333 0 8.74 0 12s.015 3.667.072 4.947c.06 1.277.261 2.148.558 2.913.306.788.717 1.459 1.384 2.126.667.666 1.336 1.079 2.126 1.384.766.296 1.636.499 2.913.558C8.333 23.988 8.74 24 12 24s3.667-.015 4.947-.072c1.277-.06 2.148-.262 2.913-.558.788-.306 1.459-.718 2.126-1.384.666-.667 1.079-1.335 1.384-2.126.296-.765.499-1.636.558-2.913.06-1.28.072-1.687.072-4.947s-.015-3.667-.072-4.947c-.06-1.277-.262-2.149-.558-2.913-.306-.789-.718-1.459-1.384-2.126C21.319 1.347 20.651.935 19.86.63c-.765-.297-1.636-.499-2.913-.558C15.667.012 15.26 0 12 0zm0 2.16c3.203 0 3.585.016 4.85.071 1.17.055 1.805.249 2.227.415.562.217.96.477 1.382.896.419.42.679.819.896 1.381.164.422.36 1.057.413 2.227.057 1.266.07 1.646.07 4.85s-.015 3.585-.074 4.85c-.061 1.17-.256 1.805-.421 2.227-.224.562-.479.96-.899 1.382-.419.419-.824.679-1.38.896-.42.164-1.065.36-2.235.413-1.274.057-1.649.07-4.859.07-3.211 0-3.586-.015-4.859-.074-1.171-.061-1.816-.256-2.236-.421-.569-.224-.96-.479-1.379-.899-.421-.419-.69-.824-.9-1.38-.165-.42-.359-1.065-.42-2.235-.045-1.26-.061-1.649-.061-4.844 0-3.196.016-3.586.061-4.861.061-1.17.255-1.814.42-2.234.21-.57.479-.96.9-1.381.419-.419.81-.689 1.379-.898.42-.166 1.051-.361 2.221-.421 1.275-.045 1.65-.06 4.859-.06l.045.03zm0 3.678a6.162 6.162 0 100 12.324 6.162 6.162 0 100-12.324zM12 16c-2.21 0-4-1.79-4-4s1.79-4 4-4 4 1.79 4 4-1.79 4-4 4zm7.846-10.405a1.441 1.441 0 11-2.88 0 1.441 1.441 0 012.88 0z"/></svg>',
-    'youtube.com': '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 00-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 00.502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 002.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 002.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>',
   };
 
   function getLinkIcon(url) {
-    for (const [domain, svg] of Object.entries(socialIcons)) {
-      if (url.includes(domain)) return svg;
-    }
-    return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>';
+    for (const [domain, svg] of Object.entries(socialIcons)) { if (url.includes(domain)) return svg; }
+    return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>';
   }
 
   const bioHtml = bio ? `<p class="bio">${escapeHtml(bio)}</p>` : '';
   const linksHtml = links.length > 0 ? `<div class="social-row">${links.map(l => `<a class="social-icon" href="${escapeHtml(l.url)}" target="_blank" rel="noopener">${getLinkIcon(l.url)}</a>`).join('')}</div>` : '';
-
   const pinsHtml = pinnedFiles.length > 0 ? `
     <div class="section-label">Pinned</div>
-    <div class="pinned-list">
-      ${pinnedFiles.map(f => `
-        <div class="pinned-item" onclick="window.location='/api/pin/${f.id}/download'">
-          <div class="pin-icon">${escapeHtml((f.display_name || f.filename).split('.').pop().toUpperCase().slice(0,3))}</div>
-          <div class="pin-details">
-            <div class="pin-name">${escapeHtml(f.display_name || f.filename)}</div>
-            <div class="pin-meta">${formatBytes(f.file_size)}</div>
-          </div>
-          <div class="pin-dl"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></div>
-        </div>
-      `).join('')}
-    </div>
-  ` : '';
+    <div class="pinned-list">${pinnedFiles.map(f => `
+      <a class="pinned-item" href="/api/pin/${f.id}/download">
+        <div class="pin-icon">${escapeHtml((f.display_name || f.filename).split('.').pop().toUpperCase().slice(0,3))}</div>
+        <div class="pin-details"><div class="pin-name">${escapeHtml(f.display_name || f.filename)}</div><div class="pin-meta">${formatBytes(f.file_size)}</div></div>
+        <div class="pin-dl"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></div>
+      </a>`).join('')}
+    </div>` : '';
 
-  const hasReceiveLink = stmts.findActiveReceiveLink.get(user.id);
+  const userName = escapeHtml(user.name || user.username);
 
   return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>${escapeHtml(user.name || user.username)} — Stickr</title>
+<title>${userName} — Stickr</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:-apple-system,system-ui,sans-serif;background:#08080c;color:#e8e8f0;min-height:100vh}
@@ -819,7 +813,7 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 .drop-hint p{font-size:12px;color:#555570}
 .section-label{font-size:11px;font-weight:600;color:#555570;text-transform:uppercase;letter-spacing:2px;margin-bottom:12px}
 .pinned-list{display:flex;flex-direction:column;gap:8px;margin-bottom:32px}
-.pinned-item{display:flex;align-items:center;gap:12px;padding:12px 14px;background:#101018;border:1px solid #1a1a28;border-radius:12px;cursor:pointer;transition:all .2s;text-decoration:none}
+.pinned-item{display:flex;align-items:center;gap:12px;padding:12px 14px;background:#101018;border:1px solid #1a1a28;border-radius:12px;cursor:pointer;transition:all .2s;text-decoration:none;color:#e8e8f0}
 .pinned-item:hover{border-color:rgba(108,92,231,0.3);transform:translateX(3px)}
 .pin-icon{width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;font-family:'SF Mono',monospace;flex-shrink:0;background:rgba(108,92,231,0.1);color:#a29bfe}
 .pin-details{flex:1;min-width:0}
@@ -830,7 +824,6 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 .footer-logo{font-size:16px;font-weight:800;margin-bottom:4px;background:linear-gradient(135deg,#6c5ce7,#a29bfe);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
 .footer p{font-size:11px;color:#555570}
 .footer a{color:#a29bfe;text-decoration:none;font-weight:600}
-/* Drop overlay */
 .drop-target{display:none;position:fixed;inset:0;z-index:100;align-items:center;justify-content:center;background:rgba(8,8,12,0.92);backdrop-filter:blur(20px);border:3px dashed transparent}
 .drop-target.active{display:flex;border-color:#6c5ce7;animation:borderPulse 1.5s ease infinite}
 @keyframes borderPulse{0%,100%{border-color:#6c5ce7}50%{border-color:#a29bfe}}
@@ -838,25 +831,16 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 .drop-target-icon{width:80px;height:80px;border-radius:50%;background:rgba(108,92,231,0.15);display:flex;align-items:center;justify-content:center;margin:0 auto 20px;color:#a29bfe}
 .drop-target h2{font-size:24px;font-weight:700;margin-bottom:8px}
 .drop-target p{color:#555570;font-size:14px}
-/* Passcode modal */
-.passcode-overlay{display:none;position:fixed;inset:0;background:rgba(8,8,12,0.85);backdrop-filter:blur(12px);align-items:center;justify-content:center;z-index:200}
-.passcode-overlay.active{display:flex}
-.passcode-modal{background:#101018;border:1px solid #1a1a28;border-radius:20px;padding:36px;max-width:360px;width:90%;text-align:center}
-.passcode-modal h3{font-size:20px;font-weight:700;margin-bottom:6px}
-.passcode-modal>p{font-size:13px;color:#555570;margin-bottom:20px}
+.upload-modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(8,8,12,0.85);backdrop-filter:blur(12px);z-index:200}
+.upload-modal.active{display:flex}
+.upload-modal-inner{background:#101018;border:1px solid #1a1a28;border-radius:20px;padding:36px;max-width:360px;width:90%;text-align:center}
 .file-preview{display:flex;align-items:center;gap:10px;padding:10px 14px;background:rgba(108,92,231,0.08);border-radius:10px;margin-bottom:20px;font-size:13px}
 .file-preview .fname{flex:1;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .file-preview .fsize{color:#555570;font-size:12px;flex-shrink:0}
-.passcode-inputs{display:flex;justify-content:center;gap:8px;margin-bottom:20px}
-.passcode-digit{width:42px;height:52px;background:#08080c;border:1.5px solid #1a1a28;border-radius:10px;color:#e8e8f0;font-size:20px;font-weight:700;text-align:center;font-family:'SF Mono',monospace;outline:none;transition:border-color .2s;text-transform:lowercase}
-.passcode-digit:focus{border-color:#6c5ce7;box-shadow:0 0 0 3px rgba(108,92,231,0.15)}
-.passcode-send{width:100%;padding:14px;background:linear-gradient(135deg,#6c5ce7,#a29bfe);color:white;border:none;border-radius:12px;font-family:inherit;font-size:15px;font-weight:600;cursor:pointer;transition:all .2s;margin-bottom:10px}
-.passcode-send:disabled{opacity:.5;cursor:not-allowed}
-.passcode-send:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 4px 20px rgba(108,92,231,0.3)}
-.passcode-cancel{background:none;border:none;color:#555570;font-family:inherit;font-size:13px;cursor:pointer}
-.passcode-cancel:hover{color:#e8e8f0}
-.passcode-error{color:#e05555;font-size:12px;margin-top:-12px;margin-bottom:12px;display:none}
-.passcode-error.show{display:block}
+.upload-btn{width:100%;padding:14px;background:linear-gradient(135deg,#6c5ce7,#a29bfe);color:white;border:none;border-radius:12px;font-family:inherit;font-size:15px;font-weight:600;cursor:pointer;transition:all .2s;margin-bottom:10px}
+.upload-btn:hover{transform:translateY(-1px);box-shadow:0 4px 20px rgba(108,92,231,0.3)}
+.cancel-btn{background:none;border:none;color:#555570;font-family:inherit;font-size:13px;cursor:pointer}
+.cancel-btn:hover{color:#e8e8f0}
 .progress-bar-bg{width:100%;height:6px;background:#1a1a28;border-radius:3px;overflow:hidden;margin:16px 0 12px}
 .progress-bar-fill{height:100%;background:linear-gradient(90deg,#6c5ce7,#a29bfe);border-radius:3px;width:0%;transition:width .3s}
 .upload-state{display:none;text-align:center;padding:16px 0}
@@ -865,125 +849,99 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 .success-check{width:56px;height:56px;border-radius:50%;background:rgba(0,210,160,0.12);display:flex;align-items:center;justify-content:center;margin:0 auto 14px;color:#00d2a0}
 .send-another{margin-top:16px;background:none;border:1px solid #1a1a28;color:#8888a8;padding:10px 24px;border-radius:10px;font-family:inherit;font-size:13px;cursor:pointer}
 .send-another:hover{border-color:#6c5ce7;color:#e8e8f0}
-.no-drop{text-align:center;padding:20px;color:#555570;font-size:13px;margin-bottom:32px}
+.upload-error{color:#e05555;font-size:13px;margin-top:12px;display:none}
+.upload-error.show{display:block}
+.no-upload{text-align:center;padding:20px;color:#555570;font-size:13px;margin-bottom:32px}
 @keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
 .profile{animation:fadeUp .5s ease both}
 .drop-hint{animation:fadeUp .5s ease .1s both}
 .pinned-list{animation:fadeUp .5s ease .2s both}
 </style></head><body>
-<div class="drop-target" id="drop-target">
+${canUpload ? `<div class="drop-target" id="drop-target">
   <div class="drop-target-content">
     <div class="drop-target-icon"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
-    <h2>Drop to send to ${escapeHtml(user.name || user.username)}</h2>
-    <p>Up to 100 MB · Passkey required</p>
+    <h2>Drop to send to ${userName}</h2>
+    <p>Up to 100 MB</p>
   </div>
 </div>
-<div class="passcode-overlay" id="passcode-overlay">
-  <div class="passcode-modal">
-    <div id="passcode-form">
-      <h3>Enter passkey</h3>
-      <p>${escapeHtml(user.name || user.username)} will share the passkey with you</p>
+<div class="upload-modal" id="upload-modal">
+  <div class="upload-modal-inner">
+    <div id="upload-form">
+      <h3 style="font-size:20px;font-weight:700;margin-bottom:16px">Send to ${userName}</h3>
       <div class="file-preview" id="file-preview">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#a29bfe" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
         <span class="fname" id="p-fname"></span>
         <span class="fsize" id="p-fsize"></span>
       </div>
-      <div class="passcode-inputs" id="passcode-inputs">
-        <input class="passcode-digit" type="text" maxlength="1" autocapitalize="none" autocomplete="off">
-        <input class="passcode-digit" type="text" maxlength="1" autocapitalize="none" autocomplete="off">
-        <input class="passcode-digit" type="text" maxlength="1" autocapitalize="none" autocomplete="off">
-        <input class="passcode-digit" type="text" maxlength="1" autocapitalize="none" autocomplete="off">
-        <input class="passcode-digit" type="text" maxlength="1" autocapitalize="none" autocomplete="off">
-        <input class="passcode-digit" type="text" maxlength="1" autocapitalize="none" autocomplete="off">
-      </div>
-      <div class="passcode-error" id="passcode-error">Incorrect passcode</div>
-      <button class="passcode-send" id="send-btn" disabled>Send file</button>
-      <button class="passcode-cancel" onclick="document.getElementById('passcode-overlay').classList.remove('active')">Cancel</button>
+      <button class="upload-btn" id="upload-btn">Send file</button>
+      <button class="cancel-btn" onclick="document.getElementById('upload-modal').classList.remove('active')">Cancel</button>
+      <div class="upload-error" id="upload-error"></div>
     </div>
     <div class="upload-state" id="upload-progress">
-      <p>Sending to ${escapeHtml(user.name || user.username)}...</p>
+      <p>Sending to ${userName}...</p>
       <div class="progress-bar-bg"><div class="progress-bar-fill" id="progress-fill"></div></div>
       <p id="progress-text">0%</p>
     </div>
     <div class="upload-state" id="upload-success">
       <div class="success-check"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg></div>
       <h3 style="font-size:18px;margin-bottom:4px">Sent!</h3>
-      <p>${escapeHtml(user.name || user.username)} will find it in their inbox</p>
-      <button class="send-another" onclick="resetAll()">Send another file</button>
+      <p>${userName} will find it in their inbox</p>
+      <button class="send-another" onclick="resetUpload()">Send another file</button>
     </div>
   </div>
-</div>
+</div>` : ''}
 <div class="page">
   <div class="profile">
     <div class="avatar-ring">${user.picture ? `<img class="avatar" src="${escapeHtml(user.picture)}" alt="">` : '<div class="avatar"></div>'}</div>
-    <div class="name">${escapeHtml(user.name || user.username)}</div>
+    <div class="name">${userName}</div>
     <div class="handle">@${escapeHtml(user.username)}</div>
     ${bioHtml}
     ${linksHtml}
   </div>
-  ${hasReceiveLink ? `
-  <div class="drop-hint" id="drop-hint" onclick="document.getElementById('recv-file-input').click()">
+  ${canUpload ? `<div class="drop-hint" id="drop-hint" onclick="document.getElementById('recv-file-input').click()">
     <input type="file" id="recv-file-input" style="display:none">
     <div class="drop-hint-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
-    <h3>Send files to ${escapeHtml(user.name || user.username)}</h3>
+    <h3>Send files to ${userName}</h3>
     <p>Drop here or click to browse · up to 100 MB</p>
-  </div>` : `<div class="no-drop">File receiving is not enabled for this profile</div>`}
+  </div>` : ''}
   ${pinsHtml}
   <div class="footer">
     <div class="footer-logo">Stickr</div>
     <p>One link. Share everything. <a href="/">Get yours</a></p>
   </div>
 </div>
-${hasReceiveLink ? `<script>
-const USERNAME = '${escapeHtml(user.username)}';
-const MAX_RECV = 100*1024*1024;
-let pendingFile = null;
-let verifiedLinkId = null;
-let dragCounter = 0;
-const dropTarget = document.getElementById('drop-target');
-const overlay = document.getElementById('passcode-overlay');
-const digits = document.querySelectorAll('.passcode-digit');
-const sendBtn = document.getElementById('send-btn');
+${canUpload ? `<script>
+const LINK_ID='${validKey}';
+const MAX_RECV=100*1024*1024;
+let pendingFile=null;
+let dragCounter=0;
+const dropTarget=document.getElementById('drop-target');
+const modal=document.getElementById('upload-modal');
 
 document.addEventListener('dragenter',e=>{e.preventDefault();dragCounter++;dropTarget.classList.add('active')});
 document.addEventListener('dragleave',e=>{e.preventDefault();dragCounter--;if(dragCounter<=0){dragCounter=0;dropTarget.classList.remove('active')}});
 document.addEventListener('dragover',e=>e.preventDefault());
-document.addEventListener('drop',e=>{e.preventDefault();dragCounter=0;dropTarget.classList.remove('active');const f=e.dataTransfer.files[0];if(f)showPasscode(f)});
-document.getElementById('recv-file-input').addEventListener('change',e=>{const f=e.target.files[0];e.target.value='';if(f)showPasscode(f)});
+document.addEventListener('drop',e=>{e.preventDefault();dragCounter=0;dropTarget.classList.remove('active');const f=e.dataTransfer.files[0];if(f)showUpload(f)});
+document.getElementById('recv-file-input').addEventListener('change',e=>{const f=e.target.files[0];e.target.value='';if(f)showUpload(f)});
 
-function showPasscode(file){
+function showUpload(file){
   if(file.size>MAX_RECV){alert('File too large (max 100 MB)');return}
-  pendingFile=file;verifiedLinkId=null;
+  pendingFile=file;
   document.getElementById('p-fname').textContent=file.name;
   document.getElementById('p-fsize').textContent=fmtSize(file.size);
-  digits.forEach(d=>d.value='');sendBtn.disabled=true;
-  document.getElementById('passcode-error').classList.remove('show');
-  document.getElementById('passcode-form').style.display='';
+  document.getElementById('upload-form').style.display='';
   document.getElementById('upload-progress').classList.remove('active');
   document.getElementById('upload-success').classList.remove('active');
-  overlay.classList.add('active');
-  setTimeout(()=>digits[0].focus(),100);
+  document.getElementById('upload-error').classList.remove('show');
+  modal.classList.add('active');
 }
 
-digits.forEach((d,i)=>{
-  d.addEventListener('input',()=>{if(d.value&&i<digits.length-1)digits[i+1].focus();sendBtn.disabled=Array.from(digits).some(x=>!x.value)});
-  d.addEventListener('keydown',e=>{if(e.key==='Backspace'&&!d.value&&i>0)digits[i-1].focus();if(e.key==='Enter'&&!sendBtn.disabled)doSend()});
-});
+document.getElementById('upload-btn').addEventListener('click',doUpload);
+modal.addEventListener('click',e=>{if(e.target===modal){modal.classList.remove('active');pendingFile=null}});
 
-sendBtn.addEventListener('click',doSend);
-overlay.addEventListener('click',e=>{if(e.target===overlay){overlay.classList.remove('active');pendingFile=null}});
-
-async function doSend(){
-  const code=Array.from(digits).map(d=>d.value).join('');
-  if(!verifiedLinkId){
-    try{
-      const r=await fetch('/api/receive-link/verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:USERNAME,passkey:code})});
-      const d=await r.json();
-      if(!r.ok){document.getElementById('passcode-error').classList.add('show');document.getElementById('passcode-error').textContent=d.error||'Invalid passkey';return}
-      verifiedLinkId=d.linkId;
-    }catch{document.getElementById('passcode-error').classList.add('show');return}
-  }
-  document.getElementById('passcode-form').style.display='none';
+async function doUpload(){
+  if(!pendingFile)return;
+  document.getElementById('upload-form').style.display='none';
   const prog=document.getElementById('upload-progress');prog.classList.add('active');
   const fill=document.getElementById('progress-fill');const txt=document.getElementById('progress-text');
   try{
@@ -993,7 +951,7 @@ async function doSend(){
       xhr.addEventListener('load',()=>{if(xhr.status>=200&&xhr.status<300)resolve(JSON.parse(xhr.responseText));else{try{reject(JSON.parse(xhr.responseText))}catch{reject({error:'Upload failed'})}}});
       xhr.addEventListener('error',()=>reject({error:'Network error'}));
       xhr.open('POST','/api/receive/upload');
-      xhr.setRequestHeader('X-Receive-Link-Id',verifiedLinkId);
+      xhr.setRequestHeader('X-Receive-Link-Id',LINK_ID);
       xhr.setRequestHeader('X-Filename',encodeURIComponent(pendingFile.name));
       xhr.setRequestHeader('X-Mime-Type',pendingFile.type||'application/octet-stream');
       xhr.send(pendingFile);
@@ -1002,21 +960,18 @@ async function doSend(){
     document.getElementById('upload-success').classList.add('active');
   }catch(err){
     prog.classList.remove('active');
-    document.getElementById('passcode-form').style.display='';
-    document.getElementById('passcode-error').textContent=err.error||'Upload failed';
-    document.getElementById('passcode-error').classList.add('show');
+    document.getElementById('upload-form').style.display='';
+    document.getElementById('upload-error').textContent=err.error||'Upload failed';
+    document.getElementById('upload-error').classList.add('show');
   }
 }
 
-function resetAll(){
-  overlay.classList.remove('active');pendingFile=null;verifiedLinkId=null;
-  document.getElementById('progress-fill').style.width='0%';
-}
-
+function resetUpload(){modal.classList.remove('active');pendingFile=null;document.getElementById('progress-fill').style.width='0%'}
 function fmtSize(b){if(b<1024)return b+' B';if(b<1048576)return(b/1024).toFixed(1)+' KB';return(b/1048576).toFixed(1)+' MB'}
 <\/script>` : ''}
 </body></html>`;
 }
+
 // Create a batch for grouping multiple files
 app.post('/api/batch/create', rateLimit('batch', 20, 60 * 1000), (req, res) => {
   const user = getUserFromCookie(req);
@@ -1706,8 +1661,18 @@ app.get('/:username', (req, res) => {
   const user = stmts.findUserByUsername.get(username);
   if (!user) return res.status(404).send('Not found');
 
+  // Validate upload key if provided
+  const key = req.query.key || null;
+  let validKey = null;
+  if (key) {
+    const link = stmts.findReceiveLinkById.get(key);
+    if (link && link.active && link.user_id === user.id && new Date(link.expires_at) > new Date()) {
+      validKey = key;
+    }
+  }
+
   const pinnedFiles = stmts.findPinnedFilesByUsername.all(username);
-  res.send(getProfilePage(user, pinnedFiles));
+  res.send(getProfilePage(user, pinnedFiles, validKey));
 });
 
 const PORT = process.env.PORT || 3000;
