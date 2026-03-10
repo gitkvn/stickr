@@ -4073,6 +4073,8 @@ function showInbox() {
   document.getElementById('home-view').classList.remove('active');
   document.getElementById('link-view').classList.remove('active');
   document.getElementById('inbox-view').classList.add('active');
+  // Clear badge
+  document.getElementById('inbox-badge').style.display = 'none';
   loadInbox();
 }
 
