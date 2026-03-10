@@ -484,7 +484,7 @@ app.post('/api/receive-link/create', (req, res) => {
   stmts.deactivateUserReceiveLinks.run(user.id);
 
   const id = crypto.randomBytes(8).toString('hex');
-  const passkey = String(Math.floor(1000 + Math.random() * 9000));
+  const passkey = crypto.randomBytes(3).toString('hex'); // 6-char hex
   const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(); // 30 days
 
   stmts.createReceiveLink.run(id, user.id, passkey, expiresAt);
@@ -498,10 +498,10 @@ app.post('/api/receive-link/verify', (req, res) => {
   if (!username || !passkey) return res.status(400).json({ error: 'Missing username or passkey' });
 
   const link = stmts.findReceiveLinkByUserAndPasskey.get(username, passkey);
-  if (!link) return res.status(403).json({ error: 'Invalid passcode' });
+  if (!link) return res.status(403).json({ error: 'Invalid passkey' });
 
   if (new Date(link.expires_at) < new Date()) {
-    return res.status(410).json({ error: 'Passcode expired' });
+    return res.status(410).json({ error: 'Passkey expired' });
   }
 
   res.json({ valid: true, linkId: link.id });
@@ -557,6 +557,9 @@ app.post('/api/receive/upload', rateLimit('receive-upload', 10, 60 * 1000), asyn
     await upload.done();
 
     stmts.createReceivedFile.run(token, link.user_id, filename, bytesReceived, mimeType, r2Key, expiresAt, link.id);
+
+    // Push inbox notification via WebSocket
+    notifyInbox(link.user_id);
 
     res.json({ success: true });
   } catch (err) {
@@ -822,8 +825,8 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 .file-preview{display:flex;align-items:center;gap:10px;padding:10px 14px;background:rgba(108,92,231,0.08);border-radius:10px;margin-bottom:20px;font-size:13px}
 .file-preview .fname{flex:1;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .file-preview .fsize{color:#555570;font-size:12px;flex-shrink:0}
-.passcode-inputs{display:flex;justify-content:center;gap:10px;margin-bottom:20px}
-.passcode-digit{width:52px;height:60px;background:#08080c;border:1.5px solid #1a1a28;border-radius:12px;color:#e8e8f0;font-size:24px;font-weight:700;text-align:center;font-family:'SF Mono',monospace;outline:none;transition:border-color .2s}
+.passcode-inputs{display:flex;justify-content:center;gap:8px;margin-bottom:20px}
+.passcode-digit{width:42px;height:52px;background:#08080c;border:1.5px solid #1a1a28;border-radius:10px;color:#e8e8f0;font-size:20px;font-weight:700;text-align:center;font-family:'SF Mono',monospace;outline:none;transition:border-color .2s;text-transform:lowercase}
 .passcode-digit:focus{border-color:#6c5ce7;box-shadow:0 0 0 3px rgba(108,92,231,0.15)}
 .passcode-send{width:100%;padding:14px;background:linear-gradient(135deg,#6c5ce7,#a29bfe);color:white;border:none;border-radius:12px;font-family:inherit;font-size:15px;font-weight:600;cursor:pointer;transition:all .2s;margin-bottom:10px}
 .passcode-send:disabled{opacity:.5;cursor:not-allowed}
@@ -850,24 +853,26 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
   <div class="drop-target-content">
     <div class="drop-target-icon"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
     <h2>Drop to send to ${escapeHtml(user.name || user.username)}</h2>
-    <p>Up to 100 MB · Passcode required</p>
+    <p>Up to 100 MB · Passkey required</p>
   </div>
 </div>
 <div class="passcode-overlay" id="passcode-overlay">
   <div class="passcode-modal">
     <div id="passcode-form">
-      <h3>Enter passcode</h3>
-      <p>${escapeHtml(user.name || user.username)} will share the passcode with you</p>
+      <h3>Enter passkey</h3>
+      <p>${escapeHtml(user.name || user.username)} will share the passkey with you</p>
       <div class="file-preview" id="file-preview">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#a29bfe" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
         <span class="fname" id="p-fname"></span>
         <span class="fsize" id="p-fsize"></span>
       </div>
       <div class="passcode-inputs" id="passcode-inputs">
-        <input class="passcode-digit" type="text" maxlength="1" inputmode="numeric">
-        <input class="passcode-digit" type="text" maxlength="1" inputmode="numeric">
-        <input class="passcode-digit" type="text" maxlength="1" inputmode="numeric">
-        <input class="passcode-digit" type="text" maxlength="1" inputmode="numeric">
+        <input class="passcode-digit" type="text" maxlength="1" autocapitalize="none" autocomplete="off">
+        <input class="passcode-digit" type="text" maxlength="1" autocapitalize="none" autocomplete="off">
+        <input class="passcode-digit" type="text" maxlength="1" autocapitalize="none" autocomplete="off">
+        <input class="passcode-digit" type="text" maxlength="1" autocapitalize="none" autocomplete="off">
+        <input class="passcode-digit" type="text" maxlength="1" autocapitalize="none" autocomplete="off">
+        <input class="passcode-digit" type="text" maxlength="1" autocapitalize="none" autocomplete="off">
       </div>
       <div class="passcode-error" id="passcode-error">Incorrect passcode</div>
       <button class="passcode-send" id="send-btn" disabled>Send file</button>
@@ -952,7 +957,7 @@ async function doSend(){
     try{
       const r=await fetch('/api/receive-link/verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:USERNAME,passkey:code})});
       const d=await r.json();
-      if(!r.ok){document.getElementById('passcode-error').classList.add('show');document.getElementById('passcode-error').textContent=d.error||'Invalid passcode';return}
+      if(!r.ok){document.getElementById('passcode-error').classList.add('show');document.getElementById('passcode-error').textContent=d.error||'Invalid passkey';return}
       verifiedLinkId=d.linkId;
     }catch{document.getElementById('passcode-error').classList.add('show');return}
   }
@@ -1504,6 +1509,17 @@ function cleanupExistingRoom(ws) {
   }
   ws.roomId = null;
   ws.role = null;
+}
+
+// Push inbox notification to a user's active WebSocket connections
+function notifyInbox(userId) {
+  const files = stmts.findReceivedFiles.all(userId);
+  const count = files.filter(f => new Date(f.expires_at) > new Date()).length;
+  wss.clients.forEach((ws) => {
+    if (ws.user && ws.user.id === userId && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'inbox-update', count }));
+    }
+  });
 }
 
 // ═══════════════════════════════════════════

@@ -1909,7 +1909,7 @@ header {
           <div class="profile-menu-divider"></div>
           <div class="profile-menu-section">
             <div class="profile-menu-item">
-              <span class="profile-menu-label">Receive passcode</span>
+              <span class="profile-menu-label">Receive passkey</span>
               <button class="profile-menu-small-btn" onclick="event.stopPropagation();generatePasscode();" id="passcode-gen-btn">Generate</button>
             </div>
             <div id="passcode-display" style="display:none;margin-top:8px;">
@@ -2028,7 +2028,7 @@ header {
       </button>
     </div>
     <div class="inbox-list" id="inbox-list">
-      <div class="inbox-empty">No files received yet. Share your profile link and passcode to receive files.</div>
+      <div class="inbox-empty">No files received yet. Share your profile link and passkey to receive files.</div>
     </div>
   </div>
 
@@ -2375,6 +2375,13 @@ function handleSignalingMessage(msg) {
     case 'session-token':
       sessionToken = msg.token;
       break;
+
+    case 'inbox-update': {
+      const badge = document.getElementById('inbox-badge');
+      if (msg.count > 0) { badge.textContent = msg.count; badge.style.display = ''; }
+      else { badge.style.display = 'none'; }
+      break;
+    }
 
     case 'room-created':
       myPeerId = msg.peerId;
@@ -4082,7 +4089,7 @@ async function loadInbox() {
     const files = await res.json();
     document.getElementById('inbox-count-label').textContent = files.length + ' file' + (files.length !== 1 ? 's' : '');
     if (files.length === 0) {
-      list.innerHTML = '<div class="inbox-empty">No files received yet. Share your profile link and passcode to receive files.</div>';
+      list.innerHTML = '<div class="inbox-empty">No files received yet. Share your profile link and passkey to receive files.</div>';
       return;
     }
     list.innerHTML = files.map(f => {
@@ -4113,7 +4120,7 @@ async function deleteInboxFile(token) {
       const list = document.getElementById('inbox-list');
       setTimeout(() => {
         if (!list.querySelector('.inbox-file-item')) {
-          list.innerHTML = '<div class="inbox-empty">No files received yet. Share your profile link and passcode to receive files.</div>';
+          list.innerHTML = '<div class="inbox-empty">No files received yet. Share your profile link and passkey to receive files.</div>';
           document.getElementById('inbox-count-label').textContent = '0 files';
         } else {
           const count = list.querySelectorAll('.inbox-file-item').length;
@@ -4161,13 +4168,13 @@ function getExpiresIn(dateStr) {
 async function generatePasscode() {
   try {
     const res = await fetch('/api/receive-link/create', { method: 'POST' });
-    if (!res.ok) { const err = await res.json(); showToast(err.error || 'Failed to generate passcode'); return; }
+    if (!res.ok) { const err = await res.json(); showToast(err.error || 'Failed to generate passkey'); return; }
     const data = await res.json();
     document.getElementById('passcode-value').textContent = data.passkey;
     document.getElementById('passcode-display').style.display = 'block';
     document.getElementById('passcode-gen-btn').textContent = 'Regenerate';
-    showToast('Passcode generated');
-  } catch { showToast('Failed to generate passcode'); }
+    showToast('Passkey generated');
+  } catch { showToast('Failed to generate passkey'); }
 }
 
 function copyPasscode() {
