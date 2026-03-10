@@ -2401,7 +2401,7 @@ header {
   </header>
 
   <!-- ═══ HOME VIEW ═══ -->
-  <div id="home-view" class="view home-view active">
+  <div id="home-view" class="view home-view active" style="opacity:0;transition:opacity 0.2s;">
     <!-- Signed-in dashboard (hidden by default) -->
     <div class="signed-in-home" id="signed-in-hero" style="display:none;">
       <div class="greeting">
@@ -5306,7 +5306,9 @@ async function checkAuth() {
 function updateUsageDisplay() {} // No-op — balance system removed
 
 // Check auth on page load
-checkAuth();
+checkAuth().finally(() => {
+  document.getElementById('home-view').style.opacity = '1';
+});
 
 // ─── Auto-join from URL hash ───
 window.addEventListener('load', () => {
