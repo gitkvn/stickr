@@ -23,7 +23,7 @@ const R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY;
 const R2_BUCKET_NAME = process.env.R2_BUCKET_NAME || 'stickr-files';
 const ASYNC_FILE_EXPIRY = 24 * 60 * 60 * 1000; // 24 hours
 const ASYNC_THRESHOLD = 25 * 1024 * 1024; // 25MB
-const MAX_FILE_SIZE = 250 * 1024 * 1024; // 250MB per file (free tier)
+const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB per file (free tier)
 
 let s3 = null;
 if (R2_ACCOUNT_ID && R2_ACCESS_KEY_ID && R2_SECRET_ACCESS_KEY) {
@@ -528,21 +528,21 @@ app.post('/api/receive/upload', rateLimit('receive-upload', 10, 60 * 1000), asyn
   if (!link || !link.active) return res.status(403).json({ error: 'Invalid receive link' });
   if (new Date(link.expires_at) < new Date()) return res.status(410).json({ error: 'Link expired' });
 
-  const MAX_RECEIVE_SIZE = 100 * 1024 * 1024; // 100MB for received files
-  if (declaredSize > MAX_RECEIVE_SIZE) {
-    return res.status(413).json({ error: 'File too large (max 100 MB)' });
+  // Use global MAX_FILE_SIZE for receive uploads too
+  if (declaredSize > MAX_FILE_SIZE) {
+    return res.status(413).json({ error: 'file_too_large', maxSize: MAX_FILE_SIZE });
   }
 
   const token = crypto.randomBytes(16).toString('hex');
   const r2Key = `received/${link.user_id}/${token}/${sanitizeFilename(filename)}`;
-  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(); // 7 day expiry for received files
+  const expiresAt = new Date(Date.now() + ASYNC_FILE_EXPIRY).toISOString(); // 24hr expiry
 
   let bytesReceived = 0;
   const passthrough = new PassThrough();
 
   req.on('data', (chunk) => {
     bytesReceived += chunk.length;
-    if (bytesReceived > MAX_RECEIVE_SIZE) {
+    if (bytesReceived > MAX_FILE_SIZE) {
       passthrough.destroy(new Error('File too large'));
       req.destroy();
       return;
