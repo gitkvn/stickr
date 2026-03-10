@@ -2432,12 +2432,12 @@ header {
           <div class="stat-value purple" id="home-inbox-count">0</div>
           <div class="stat-label">Inbox</div>
         </div>
-        <div class="quick-stat">
+        <div class="quick-stat" onclick="toggleProfileMenu();setTimeout(()=>{const el=document.getElementById('pin-upload-btn');if(el)el.scrollIntoView({behavior:'smooth',block:'center'})},100);">
           <div class="stat-value" id="home-pin-count">0</div>
           <div class="stat-label">Pinned</div>
         </div>
-        <div class="quick-stat">
-          <div class="stat-value green">Free</div>
+        <div class="quick-stat" onclick="showUpgradePrompt()">
+          <div class="stat-value green" id="home-plan-label">Free</div>
           <div class="stat-label">Plan</div>
         </div>
       </div>
@@ -4759,6 +4759,29 @@ async function checkInboxCount() {
       if (el) el.textContent = files.length;
     }
   } catch {}
+}
+
+function showUpgradePrompt() {
+  // If already Pro, just show info
+  if (currentUser && currentUser.plan === 'pro') {
+    showToastInfo('You\'re on Pro!');
+    return;
+  }
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay active';
+  modal.id = 'upgrade-modal';
+  modal.innerHTML = `
+    <div class="modal" style="text-align:center; max-width:380px;">
+      <h2 style="font-size:22px;margin-bottom:6px;">Upgrade to Pro</h2>
+      <p style="color:var(--text-secondary); font-size:14px; margin-bottom:24px; line-height:1.6;">$1.99/month · Send files up to 2 GB · 7-day link expiry · 10 pinned files · No branding</p>
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <button class="btn btn-primary" style="width:100%;justify-content:center;" disabled>Coming soon</button>
+        <button class="btn btn-secondary" style="width:100%;justify-content:center;" onclick="document.getElementById('upgrade-modal').remove()">Maybe later</button>
+      </div>
+    </div>
+  `;
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
 }
 
 function updateHomeStats() {
