@@ -963,16 +963,16 @@ function getProfilePage(user, pinnedFiles, validKey) {
 
   return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>${userName} — Stickr</title>
-<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'DM Sans',-apple-system,sans-serif;background:#08080c;color:#e8e8f0;min-height:100vh}
+body{font-family:'Outfit',-apple-system,sans-serif;background:#08080c;color:#e8e8f0;min-height:100vh}
 body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse 600px 400px at 30% 15%,rgba(108,92,231,0.05) 0%,transparent 70%),radial-gradient(ellipse 500px 300px at 75% 85%,rgba(0,210,160,0.03) 0%,transparent 70%);pointer-events:none}
 .page{max-width:440px;margin:0 auto;padding:56px 20px 40px;position:relative;z-index:1}
 .profile{text-align:center;margin-bottom:32px}
 .avatar-ring{width:96px;height:96px;border-radius:50%;padding:3px;background:linear-gradient(135deg,#6c5ce7,#a29bfe);display:inline-block;margin-bottom:16px}
 .avatar{width:100%;height:100%;border-radius:50%;object-fit:cover;background:#08080c;border:3px solid #08080c}
-.name{font-family:'Instrument Serif',Georgia,serif;font-size:28px;font-weight:400;letter-spacing:-0.5px;margin-bottom:4px}
+.name{.name{font-size:28px;font-weight:600;letter-spacing:-0.5px;margin-bottom:4px}
 .handle{font-family:'SF Mono','Fira Code',monospace;font-size:13px;color:#555570;margin-bottom:10px}
 .bio{font-size:14px;color:#8888a8;line-height:1.6;max-width:320px;margin:0 auto 14px}
 .social-row{display:flex;justify-content:center;gap:10px;margin-bottom:4px}
@@ -1326,7 +1326,7 @@ function getDownloadPage(file, expired = false) {
 <title>Stickr — File ${expired ? 'Expired' : 'Not Found'}</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'DM Sans',-apple-system,sans-serif;background:#0a0a0f;color:#e8e8f0;min-height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;padding:24px}
+body{font-family:'Outfit',-apple-system,sans-serif;background:#0a0a0f;color:#e8e8f0;min-height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;padding:24px}
 .card{background:#12121a;border:1px solid #2a2a3e;border-radius:16px;padding:48px 36px;max-width:420px;width:100%;text-align:center}
 h1{font-size:24px;margin-bottom:8px}
 p{color:#8888a8;font-size:14px;line-height:1.6;margin-bottom:24px}
@@ -1346,7 +1346,7 @@ p{color:#8888a8;font-size:14px;line-height:1.6;margin-bottom:24px}
 <title>Stickr — Download ${escapeHtml(file.filename)}</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'DM Sans',-apple-system,sans-serif;background:#0a0a0f;color:#e8e8f0;min-height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;padding:24px}
+body{font-family:'Outfit',-apple-system,sans-serif;background:#0a0a0f;color:#e8e8f0;min-height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;padding:24px}
 .card{background:#12121a;border:1px solid #2a2a3e;border-radius:16px;padding:48px 36px;max-width:420px;width:100%;text-align:center}
 h1{font-size:20px;margin-bottom:4px;word-break:break-all}
 .meta{color:#8888a8;font-size:13px;margin-bottom:24px}
@@ -1405,7 +1405,7 @@ function getBatchDownloadPage(batch, files) {
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{--bg:#12121a}
-body{font-family:'DM Sans',-apple-system,sans-serif;background:#0a0a0f;color:#e8e8f0;min-height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;padding:24px}
+body{font-family:'Outfit',-apple-system,sans-serif;background:#0a0a0f;color:#e8e8f0;min-height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;padding:24px}
 .card{background:#12121a;border:1px solid #2a2a3e;border-radius:16px;padding:36px;max-width:480px;width:100%}
 h1{font-size:22px;margin-bottom:4px;text-align:center}
 .meta{color:#8888a8;font-size:13px;text-align:center;margin-bottom:4px}
