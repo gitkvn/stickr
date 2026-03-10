@@ -531,10 +531,9 @@ header {
   justify-content: center;
   padding: 40px 20px;
   gap: 50px;
-  opacity: 0;
-  transition: opacity 0.2s;
+  display: none !important;
 }
-.home-view.ready { opacity: 1; }
+.home-view.active.ready { display: flex !important; }
 
 /* ─── Get a Link View ─── */
 .link-view {
