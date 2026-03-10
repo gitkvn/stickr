@@ -4830,7 +4830,6 @@ function showInstallGuide() {
 }
 
 function showUpgradePrompt() {
-  // If already Pro, just show info
   if (currentUser && currentUser.plan === 'pro') {
     showToastInfo('You\'re on Pro!');
     return;
@@ -4843,13 +4842,35 @@ function showUpgradePrompt() {
       <h2 style="font-size:22px;margin-bottom:6px;">Upgrade to Pro</h2>
       <p style="color:var(--text-secondary); font-size:14px; margin-bottom:24px; line-height:1.6;">$1.99/month · Send files up to 2 GB · 7-day link expiry · 10 pinned files · No branding</p>
       <div style="display:flex;flex-direction:column;gap:10px;">
-        <button class="btn btn-primary" style="width:100%;justify-content:center;" disabled>Coming soon</button>
+        <button class="btn btn-primary" style="width:100%;justify-content:center;" onclick="startCheckout()" id="checkout-btn">Upgrade to Pro — $1.99/mo</button>
         <button class="btn btn-secondary" style="width:100%;justify-content:center;" onclick="document.getElementById('upgrade-modal').remove()">Maybe later</button>
       </div>
     </div>
   `;
   modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
   document.body.appendChild(modal);
+}
+
+async function startCheckout() {
+  const btn = document.getElementById('checkout-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Loading...'; }
+  try {
+    const res = await fetch('/api/checkout/pro', { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) {
+      if (data.error === 'Payments not configured yet') {
+        showToast('Payments coming soon!');
+      } else {
+        showToastError(data.error || 'Checkout failed');
+      }
+      if (btn) { btn.disabled = false; btn.textContent = 'Upgrade to Pro — $1.99/mo'; }
+      return;
+    }
+    window.location.href = data.url;
+  } catch {
+    showToastError('Payment service unavailable');
+    if (btn) { btn.disabled = false; btn.textContent = 'Upgrade to Pro — $1.99/mo'; }
+  }
 }
 
 function updateHomeStats() {
@@ -5231,6 +5252,17 @@ async function checkAuth() {
       // Profile link
       if (currentUser.username) {
         document.getElementById('home-profile-url').textContent = 'getstickr.in/' + currentUser.username;
+      }
+      // Update plan label
+      const planLabel = document.getElementById('home-plan-label');
+      if (planLabel) {
+        if (currentUser.plan === 'pro') {
+          planLabel.textContent = 'Pro';
+          planLabel.classList.remove('green');
+          planLabel.style.color = 'var(--accent-bright)';
+        } else {
+          planLabel.textContent = 'Free';
+        }
       }
       const avatar = document.getElementById('user-avatar');
       if (currentUser.picture) {

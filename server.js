@@ -123,6 +123,12 @@ try { db.exec('ALTER TABLE async_files ADD COLUMN receive_link_id TEXT'); } catc
 try { db.exec('ALTER TABLE users ADD COLUMN username TEXT'); } catch (e) { /* already exists */ }
 try { db.exec('ALTER TABLE users ADD COLUMN profile_data TEXT'); } catch (e) { /* already exists */ }
 try { db.exec('ALTER TABLE users ADD COLUMN last_inbox_seen TEXT'); } catch (e) { /* already exists */ }
+try { db.exec('ALTER TABLE users ADD COLUMN plan TEXT DEFAULT \'free\''); } catch (e) { /* already exists */ }
+try { db.exec('ALTER TABLE users ADD COLUMN plan_expires_at TEXT'); } catch (e) { /* already exists */ }
+try { db.exec('ALTER TABLE users ADD COLUMN dodo_customer_id TEXT'); } catch (e) { /* already exists */ }
+try { db.exec('ALTER TABLE users ADD COLUMN dodo_subscription_id TEXT'); } catch (e) { /* already exists */ }
+try { db.exec('ALTER TABLE users ADD COLUMN transfer_used INTEGER DEFAULT 0'); } catch (e) { /* already exists */ }
+try { db.exec('ALTER TABLE users ADD COLUMN transfer_used_reset TEXT'); } catch (e) { /* already exists */ }
 try { db.exec('ALTER TABLE pinned_files ADD COLUMN display_name TEXT'); } catch (e) { /* already exists */ }
 try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username)'); } catch (e) { /* already exists */ }
 
@@ -174,6 +180,14 @@ const stmts = {
   updateProfileData: db.prepare('UPDATE users SET profile_data = ? WHERE id = ?'),
   updateLastInboxSeen: db.prepare("UPDATE users SET last_inbox_seen = datetime('now') WHERE id = ?"),
   getLastInboxSeen: db.prepare('SELECT last_inbox_seen FROM users WHERE id = ?'),
+  // Plan management
+  updateUserPlan: db.prepare('UPDATE users SET plan = ?, plan_expires_at = ?, dodo_customer_id = ?, dodo_subscription_id = ? WHERE id = ?'),
+  updateUserPlanByDodoCustomer: db.prepare('UPDATE users SET plan = ?, plan_expires_at = ? WHERE dodo_customer_id = ?'),
+  findUserByDodoCustomer: db.prepare('SELECT * FROM users WHERE dodo_customer_id = ?'),
+  findUserByEmail: db.prepare('SELECT * FROM users WHERE email = ?'),
+  getUserPlan: db.prepare('SELECT plan, plan_expires_at, transfer_used, transfer_used_reset FROM users WHERE id = ?'),
+  addTransferUsed: db.prepare('UPDATE users SET transfer_used = transfer_used + ? WHERE id = ?'),
+  resetTransferUsed: db.prepare("UPDATE users SET transfer_used = 0, transfer_used_reset = datetime('now') WHERE id = ?"),
   // Receive link queries
   createReceiveLink: db.prepare('INSERT INTO receive_links (id, user_id, passkey, expires_at) VALUES (?, ?, ?, ?)'),
   deactivateUserReceiveLinks: db.prepare('UPDATE receive_links SET active = 0 WHERE user_id = ?'),
@@ -452,6 +466,8 @@ app.get('/auth/me', (req, res) => {
     picture: user.picture,
     username: user.username,
     profile_data: user.profile_data,
+    plan: isProUser(user.id) ? 'pro' : 'free',
+    planLimits: getUserPlanLimits(user.id),
     receiveLink: (() => {
       const rl = stmts.findActiveReceiveLink.get(user.id);
       if (!rl) return null;
@@ -475,6 +491,162 @@ app.get('/auth/logout', (req, res) => {
 // ═══════════════════════════════════════════
 // ASYNC FILE TRANSFER (R2)
 // ═══════════════════════════════════════════
+
+// ═══════════════════════════════════════════
+// PAYMENTS (Dodo)
+// ═══════════════════════════════════════════
+const DODO_API_KEY = process.env.DODO_PAYMENTS_API_KEY || '';
+const DODO_WEBHOOK_SECRET = process.env.DODO_PAYMENTS_WEBHOOK_SECRET || '';
+const DODO_PRODUCT_ID = process.env.DODO_PRO_PRODUCT_ID || ''; // Pro subscription product ID
+const DODO_ENV = process.env.DODO_PAYMENTS_ENVIRONMENT || 'test_mode';
+const DODO_API_BASE = DODO_ENV === 'live_mode' ? 'https://api.dodopayments.com' : 'https://test.dodopayments.com';
+
+// Create checkout session for Pro subscription
+app.post('/api/checkout/pro', async (req, res) => {
+  const user = getUserFromCookie(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+
+  if (isProUser(user.id)) {
+    return res.status(400).json({ error: 'Already on Pro' });
+  }
+
+  if (!DODO_API_KEY || !DODO_PRODUCT_ID) {
+    return res.status(503).json({ error: 'Payments not configured yet' });
+  }
+
+  try {
+    const baseUrl = getBaseUrl(req);
+    const response = await fetch(`${DODO_API_BASE}/subscriptions`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${DODO_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        payment_link: true,
+        customer: {
+          email: user.email,
+          name: user.name || user.username,
+        },
+        product_id: DODO_PRODUCT_ID,
+        return_url: `${baseUrl}/?upgrade=success`,
+        metadata: {
+          user_id: user.id,
+        },
+      }),
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      console.error('Dodo checkout error:', data);
+      return res.status(500).json({ error: 'Failed to create checkout' });
+    }
+
+    // Store Dodo customer ID if provided
+    if (data.customer && data.customer.customer_id) {
+      stmts.updateUserPlan.run(user.plan || 'free', null, data.customer.customer_id, null, user.id);
+    }
+
+    res.json({ url: data.payment_link });
+  } catch (err) {
+    console.error('Dodo checkout error:', err);
+    res.status(500).json({ error: 'Payment service unavailable' });
+  }
+});
+
+// Dodo webhook handler
+app.post('/api/webhook/dodo', express.raw({ type: 'application/json' }), (req, res) => {
+  if (!DODO_WEBHOOK_SECRET) {
+    console.warn('Dodo webhook received but no secret configured');
+    return res.status(200).send('OK');
+  }
+
+  // Verify webhook signature
+  const webhookId = req.headers['webhook-id'];
+  const webhookTimestamp = req.headers['webhook-timestamp'];
+  const webhookSignature = req.headers['webhook-signature'];
+
+  if (!webhookId || !webhookTimestamp || !webhookSignature) {
+    console.warn('Dodo webhook missing headers');
+    return res.status(400).send('Missing webhook headers');
+  }
+
+  let payload;
+  try {
+    payload = JSON.parse(req.body.toString());
+  } catch {
+    return res.status(400).send('Invalid JSON');
+  }
+
+  console.log('Dodo webhook:', payload.type, JSON.stringify(payload).slice(0, 200));
+
+  const eventType = payload.type || payload.event_type;
+
+  switch (eventType) {
+    case 'subscription.active':
+    case 'subscription.renewed': {
+      const sub = payload.data || payload;
+      const customerId = sub.customer_id || (sub.customer && sub.customer.customer_id);
+      const subscriptionId = sub.subscription_id || sub.id;
+      const userId = sub.metadata && sub.metadata.user_id;
+
+      if (userId) {
+        // Find by user_id from metadata
+        const expiresAt = sub.current_period_end || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+        stmts.updateUserPlan.run('pro', expiresAt, customerId || null, subscriptionId || null, userId);
+        console.log(`Pro activated for user ${userId}`);
+      } else if (customerId) {
+        // Find by Dodo customer ID
+        const user = stmts.findUserByDodoCustomer.get(customerId);
+        if (user) {
+          const expiresAt = sub.current_period_end || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+          stmts.updateUserPlan.run('pro', expiresAt, customerId, subscriptionId || null, user.id);
+          console.log(`Pro activated for user ${user.id} via customer ${customerId}`);
+        }
+      }
+      break;
+    }
+
+    case 'subscription.cancelled':
+    case 'subscription.expired':
+    case 'subscription.failed': {
+      const sub = payload.data || payload;
+      const customerId = sub.customer_id || (sub.customer && sub.customer.customer_id);
+      const userId = sub.metadata && sub.metadata.user_id;
+
+      if (userId) {
+        stmts.updateUserPlan.run('free', null, null, null, userId);
+        console.log(`Pro deactivated for user ${userId}`);
+      } else if (customerId) {
+        stmts.updateUserPlanByDodoCustomer.run('free', null, customerId);
+        console.log(`Pro deactivated for customer ${customerId}`);
+      }
+      break;
+    }
+
+    default:
+      console.log('Dodo webhook unhandled event:', eventType);
+  }
+
+  res.status(200).send('OK');
+});
+
+// Get current plan status
+app.get('/api/plan', (req, res) => {
+  const user = getUserFromCookie(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+
+  const plan = getUserPlanLimits(user.id);
+  const pro = isProUser(user.id);
+  const row = stmts.getUserPlan.get(user.id);
+
+  res.json({
+    plan: pro ? 'pro' : 'free',
+    limits: plan,
+    transferUsed: row ? row.transfer_used : 0,
+    expiresAt: pro && row ? row.plan_expires_at : null,
+  });
+});
 
 // ═══════════════════════════════════════════
 // RECEIVE LINKS + INBOX
@@ -1003,13 +1175,16 @@ app.post('/api/upload', rateLimit('upload', 20, 60 * 1000), async (req, res) => 
     return res.status(400).json({ error: 'Missing filename' });
   }
 
-  if (declaredSize > MAX_FILE_SIZE) {
-    return res.status(413).json({ error: 'file_too_large', maxSize: MAX_FILE_SIZE });
+  // Plan-based file size limit
+  const planLimits = getUserPlanLimits(user.id);
+  const effectiveMaxSize = planLimits.maxFileSize;
+  if (declaredSize > effectiveMaxSize) {
+    return res.status(413).json({ error: 'file_too_large', maxSize: effectiveMaxSize, plan: isProUser(user.id) ? 'pro' : 'free' });
   }
 
   const token = crypto.randomBytes(16).toString('hex');
   const r2Key = `${user.id}/${token}/${sanitizeFilename(filename)}`;
-  const expiresAt = new Date(Date.now() + ASYNC_FILE_EXPIRY).toISOString();
+  const expiresAt = new Date(Date.now() + planLimits.linkExpiry).toISOString();
 
   // Track bytes as they stream through
   let bytesReceived = 0;
@@ -1052,6 +1227,9 @@ app.post('/api/upload', rateLimit('upload', 20, 60 * 1000), async (req, res) => 
     // Track transfer for stats
     const fileId = 'async-' + token;
     try { stmts.createPendingTransfer.run(fileId, user.id, fileSize); } catch {}
+
+    // Track transfer usage against plan limits
+    stmts.addTransferUsed.run(fileSize, user.id);
 
     const host = req.headers.host;
     const protocol = req.headers['x-forwarded-proto'] || 'https';
@@ -1412,6 +1590,43 @@ function formatBytes(bytes) {
   const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
+// Plan limits
+const PLAN_LIMITS = {
+  free: {
+    maxFileSize: 100 * 1024 * 1024,        // 100MB
+    maxTransfer: 1 * 1024 * 1024 * 1024,   // 1GB lifetime
+    linkExpiry: 24 * 60 * 60 * 1000,       // 24 hours
+    maxPins: 3,
+    maxPinSize: 25 * 1024 * 1024,          // 25MB
+    branding: true,
+  },
+  pro: {
+    maxFileSize: 2 * 1024 * 1024 * 1024,   // 2GB
+    maxTransfer: 100 * 1024 * 1024 * 1024, // 100GB/month
+    linkExpiry: 7 * 24 * 60 * 60 * 1000,   // 7 days
+    maxPins: 10,
+    maxPinSize: 100 * 1024 * 1024,         // 100MB
+    branding: false,
+  },
+};
+
+function getUserPlanLimits(userId) {
+  const row = stmts.getUserPlan.get(userId);
+  if (!row || row.plan !== 'pro') return PLAN_LIMITS.free;
+  // Check if Pro has expired
+  if (row.plan_expires_at && new Date(row.plan_expires_at) < new Date()) {
+    return PLAN_LIMITS.free;
+  }
+  return PLAN_LIMITS.pro;
+}
+
+function isProUser(userId) {
+  const row = stmts.getUserPlan.get(userId);
+  if (!row || row.plan !== 'pro') return false;
+  if (row.plan_expires_at && new Date(row.plan_expires_at) < new Date()) return false;
+  return true;
 }
 
 function escapeHtml(str) {
