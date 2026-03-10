@@ -1515,11 +1515,14 @@ function cleanupExistingRoom(ws) {
 function notifyInbox(userId) {
   const files = stmts.findReceivedFiles.all(userId);
   const count = files.filter(f => new Date(f.expires_at) > new Date()).length;
+  let notified = 0;
   wss.clients.forEach((ws) => {
     if (ws.user && ws.user.id === userId && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: 'inbox-update', count }));
+      notified++;
     }
   });
+  console.log(`Inbox notify: userId=${userId}, count=${count}, wsClients=${wss.clients.size}, notified=${notified}`);
 }
 
 // ═══════════════════════════════════════════
