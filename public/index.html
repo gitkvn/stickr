@@ -245,6 +245,35 @@ header {
   transition: border-color 0.2s;
 }
 .user-avatar:hover { border-color: var(--accent); }
+.inbox-btn {
+  position: relative;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 8px;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+}
+.inbox-btn:hover { color: var(--text-primary); background: var(--bg-tertiary); }
+.inbox-badge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  background: var(--accent);
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+}
 .user-name {
   font-size: 13px;
   font-weight: 600;
@@ -680,6 +709,53 @@ header {
 .qr-link-close:hover { color: var(--text-primary); border-color: var(--text-muted); }
 
 /* ─── Inbox View ─── */
+.inbox-view {
+  padding: 40px 20px;
+  max-width: 600px;
+  margin: 0 auto;
+  width: 100%;
+  flex-direction: column;
+  gap: 16px;
+}
+.inbox-count-label {
+  font-size: 13px;
+  color: var(--text-muted);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  padding: 3px 10px;
+  border-radius: 12px;
+}
+.inbox-list { display: flex; flex-direction: column; gap: 8px; }
+.inbox-empty { text-align: center; padding: 40px 20px; color: var(--text-muted); font-size: 14px; }
+.inbox-file-item {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  transition: all 0.2s;
+}
+.inbox-file-item:hover { border-color: var(--accent-glow); }
+.inbox-file-icon {
+  width: 40px; height: 40px; border-radius: 10px;
+  background: var(--bg-tertiary); display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; color: var(--text-muted);
+}
+.inbox-file-details { flex: 1; min-width: 0; }
+.inbox-file-name { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.inbox-file-meta { font-size: 12px; color: var(--text-muted); margin-top: 3px; }
+.inbox-file-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.inbox-action-btn {
+  width: 36px; height: 36px; border-radius: 8px; border: none;
+  display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s;
+}
+.inbox-action-btn.dl { background: var(--accent-glow); color: var(--accent-bright); }
+.inbox-action-btn.dl:hover { background: #6c5ce730; }
+.inbox-action-btn.del { background: #e0555508; color: #e05555; opacity: 0.4; }
+.inbox-action-btn.del:hover { opacity: 1; background: #e0555515; }
+
 .hero {
   text-align: center;
   max-width: 680px;
@@ -1791,6 +1867,10 @@ header {
     <div class="header-right">
       <div class="header-badge">P2P Encrypted</div>
       <div class="user-menu" id="user-menu" style="display:none">
+        <button class="inbox-btn" id="inbox-btn" onclick="showInbox()" title="Inbox">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+          <span class="inbox-badge" id="inbox-badge" style="display:none">0</span>
+        </button>
         <img class="user-avatar" id="user-avatar" src="" alt="" onclick="toggleProfileMenu()">
         <span class="user-name" id="user-name"></span>
         <button class="user-logout" onclick="logout()" title="Sign out">Sign out</button>
@@ -1825,6 +1905,20 @@ header {
             </div>
             <button class="profile-menu-small-btn" onclick="event.stopPropagation();document.getElementById('pin-file-input').click();" id="pin-upload-btn" style="margin-top:8px;width:100%;text-align:center;">+ Add file (max 25 MB)</button>
             <input type="file" id="pin-file-input" style="display:none">
+          </div>
+          <div class="profile-menu-divider"></div>
+          <div class="profile-menu-section">
+            <div class="profile-menu-item">
+              <span class="profile-menu-label">Receive passcode</span>
+              <button class="profile-menu-small-btn" onclick="event.stopPropagation();generatePasscode();" id="passcode-gen-btn">Generate</button>
+            </div>
+            <div id="passcode-display" style="display:none;margin-top:8px;">
+              <div style="display:flex;align-items:center;gap:10px;">
+                <span style="font-family:var(--font-mono);font-size:20px;font-weight:700;letter-spacing:4px;color:var(--accent-bright);" id="passcode-value"></span>
+                <span style="font-size:12px;color:var(--text-muted);cursor:pointer;" onclick="event.stopPropagation();copyPasscode();" id="passcode-copy">Copy</span>
+              </div>
+              <p style="font-size:11px;color:var(--text-muted);margin-top:4px;">Share this with people who want to send you files</p>
+            </div>
           </div>
           <div class="profile-menu-divider"></div>
           <div class="profile-menu-section">
@@ -1919,6 +2013,23 @@ header {
       <span class="footer-sep">·</span>
       <span class="footer-note">Encrypted end-to-end. Fast. Private.</span>
     </footer>
+  </div>
+
+  <!-- ═══ INBOX VIEW ═══ -->
+  <div id="inbox-view" class="view inbox-view">
+    <div class="link-view-header">
+      <div style="display:flex;align-items:center;gap:12px;">
+        <h2>Inbox</h2>
+        <span class="inbox-count-label" id="inbox-count-label"></span>
+      </div>
+      <button class="btn-back" onclick="closeInbox()">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+        Back
+      </button>
+    </div>
+    <div class="inbox-list" id="inbox-list">
+      <div class="inbox-empty">No files received yet. Share your profile link and passcode to receive files.</div>
+    </div>
   </div>
 
   <!-- ═══ GET A LINK VIEW ═══ -->
@@ -3947,6 +4058,134 @@ function hideSigninModal() {
   document.getElementById('signin-modal').classList.remove('active');
 }
 
+// ═══════════════════════════════════════════
+// INBOX
+// ═══════════════════════════════════════════
+function showInbox() {
+  document.getElementById('profile-menu').classList.remove('active');
+  document.getElementById('home-view').classList.remove('active');
+  document.getElementById('link-view').classList.remove('active');
+  document.getElementById('inbox-view').classList.add('active');
+  loadInbox();
+}
+
+function closeInbox() {
+  document.getElementById('inbox-view').classList.remove('active');
+  document.getElementById('home-view').classList.add('active');
+}
+
+async function loadInbox() {
+  const list = document.getElementById('inbox-list');
+  try {
+    const res = await fetch('/api/inbox');
+    if (!res.ok) return;
+    const files = await res.json();
+    document.getElementById('inbox-count-label').textContent = files.length + ' file' + (files.length !== 1 ? 's' : '');
+    if (files.length === 0) {
+      list.innerHTML = '<div class="inbox-empty">No files received yet. Share your profile link and passcode to receive files.</div>';
+      return;
+    }
+    list.innerHTML = files.map(f => {
+      const age = getTimeAgo(f.created_at);
+      const exp = getExpiresIn(f.expires_at);
+      return `
+        <div class="inbox-file-item" id="inbox-${f.token}">
+          <div class="inbox-file-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+          <div class="inbox-file-details">
+            <div class="inbox-file-name">${escapeHtml(f.filename)}</div>
+            <div class="inbox-file-meta">${formatSize(f.file_size)} · ${age} · ${exp}</div>
+          </div>
+          <div class="inbox-file-actions">
+            <a class="inbox-action-btn dl" href="/api/download/${f.token}" title="Download"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></a>
+            <button class="inbox-action-btn del" onclick="deleteInboxFile('${f.token}')" title="Delete"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+          </div>
+        </div>`;
+    }).join('');
+  } catch (err) { console.error('Failed to load inbox:', err); }
+}
+
+async function deleteInboxFile(token) {
+  try {
+    const res = await fetch('/api/inbox/' + token, { method: 'DELETE' });
+    if (res.ok) {
+      const el = document.getElementById('inbox-' + token);
+      if (el) { el.style.opacity = '0'; el.style.transition = 'opacity 0.2s'; setTimeout(() => { el.remove(); checkInboxCount(); }, 200); }
+      const list = document.getElementById('inbox-list');
+      setTimeout(() => {
+        if (!list.querySelector('.inbox-file-item')) {
+          list.innerHTML = '<div class="inbox-empty">No files received yet. Share your profile link and passcode to receive files.</div>';
+          document.getElementById('inbox-count-label').textContent = '0 files';
+        } else {
+          const count = list.querySelectorAll('.inbox-file-item').length;
+          document.getElementById('inbox-count-label').textContent = count + ' file' + (count !== 1 ? 's' : '');
+        }
+      }, 250);
+    }
+  } catch {}
+}
+
+async function checkInboxCount() {
+  try {
+    const res = await fetch('/api/inbox');
+    if (!res.ok) return;
+    const files = await res.json();
+    const badge = document.getElementById('inbox-badge');
+    if (files.length > 0) { badge.textContent = files.length; badge.style.display = ''; }
+    else { badge.style.display = 'none'; }
+  } catch {}
+}
+
+function getTimeAgo(dateStr) {
+  const diff = Date.now() - new Date(dateStr + 'Z').getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return mins + 'm ago';
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return hours + 'h ago';
+  return Math.floor(hours / 24) + 'd ago';
+}
+
+function getExpiresIn(dateStr) {
+  const diff = new Date(dateStr + 'Z').getTime() - Date.now();
+  if (diff <= 0) return 'expired';
+  const hours = Math.floor(diff / (1000 * 60 * 60));
+  if (hours >= 24) return Math.floor(hours / 24) + 'd left';
+  const mins = Math.floor((diff % (1000 * 60 * 60)) / 60000);
+  if (hours > 0) return hours + 'h left';
+  return mins + 'm left';
+}
+
+// ═══════════════════════════════════════════
+// PASSCODE
+// ═══════════════════════════════════════════
+async function generatePasscode() {
+  try {
+    const res = await fetch('/api/receive-link/create', { method: 'POST' });
+    if (!res.ok) { const err = await res.json(); showToast(err.error || 'Failed to generate passcode'); return; }
+    const data = await res.json();
+    document.getElementById('passcode-value').textContent = data.passkey;
+    document.getElementById('passcode-display').style.display = 'block';
+    document.getElementById('passcode-gen-btn').textContent = 'Regenerate';
+    showToast('Passcode generated');
+  } catch { showToast('Failed to generate passcode'); }
+}
+
+function copyPasscode() {
+  const code = document.getElementById('passcode-value').textContent;
+  const url = window.location.origin + '/' + currentUser.username;
+  navigator.clipboard.writeText(url + '\nPasscode: ' + code);
+  document.getElementById('passcode-copy').textContent = 'Copied!';
+  setTimeout(() => document.getElementById('passcode-copy').textContent = 'Copy', 2000);
+}
+
+function loadPasscode() {
+  if (currentUser && currentUser.receiveLink) {
+    document.getElementById('passcode-value').textContent = currentUser.receiveLink.passkey;
+    document.getElementById('passcode-display').style.display = 'block';
+    document.getElementById('passcode-gen-btn').textContent = 'Regenerate';
+  }
+}
+
 function toggleProfileMenu() {
   const menu = document.getElementById('profile-menu');
   menu.classList.toggle('active');
@@ -4268,6 +4507,8 @@ async function checkAuth() {
       updateUsageDisplay();
       loadPinnedFiles();
       loadMyCard();
+      loadPasscode();
+      checkInboxCount();
     } else {
       currentUser = null;
       document.getElementById('user-menu').style.display = 'none';

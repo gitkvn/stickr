@@ -449,6 +449,10 @@ app.get('/auth/me', (req, res) => {
     picture: user.picture,
     username: user.username,
     profile_data: user.profile_data,
+    receiveLink: (() => {
+      const rl = stmts.findActiveReceiveLink.get(user.id);
+      return rl ? { passkey: rl.passkey, expiresAt: rl.expires_at } : null;
+    })(),
   });
 });
 
@@ -466,6 +470,126 @@ app.get('/auth/logout', (req, res) => {
 // ═══════════════════════════════════════════
 // ASYNC FILE TRANSFER (R2)
 // ═══════════════════════════════════════════
+
+// ═══════════════════════════════════════════
+// RECEIVE LINKS + INBOX
+// ═══════════════════════════════════════════
+
+// Generate a new receive link (passcode)
+app.post('/api/receive-link/create', (req, res) => {
+  const user = getUserFromCookie(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  if (!user.username) return res.status(400).json({ error: 'No username set' });
+
+  stmts.deactivateUserReceiveLinks.run(user.id);
+
+  const id = crypto.randomBytes(8).toString('hex');
+  const passkey = String(Math.floor(1000 + Math.random() * 9000));
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(); // 30 days
+
+  stmts.createReceiveLink.run(id, user.id, passkey, expiresAt);
+
+  res.json({ passkey, expiresAt });
+});
+
+// Verify passcode for a username
+app.post('/api/receive-link/verify', (req, res) => {
+  const { username, passkey } = req.body;
+  if (!username || !passkey) return res.status(400).json({ error: 'Missing username or passkey' });
+
+  const link = stmts.findReceiveLinkByUserAndPasskey.get(username, passkey);
+  if (!link) return res.status(403).json({ error: 'Invalid passcode' });
+
+  if (new Date(link.expires_at) < new Date()) {
+    return res.status(410).json({ error: 'Passcode expired' });
+  }
+
+  res.json({ valid: true, linkId: link.id });
+});
+
+// Upload to someone's profile (passcode verified, no auth needed for sender)
+app.post('/api/receive/upload', rateLimit('receive-upload', 10, 60 * 1000), async (req, res) => {
+  if (!s3) return res.status(503).json({ error: 'Storage not available' });
+
+  const linkId = req.headers['x-receive-link-id'];
+  const filename = decodeURIComponent(req.headers['x-filename'] || '');
+  const mimeType = req.headers['x-mime-type'] || 'application/octet-stream';
+  const declaredSize = parseInt(req.headers['content-length'], 10);
+
+  if (!linkId || !filename) return res.status(400).json({ error: 'Missing link ID or filename' });
+
+  const link = stmts.findReceiveLinkById.get(linkId);
+  if (!link || !link.active) return res.status(403).json({ error: 'Invalid receive link' });
+  if (new Date(link.expires_at) < new Date()) return res.status(410).json({ error: 'Link expired' });
+
+  const MAX_RECEIVE_SIZE = 100 * 1024 * 1024; // 100MB for received files
+  if (declaredSize > MAX_RECEIVE_SIZE) {
+    return res.status(413).json({ error: 'File too large (max 100 MB)' });
+  }
+
+  const token = crypto.randomBytes(16).toString('hex');
+  const r2Key = `received/${link.user_id}/${token}/${sanitizeFilename(filename)}`;
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(); // 7 day expiry for received files
+
+  let bytesReceived = 0;
+  const passthrough = new PassThrough();
+
+  req.on('data', (chunk) => {
+    bytesReceived += chunk.length;
+    if (bytesReceived > MAX_RECEIVE_SIZE) {
+      passthrough.destroy(new Error('File too large'));
+      req.destroy();
+      return;
+    }
+    passthrough.write(chunk);
+  });
+  req.on('end', () => passthrough.end());
+  req.on('error', (err) => passthrough.destroy(err));
+
+  try {
+    const upload = new Upload({
+      client: s3,
+      params: { Bucket: R2_BUCKET_NAME, Key: r2Key, Body: passthrough, ContentType: mimeType },
+      queueSize: 4,
+      partSize: 5 * 1024 * 1024,
+    });
+
+    await upload.done();
+
+    stmts.createReceivedFile.run(token, link.user_id, filename, bytesReceived, mimeType, r2Key, expiresAt, link.id);
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Receive upload error:', err);
+    res.status(500).json({ error: 'Upload failed' });
+  }
+});
+
+// Inbox — list received files
+app.get('/api/inbox', (req, res) => {
+  const user = getUserFromCookie(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+
+  const files = stmts.findReceivedFiles.all(user.id);
+  const active = files.filter(f => new Date(f.expires_at) > new Date());
+  res.json(active);
+});
+
+// Delete from inbox
+app.delete('/api/inbox/:token', async (req, res) => {
+  const user = getUserFromCookie(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+
+  const file = stmts.findAsyncFile.get(req.params.token);
+  if (!file || file.user_id !== user.id) return res.status(404).json({ error: 'File not found' });
+
+  if (s3) {
+    try { await s3.send(new DeleteObjectCommand({ Bucket: R2_BUCKET_NAME, Key: file.r2_key })); } catch {}
+  }
+  stmts.deleteAsyncFile.run(req.params.token);
+  res.json({ success: true });
+});
+
 // ═══════════════════════════════════════════
 // PINNED FILES
 // ═══════════════════════════════════════════
@@ -610,79 +734,260 @@ function getProfilePage(user, pinnedFiles) {
   const links = profile.links || [];
 
   const socialIcons = {
-    'twitter.com': '<svg width="18" height="18" viewBox="0 0 24 24" fill="#8888a8"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>',
-    'x.com': '<svg width="18" height="18" viewBox="0 0 24 24" fill="#8888a8"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>',
-    'linkedin.com': '<svg width="18" height="18" viewBox="0 0 24 24" fill="#8888a8"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>',
-    'github.com': '<svg width="18" height="18" viewBox="0 0 24 24" fill="#8888a8"><path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/></svg>',
-    'discord': '<svg width="18" height="18" viewBox="0 0 24 24" fill="#8888a8"><path d="M20.317 4.37a19.791 19.791 0 00-4.885-1.515.074.074 0 00-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 00-5.487 0 12.64 12.64 0 00-.617-1.25.077.077 0 00-.079-.037A19.736 19.736 0 003.677 4.37a.07.07 0 00-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 00.031.057 19.9 19.9 0 005.993 3.03.078.078 0 00.084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 00-.041-.106 13.107 13.107 0 01-1.872-.892.077.077 0 01-.008-.128 10.2 10.2 0 00.372-.292.074.074 0 01.077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 01.078.01c.12.098.246.198.373.292a.077.077 0 01-.006.127 12.299 12.299 0 01-1.873.892.077.077 0 00-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 00.084.028 19.839 19.839 0 006.002-3.03.077.077 0 00.032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 00-.031-.03z"/></svg>',
-    'instagram.com': '<svg width="18" height="18" viewBox="0 0 24 24" fill="#8888a8"><path d="M12 0C8.74 0 8.333.015 7.053.072 5.775.132 4.905.333 4.14.63c-.789.306-1.459.717-2.126 1.384S.935 3.35.63 4.14C.333 4.905.131 5.775.072 7.053.012 8.333 0 8.74 0 12s.015 3.667.072 4.947c.06 1.277.261 2.148.558 2.913.306.788.717 1.459 1.384 2.126.667.666 1.336 1.079 2.126 1.384.766.296 1.636.499 2.913.558C8.333 23.988 8.74 24 12 24s3.667-.015 4.947-.072c1.277-.06 2.148-.262 2.913-.558.788-.306 1.459-.718 2.126-1.384.666-.667 1.079-1.335 1.384-2.126.296-.765.499-1.636.558-2.913.06-1.28.072-1.687.072-4.947s-.015-3.667-.072-4.947c-.06-1.277-.262-2.149-.558-2.913-.306-.789-.718-1.459-1.384-2.126C21.319 1.347 20.651.935 19.86.63c-.765-.297-1.636-.499-2.913-.558C15.667.012 15.26 0 12 0zm0 2.16c3.203 0 3.585.016 4.85.071 1.17.055 1.805.249 2.227.415.562.217.96.477 1.382.896.419.42.679.819.896 1.381.164.422.36 1.057.413 2.227.057 1.266.07 1.646.07 4.85s-.015 3.585-.074 4.85c-.061 1.17-.256 1.805-.421 2.227-.224.562-.479.96-.899 1.382-.419.419-.824.679-1.38.896-.42.164-1.065.36-2.235.413-1.274.057-1.649.07-4.859.07-3.211 0-3.586-.015-4.859-.074-1.171-.061-1.816-.256-2.236-.421-.569-.224-.96-.479-1.379-.899-.421-.419-.69-.824-.9-1.38-.165-.42-.359-1.065-.42-2.235-.045-1.26-.061-1.649-.061-4.844 0-3.196.016-3.586.061-4.861.061-1.17.255-1.814.42-2.234.21-.57.479-.96.9-1.381.419-.419.81-.689 1.379-.898.42-.166 1.051-.361 2.221-.421 1.275-.045 1.65-.06 4.859-.06l.045.03zm0 3.678a6.162 6.162 0 100 12.324 6.162 6.162 0 100-12.324zM12 16c-2.21 0-4-1.79-4-4s1.79-4 4-4 4 1.79 4 4-1.79 4-4 4zm7.846-10.405a1.441 1.441 0 11-2.88 0 1.441 1.441 0 012.88 0z"/></svg>',
-    'youtube.com': '<svg width="18" height="18" viewBox="0 0 24 24" fill="#8888a8"><path d="M23.498 6.186a3.016 3.016 0 00-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 00.502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 002.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 002.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>',
+    'twitter.com': '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>',
+    'x.com': '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>',
+    'linkedin.com': '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>',
+    'github.com': '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/></svg>',
+    'instagram.com': '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C8.74 0 8.333.015 7.053.072 5.775.132 4.905.333 4.14.63c-.789.306-1.459.717-2.126 1.384S.935 3.35.63 4.14C.333 4.905.131 5.775.072 7.053.012 8.333 0 8.74 0 12s.015 3.667.072 4.947c.06 1.277.261 2.148.558 2.913.306.788.717 1.459 1.384 2.126.667.666 1.336 1.079 2.126 1.384.766.296 1.636.499 2.913.558C8.333 23.988 8.74 24 12 24s3.667-.015 4.947-.072c1.277-.06 2.148-.262 2.913-.558.788-.306 1.459-.718 2.126-1.384.666-.667 1.079-1.335 1.384-2.126.296-.765.499-1.636.558-2.913.06-1.28.072-1.687.072-4.947s-.015-3.667-.072-4.947c-.06-1.277-.262-2.149-.558-2.913-.306-.789-.718-1.459-1.384-2.126C21.319 1.347 20.651.935 19.86.63c-.765-.297-1.636-.499-2.913-.558C15.667.012 15.26 0 12 0zm0 2.16c3.203 0 3.585.016 4.85.071 1.17.055 1.805.249 2.227.415.562.217.96.477 1.382.896.419.42.679.819.896 1.381.164.422.36 1.057.413 2.227.057 1.266.07 1.646.07 4.85s-.015 3.585-.074 4.85c-.061 1.17-.256 1.805-.421 2.227-.224.562-.479.96-.899 1.382-.419.419-.824.679-1.38.896-.42.164-1.065.36-2.235.413-1.274.057-1.649.07-4.859.07-3.211 0-3.586-.015-4.859-.074-1.171-.061-1.816-.256-2.236-.421-.569-.224-.96-.479-1.379-.899-.421-.419-.69-.824-.9-1.38-.165-.42-.359-1.065-.42-2.235-.045-1.26-.061-1.649-.061-4.844 0-3.196.016-3.586.061-4.861.061-1.17.255-1.814.42-2.234.21-.57.479-.96.9-1.381.419-.419.81-.689 1.379-.898.42-.166 1.051-.361 2.221-.421 1.275-.045 1.65-.06 4.859-.06l.045.03zm0 3.678a6.162 6.162 0 100 12.324 6.162 6.162 0 100-12.324zM12 16c-2.21 0-4-1.79-4-4s1.79-4 4-4 4 1.79 4 4-1.79 4-4 4zm7.846-10.405a1.441 1.441 0 11-2.88 0 1.441 1.441 0 012.88 0z"/></svg>',
+    'youtube.com': '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 00-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 00.502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 002.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 002.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>',
   };
 
   function getLinkIcon(url) {
     for (const [domain, svg] of Object.entries(socialIcons)) {
       if (url.includes(domain)) return svg;
     }
-    return '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8888a8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>';
+    return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>';
   }
 
-  const bioHtml = bio ? `<p style="font-size:14px;color:#8888a8;margin-top:10px;line-height:1.5;">${bio.replace(/</g,'&lt;')}</p>` : '';
-
-  const linksHtml = links.length > 0 ? `
-    <div style="display:flex;justify-content:center;gap:12px;margin-top:14px;">
-      ${links.map(l => `<a href="${escapeHtml(l.url)}" target="_blank" rel="noopener" style="width:40px;height:40px;border-radius:10px;background:#1a1a28;border:1px solid #2a2a3e;display:flex;align-items:center;justify-content:center;transition:border-color .2s;text-decoration:none;" onmouseover="this.style.borderColor='#6c5ce7'" onmouseout="this.style.borderColor='#2a2a3e'">${getLinkIcon(l.url)}</a>`).join('')}
-    </div>
-  ` : '';
+  const bioHtml = bio ? `<p class="bio">${escapeHtml(bio)}</p>` : '';
+  const linksHtml = links.length > 0 ? `<div class="social-row">${links.map(l => `<a class="social-icon" href="${escapeHtml(l.url)}" target="_blank" rel="noopener">${getLinkIcon(l.url)}</a>`).join('')}</div>` : '';
 
   const pinsHtml = pinnedFiles.length > 0 ? `
-    <div style="margin-top:24px;">
-      <div style="font-size:11px;font-weight:600;color:#555570;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:12px;">Pinned files</div>
+    <div class="section-label">Pinned</div>
+    <div class="pinned-list">
       ${pinnedFiles.map(f => `
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;background:#1a1a28;border:1px solid #2a2a3e;border-radius:10px;margin-bottom:8px;">
-          <div style="min-width:0;">
-            <div style="font-size:13px;font-weight:600;color:#e8e8f0;">${escapeHtml(f.display_name || f.filename)}</div>
-            <div style="font-size:11px;color:#555570;margin-top:2px;">${formatBytes(f.file_size)}</div>
+        <div class="pinned-item" onclick="window.location='/api/pin/${f.id}/download'">
+          <div class="pin-icon">${escapeHtml((f.display_name || f.filename).split('.').pop().toUpperCase().slice(0,3))}</div>
+          <div class="pin-details">
+            <div class="pin-name">${escapeHtml(f.display_name || f.filename)}</div>
+            <div class="pin-meta">${formatBytes(f.file_size)}</div>
           </div>
-          <a href="/api/pin/${f.id}/download" style="flex-shrink:0;margin-left:12px;width:34px;height:34px;border-radius:8px;background:#6c5ce715;display:flex;align-items:center;justify-content:center;color:#a29bfe;text-decoration:none;">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          </a>
+          <div class="pin-dl"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></div>
         </div>
       `).join('')}
     </div>
   ` : '';
 
+  const hasReceiveLink = stmts.findActiveReceiveLink.get(user.id);
+
   return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>${escapeHtml(user.name || user.username)} — Stickr</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,system-ui,sans-serif;background:#0a0a0f;color:#e8e8f0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
-body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse at 30% 20%,#6c5ce708 0%,transparent 50%),radial-gradient(ellipse at 70% 80%,#00d2a005 0%,transparent 50%);pointer-events:none}
-.card{background:#12121a;border:1px solid #2a2a3e;border-radius:20px;padding:44px 36px;max-width:400px;width:100%;animation:cardIn .4s ease both}
-@keyframes cardIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
-.profile{text-align:center}
-.avatar{width:72px;height:72px;border-radius:50%;border:3px solid #2a2a3e;margin-bottom:14px;object-fit:cover;background:#1a1a28}
-.name{font-size:22px;font-weight:700;margin-bottom:4px}
-.handle{font-size:13px;color:#555570;font-family:'SF Mono','Fira Code',monospace}
-.footer{border-top:1px solid #2a2a3e;padding-top:20px;margin-top:28px;text-align:center}
-.footer-logo{font-size:16px;font-weight:800;background:linear-gradient(135deg,#6c5ce7,#a29bfe);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:6px}
+body{font-family:-apple-system,system-ui,sans-serif;background:#08080c;color:#e8e8f0;min-height:100vh}
+body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse 600px 400px at 30% 15%,rgba(108,92,231,0.05) 0%,transparent 70%),radial-gradient(ellipse 500px 300px at 75% 85%,rgba(0,210,160,0.03) 0%,transparent 70%);pointer-events:none}
+.page{max-width:440px;margin:0 auto;padding:56px 20px 40px;position:relative;z-index:1}
+.profile{text-align:center;margin-bottom:32px}
+.avatar-ring{width:96px;height:96px;border-radius:50%;padding:3px;background:linear-gradient(135deg,#6c5ce7,#a29bfe);display:inline-block;margin-bottom:16px}
+.avatar{width:100%;height:100%;border-radius:50%;object-fit:cover;background:#08080c;border:3px solid #08080c}
+.name{font-size:28px;font-weight:700;letter-spacing:-0.5px;margin-bottom:4px}
+.handle{font-family:'SF Mono','Fira Code',monospace;font-size:13px;color:#555570;margin-bottom:10px}
+.bio{font-size:14px;color:#8888a8;line-height:1.6;max-width:320px;margin:0 auto 14px}
+.social-row{display:flex;justify-content:center;gap:10px;margin-bottom:4px}
+.social-icon{width:38px;height:38px;border-radius:10px;background:#101018;border:1px solid #1a1a28;display:flex;align-items:center;justify-content:center;color:#555570;text-decoration:none;transition:all .2s}
+.social-icon:hover{border-color:#6c5ce7;color:#a29bfe;transform:translateY(-2px)}
+.drop-hint{text-align:center;padding:28px 20px;border:1.5px dashed #1a1a28;border-radius:16px;margin-bottom:32px;cursor:pointer;transition:all .3s}
+.drop-hint:hover{border-color:#6c5ce7;background:rgba(108,92,231,0.04)}
+.drop-hint-icon{color:#555570;margin-bottom:10px;transition:color .3s}
+.drop-hint:hover .drop-hint-icon{color:#a29bfe}
+.drop-hint h3{font-size:15px;font-weight:600;margin-bottom:4px}
+.drop-hint p{font-size:12px;color:#555570}
+.section-label{font-size:11px;font-weight:600;color:#555570;text-transform:uppercase;letter-spacing:2px;margin-bottom:12px}
+.pinned-list{display:flex;flex-direction:column;gap:8px;margin-bottom:32px}
+.pinned-item{display:flex;align-items:center;gap:12px;padding:12px 14px;background:#101018;border:1px solid #1a1a28;border-radius:12px;cursor:pointer;transition:all .2s;text-decoration:none}
+.pinned-item:hover{border-color:rgba(108,92,231,0.3);transform:translateX(3px)}
+.pin-icon{width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;font-family:'SF Mono',monospace;flex-shrink:0;background:rgba(108,92,231,0.1);color:#a29bfe}
+.pin-details{flex:1;min-width:0}
+.pin-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pin-meta{font-size:11px;color:#555570;margin-top:2px}
+.pin-dl{width:32px;height:32px;border-radius:8px;background:rgba(108,92,231,0.1);display:flex;align-items:center;justify-content:center;color:#a29bfe;flex-shrink:0}
+.footer{text-align:center;padding-top:24px;border-top:1px solid #1a1a28}
+.footer-logo{font-size:16px;font-weight:800;margin-bottom:4px;background:linear-gradient(135deg,#6c5ce7,#a29bfe);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
 .footer p{font-size:11px;color:#555570}
 .footer a{color:#a29bfe;text-decoration:none;font-weight:600}
-.footer a:hover{text-decoration:underline}
+/* Drop overlay */
+.drop-target{display:none;position:fixed;inset:0;z-index:100;align-items:center;justify-content:center;background:rgba(8,8,12,0.92);backdrop-filter:blur(20px);border:3px dashed transparent}
+.drop-target.active{display:flex;border-color:#6c5ce7;animation:borderPulse 1.5s ease infinite}
+@keyframes borderPulse{0%,100%{border-color:#6c5ce7}50%{border-color:#a29bfe}}
+.drop-target-content{text-align:center}
+.drop-target-icon{width:80px;height:80px;border-radius:50%;background:rgba(108,92,231,0.15);display:flex;align-items:center;justify-content:center;margin:0 auto 20px;color:#a29bfe}
+.drop-target h2{font-size:24px;font-weight:700;margin-bottom:8px}
+.drop-target p{color:#555570;font-size:14px}
+/* Passcode modal */
+.passcode-overlay{display:none;position:fixed;inset:0;background:rgba(8,8,12,0.85);backdrop-filter:blur(12px);align-items:center;justify-content:center;z-index:200}
+.passcode-overlay.active{display:flex}
+.passcode-modal{background:#101018;border:1px solid #1a1a28;border-radius:20px;padding:36px;max-width:360px;width:90%;text-align:center}
+.passcode-modal h3{font-size:20px;font-weight:700;margin-bottom:6px}
+.passcode-modal>p{font-size:13px;color:#555570;margin-bottom:20px}
+.file-preview{display:flex;align-items:center;gap:10px;padding:10px 14px;background:rgba(108,92,231,0.08);border-radius:10px;margin-bottom:20px;font-size:13px}
+.file-preview .fname{flex:1;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.file-preview .fsize{color:#555570;font-size:12px;flex-shrink:0}
+.passcode-inputs{display:flex;justify-content:center;gap:10px;margin-bottom:20px}
+.passcode-digit{width:52px;height:60px;background:#08080c;border:1.5px solid #1a1a28;border-radius:12px;color:#e8e8f0;font-size:24px;font-weight:700;text-align:center;font-family:'SF Mono',monospace;outline:none;transition:border-color .2s}
+.passcode-digit:focus{border-color:#6c5ce7;box-shadow:0 0 0 3px rgba(108,92,231,0.15)}
+.passcode-send{width:100%;padding:14px;background:linear-gradient(135deg,#6c5ce7,#a29bfe);color:white;border:none;border-radius:12px;font-family:inherit;font-size:15px;font-weight:600;cursor:pointer;transition:all .2s;margin-bottom:10px}
+.passcode-send:disabled{opacity:.5;cursor:not-allowed}
+.passcode-send:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 4px 20px rgba(108,92,231,0.3)}
+.passcode-cancel{background:none;border:none;color:#555570;font-family:inherit;font-size:13px;cursor:pointer}
+.passcode-cancel:hover{color:#e8e8f0}
+.passcode-error{color:#e05555;font-size:12px;margin-top:-12px;margin-bottom:12px;display:none}
+.passcode-error.show{display:block}
+.progress-bar-bg{width:100%;height:6px;background:#1a1a28;border-radius:3px;overflow:hidden;margin:16px 0 12px}
+.progress-bar-fill{height:100%;background:linear-gradient(90deg,#6c5ce7,#a29bfe);border-radius:3px;width:0%;transition:width .3s}
+.upload-state{display:none;text-align:center;padding:16px 0}
+.upload-state.active{display:block}
+.upload-state p{font-size:13px;color:#8888a8}
+.success-check{width:56px;height:56px;border-radius:50%;background:rgba(0,210,160,0.12);display:flex;align-items:center;justify-content:center;margin:0 auto 14px;color:#00d2a0}
+.send-another{margin-top:16px;background:none;border:1px solid #1a1a28;color:#8888a8;padding:10px 24px;border-radius:10px;font-family:inherit;font-size:13px;cursor:pointer}
+.send-another:hover{border-color:#6c5ce7;color:#e8e8f0}
+.no-drop{text-align:center;padding:20px;color:#555570;font-size:13px;margin-bottom:32px}
+@keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+.profile{animation:fadeUp .5s ease both}
+.drop-hint{animation:fadeUp .5s ease .1s both}
+.pinned-list{animation:fadeUp .5s ease .2s both}
 </style></head><body>
-<div class="card">
+<div class="drop-target" id="drop-target">
+  <div class="drop-target-content">
+    <div class="drop-target-icon"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
+    <h2>Drop to send to ${escapeHtml(user.name || user.username)}</h2>
+    <p>Up to 100 MB · Passcode required</p>
+  </div>
+</div>
+<div class="passcode-overlay" id="passcode-overlay">
+  <div class="passcode-modal">
+    <div id="passcode-form">
+      <h3>Enter passcode</h3>
+      <p>${escapeHtml(user.name || user.username)} will share the passcode with you</p>
+      <div class="file-preview" id="file-preview">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#a29bfe" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        <span class="fname" id="p-fname"></span>
+        <span class="fsize" id="p-fsize"></span>
+      </div>
+      <div class="passcode-inputs" id="passcode-inputs">
+        <input class="passcode-digit" type="text" maxlength="1" inputmode="numeric">
+        <input class="passcode-digit" type="text" maxlength="1" inputmode="numeric">
+        <input class="passcode-digit" type="text" maxlength="1" inputmode="numeric">
+        <input class="passcode-digit" type="text" maxlength="1" inputmode="numeric">
+      </div>
+      <div class="passcode-error" id="passcode-error">Incorrect passcode</div>
+      <button class="passcode-send" id="send-btn" disabled>Send file</button>
+      <button class="passcode-cancel" onclick="document.getElementById('passcode-overlay').classList.remove('active')">Cancel</button>
+    </div>
+    <div class="upload-state" id="upload-progress">
+      <p>Sending to ${escapeHtml(user.name || user.username)}...</p>
+      <div class="progress-bar-bg"><div class="progress-bar-fill" id="progress-fill"></div></div>
+      <p id="progress-text">0%</p>
+    </div>
+    <div class="upload-state" id="upload-success">
+      <div class="success-check"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg></div>
+      <h3 style="font-size:18px;margin-bottom:4px">Sent!</h3>
+      <p>${escapeHtml(user.name || user.username)} will find it in their inbox</p>
+      <button class="send-another" onclick="resetAll()">Send another file</button>
+    </div>
+  </div>
+</div>
+<div class="page">
   <div class="profile">
-    ${user.picture ? `<img class="avatar" src="${escapeHtml(user.picture)}" alt="">` : '<div class="avatar"></div>'}
+    <div class="avatar-ring">${user.picture ? `<img class="avatar" src="${escapeHtml(user.picture)}" alt="">` : '<div class="avatar"></div>'}</div>
     <div class="name">${escapeHtml(user.name || user.username)}</div>
     <div class="handle">@${escapeHtml(user.username)}</div>
     ${bioHtml}
     ${linksHtml}
   </div>
+  ${hasReceiveLink ? `
+  <div class="drop-hint" id="drop-hint" onclick="document.getElementById('recv-file-input').click()">
+    <input type="file" id="recv-file-input" style="display:none">
+    <div class="drop-hint-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
+    <h3>Send files to ${escapeHtml(user.name || user.username)}</h3>
+    <p>Drop here or click to browse · up to 100 MB</p>
+  </div>` : `<div class="no-drop">File receiving is not enabled for this profile</div>`}
   ${pinsHtml}
   <div class="footer">
     <div class="footer-logo">Stickr</div>
-    <p>Share files directly. <a href="/">Get your own link</a></p>
+    <p>One link. Share everything. <a href="/">Get yours</a></p>
   </div>
 </div>
+${hasReceiveLink ? `<script>
+const USERNAME = '${escapeHtml(user.username)}';
+const MAX_RECV = 100*1024*1024;
+let pendingFile = null;
+let verifiedLinkId = null;
+let dragCounter = 0;
+const dropTarget = document.getElementById('drop-target');
+const overlay = document.getElementById('passcode-overlay');
+const digits = document.querySelectorAll('.passcode-digit');
+const sendBtn = document.getElementById('send-btn');
+
+document.addEventListener('dragenter',e=>{e.preventDefault();dragCounter++;dropTarget.classList.add('active')});
+document.addEventListener('dragleave',e=>{e.preventDefault();dragCounter--;if(dragCounter<=0){dragCounter=0;dropTarget.classList.remove('active')}});
+document.addEventListener('dragover',e=>e.preventDefault());
+document.addEventListener('drop',e=>{e.preventDefault();dragCounter=0;dropTarget.classList.remove('active');const f=e.dataTransfer.files[0];if(f)showPasscode(f)});
+document.getElementById('recv-file-input').addEventListener('change',e=>{const f=e.target.files[0];e.target.value='';if(f)showPasscode(f)});
+
+function showPasscode(file){
+  if(file.size>MAX_RECV){alert('File too large (max 100 MB)');return}
+  pendingFile=file;verifiedLinkId=null;
+  document.getElementById('p-fname').textContent=file.name;
+  document.getElementById('p-fsize').textContent=fmtSize(file.size);
+  digits.forEach(d=>d.value='');sendBtn.disabled=true;
+  document.getElementById('passcode-error').classList.remove('show');
+  document.getElementById('passcode-form').style.display='';
+  document.getElementById('upload-progress').classList.remove('active');
+  document.getElementById('upload-success').classList.remove('active');
+  overlay.classList.add('active');
+  setTimeout(()=>digits[0].focus(),100);
+}
+
+digits.forEach((d,i)=>{
+  d.addEventListener('input',()=>{if(d.value&&i<digits.length-1)digits[i+1].focus();sendBtn.disabled=Array.from(digits).some(x=>!x.value)});
+  d.addEventListener('keydown',e=>{if(e.key==='Backspace'&&!d.value&&i>0)digits[i-1].focus();if(e.key==='Enter'&&!sendBtn.disabled)doSend()});
+});
+
+sendBtn.addEventListener('click',doSend);
+overlay.addEventListener('click',e=>{if(e.target===overlay){overlay.classList.remove('active');pendingFile=null}});
+
+async function doSend(){
+  const code=Array.from(digits).map(d=>d.value).join('');
+  if(!verifiedLinkId){
+    try{
+      const r=await fetch('/api/receive-link/verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:USERNAME,passkey:code})});
+      const d=await r.json();
+      if(!r.ok){document.getElementById('passcode-error').classList.add('show');document.getElementById('passcode-error').textContent=d.error||'Invalid passcode';return}
+      verifiedLinkId=d.linkId;
+    }catch{document.getElementById('passcode-error').classList.add('show');return}
+  }
+  document.getElementById('passcode-form').style.display='none';
+  const prog=document.getElementById('upload-progress');prog.classList.add('active');
+  const fill=document.getElementById('progress-fill');const txt=document.getElementById('progress-text');
+  try{
+    const xhr=new XMLHttpRequest();
+    await new Promise((resolve,reject)=>{
+      xhr.upload.addEventListener('progress',e=>{if(e.lengthComputable){const p=Math.round(e.loaded/e.total*100);fill.style.width=p+'%';txt.textContent=p+'%'}});
+      xhr.addEventListener('load',()=>{if(xhr.status>=200&&xhr.status<300)resolve(JSON.parse(xhr.responseText));else{try{reject(JSON.parse(xhr.responseText))}catch{reject({error:'Upload failed'})}}});
+      xhr.addEventListener('error',()=>reject({error:'Network error'}));
+      xhr.open('POST','/api/receive/upload');
+      xhr.setRequestHeader('X-Receive-Link-Id',verifiedLinkId);
+      xhr.setRequestHeader('X-Filename',encodeURIComponent(pendingFile.name));
+      xhr.setRequestHeader('X-Mime-Type',pendingFile.type||'application/octet-stream');
+      xhr.send(pendingFile);
+    });
+    prog.classList.remove('active');
+    document.getElementById('upload-success').classList.add('active');
+  }catch(err){
+    prog.classList.remove('active');
+    document.getElementById('passcode-form').style.display='';
+    document.getElementById('passcode-error').textContent=err.error||'Upload failed';
+    document.getElementById('passcode-error').classList.add('show');
+  }
+}
+
+function resetAll(){
+  overlay.classList.remove('active');pendingFile=null;verifiedLinkId=null;
+  document.getElementById('progress-fill').style.width='0%';
+}
+
+function fmtSize(b){if(b<1024)return b+' B';if(b<1048576)return(b/1024).toFixed(1)+' KB';return(b/1048576).toFixed(1)+' MB'}
+<\/script>` : ''}
 </body></html>`;
 }
 // Create a batch for grouping multiple files
