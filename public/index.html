@@ -756,30 +756,81 @@ header {
 .inbox-action-btn.del { background: #e0555508; color: #e05555; opacity: 0.4; }
 .inbox-action-btn.del:hover { opacity: 1; background: #e0555515; }
 
-.hero {
+.landing-hero {
   text-align: center;
-  max-width: 680px;
+  max-width: 700px;
+  margin-bottom: 8px;
 }
-
-.hero h1 {
+.landing-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 100px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 28px;
+}
+.landing-dot {
+  width: 6px; height: 6px;
+  background: var(--success);
+  border-radius: 50%;
+  animation: lpulse 2s ease infinite;
+}
+@keyframes lpulse {
+  0%,100% { box-shadow: 0 0 0 0 rgba(0,210,160,0.3); }
+  50% { box-shadow: 0 0 0 6px rgba(0,210,160,0); }
+}
+.landing-hero h1 {
   font-family: var(--font-display);
-  font-size: clamp(38px, 6vw, 64px);
+  font-size: clamp(40px, 7vw, 72px);
   font-weight: 800;
-  line-height: 1.1;
+  line-height: 1.05;
   margin-bottom: 20px;
   letter-spacing: -2px;
 }
-
-.hero h1 .highlight {
+.landing-hero h1 .highlight {
   background: var(--gradient-1);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
-
-.hero p {
-  font-size: 18px;
+.rotating-wrapper {
+  display: inline-block;
+  position: relative;
+  overflow: hidden;
+  height: 1.1em;
+  vertical-align: bottom;
+}
+.rotating-words {
+  display: flex;
+  flex-direction: column;
+  animation: rotateWords 8.4s cubic-bezier(0.23, 1, 0.32, 1) infinite;
+}
+.rotating-word {
+  height: 1.1em;
+  display: flex;
+  align-items: center;
+  background: var(--gradient-1);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  font-style: italic;
+  white-space: nowrap;
+}
+@keyframes rotateWords {
+  0%, 11.9%       { transform: translateY(0); }
+  14.28%, 25.58%  { transform: translateY(-14.285%); }
+  28.56%, 39.86%  { transform: translateY(-28.571%); }
+  42.84%, 54.14%  { transform: translateY(-42.857%); }
+  57.12%, 68.42%  { transform: translateY(-57.142%); }
+  71.4%, 82.7%    { transform: translateY(-71.428%); }
+  85.68%, 100%    { transform: translateY(-85.714%); }
+}
+.landing-sub {
+  font-size: 17px;
   color: var(--text-secondary);
-  max-width: 500px;
+  max-width: 480px;
   margin: 0 auto;
   line-height: 1.7;
 }
@@ -789,6 +840,262 @@ header {
   gap: 16px;
   flex-wrap: wrap;
   justify-content: center;
+}
+
+/* Demo Card */
+.landing-demo {
+  display: flex;
+  justify-content: center;
+  padding: 48px 0 24px;
+}
+.demo-card {
+  width: 320px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+}
+.demo-header { padding: 28px 20px 16px; text-align: center; }
+.demo-avatar {
+  width: 52px; height: 52px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent), var(--accent-bright));
+  margin: 0 auto 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px; font-weight: 700; color: white;
+}
+.demo-name { font-size: 16px; font-weight: 700; }
+.demo-handle { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); }
+.demo-drop {
+  margin: 0 16px 12px; padding: 16px;
+  border: 1.5px dashed var(--border);
+  border-radius: 10px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 12px;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.demo-pins { padding: 0 16px 16px; }
+.demo-pin-label { font-size: 9px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-muted); margin-bottom: 6px; }
+.demo-pin-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 10px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 5px;
+}
+.demo-pin-ext {
+  width: 26px; height: 26px; border-radius: 5px;
+  background: rgba(108,92,231,0.1); color: var(--accent-bright);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 8px; font-weight: 700; font-family: var(--font-mono);
+}
+.demo-pin-info { flex: 1; }
+.demo-pin-name { font-weight: 600; font-size: 11px; }
+.demo-pin-size { font-size: 10px; color: var(--text-muted); }
+
+/* Landing Sections */
+.landing-section {
+  width: 100%;
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 64px 0 0;
+  text-align: center;
+}
+.landing-tag {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 3px;
+  color: var(--accent-bright);
+  margin-bottom: 12px;
+}
+.landing-section-title {
+  font-family: var(--font-display);
+  font-size: clamp(28px, 4vw, 40px);
+  font-weight: 800;
+  letter-spacing: -1px;
+  margin-bottom: 48px;
+}
+
+/* Steps */
+.landing-steps {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+  text-align: left;
+}
+.landing-step {
+  padding: 28px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  transition: all 0.3s;
+  position: relative;
+}
+.landing-step:hover { border-color: var(--accent); transform: translateY(-3px); }
+.step-num {
+  font-family: var(--font-display);
+  font-size: 36px;
+  color: var(--accent);
+  opacity: 0.25;
+  position: absolute;
+  top: 16px;
+  right: 20px;
+}
+.landing-step h3 { font-size: 16px; font-weight: 700; margin-bottom: 8px; }
+.landing-step p { font-size: 13px; color: var(--text-secondary); line-height: 1.6; }
+
+/* Features */
+.landing-features {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  text-align: left;
+}
+.landing-feature {
+  padding: 24px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  transition: all 0.2s;
+}
+.landing-feature:hover { border-color: rgba(108,92,231,0.3); }
+.lf-icon {
+  width: 36px; height: 36px; border-radius: 9px;
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 14px;
+}
+.landing-feature h4 { font-size: 14px; font-weight: 700; margin-bottom: 6px; }
+.landing-feature p { font-size: 13px; color: var(--text-secondary); line-height: 1.5; }
+
+/* Pricing */
+.pricing-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  text-align: left;
+}
+.price-card {
+  padding: 32px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  position: relative;
+  transition: all 0.3s;
+}
+.price-card:hover { transform: translateY(-3px); }
+.price-card.pro {
+  border-color: var(--accent);
+  background: linear-gradient(180deg, rgba(108,92,231,0.05) 0%, var(--bg-card) 100%);
+}
+.price-label {
+  position: absolute;
+  top: -11px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--accent);
+  color: white;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  padding: 4px 14px;
+  border-radius: 100px;
+}
+.price-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 6px;
+}
+.price-amount {
+  font-family: var(--font-display);
+  font-size: 40px;
+  font-weight: 800;
+  margin-bottom: 4px;
+}
+.price-amount span { font-size: 16px; color: var(--text-muted); font-weight: 400; }
+.price-desc {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 24px;
+}
+.price-features {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 28px;
+}
+.price-features li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.price-features li::before {
+  content: '✓';
+  color: var(--success);
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.price-btn {
+  display: block;
+  width: 100%;
+  padding: 12px;
+  text-align: center;
+  border-radius: 10px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: none;
+}
+.price-btn.free {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+}
+.price-btn.free:hover { border-color: var(--accent); }
+.price-btn.upgrade {
+  background: linear-gradient(135deg, var(--accent), var(--accent-bright));
+  color: white;
+}
+.price-btn.upgrade:hover { transform: translateY(-1px); box-shadow: 0 4px 20px rgba(108,92,231,0.3); }
+
+/* Landing footer */
+.landing-footer {
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 48px;
+  margin-top: 64px;
+}
+.footer-brand {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 800;
+  background: var(--gradient-1);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.landing-footer p { font-size: 13px; color: var(--text-muted); }
+.footer-links { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
+.footer-links a { color: var(--text-secondary); text-decoration: none; font-size: 13px; }
+.footer-links a:hover { color: var(--text-primary); }
+.footer-copy { font-size: 11px; color: var(--text-muted); margin-top: 16px; }
+
+.feature-card p { font-size: 12px; color: var(--text-secondary); }
+
+@media (max-width: 640px) {
+  .landing-steps { grid-template-columns: 1fr; }
+  .landing-features { grid-template-columns: 1fr; }
+  .pricing-cards { grid-template-columns: 1fr; }
+  .price-card.pro { order: -1; }
 }
 
 .btn {
@@ -1825,7 +2132,7 @@ header {
 
 @media (max-width: 600px) {
   header { padding: 14px 16px; }
-  .hero h1 { letter-spacing: -1px; }
+
   .features { grid-template-columns: 1fr; }
   .share-bar { flex-wrap: wrap; }
   .panel-header { padding: 12px 16px; }
@@ -1969,9 +2276,25 @@ header {
 
   <!-- ═══ HOME VIEW ═══ -->
   <div id="home-view" class="view home-view active">
-    <div class="hero">
-      <h1>Share files <span class="highlight">directly.</span><br>Chat <span class="highlight">privately.</span></h1>
-      <p>Peer-to-peer file sharing and encrypted chat. Fast, private, and simple. Share files with anyone in seconds.</p>
+    <div class="landing-hero">
+      <div class="landing-badge">
+        <span class="landing-dot"></span>
+        P2P encrypted · no sign-up to send
+      </div>
+      <h1>One link. Share<br>
+        <span class="rotating-wrapper">
+          <span class="rotating-words">
+            <span class="rotating-word">photos.</span>
+            <span class="rotating-word">videos.</span>
+            <span class="rotating-word">designs.</span>
+            <span class="rotating-word">documents.</span>
+            <span class="rotating-word">music.</span>
+            <span class="rotating-word">portfolios.</span>
+            <span class="rotating-word">photos.</span>
+          </span>
+        </span>
+      </h1>
+      <p class="landing-sub">Your personal sharing page. Send files peer-to-peer, pin downloads, receive uploads. Share it all from a single link.</p>
     </div>
 
     <div class="actions">
@@ -1986,33 +2309,131 @@ header {
       </button>
     </div>
 
-    <div class="features">
-      <div class="feature-card">
-        <div class="feature-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--accent-bright)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></div>
-        <h3>Peer-to-Peer</h3>
-        <p>Direct device-to-device transfer via WebRTC</p>
-      </div>
-      <div class="feature-card">
-        <div class="feature-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
-        <h3>Encrypted</h3>
-        <p>End-to-end encrypted with DTLS</p>
-      </div>
-      <div class="feature-card">
-        <div class="feature-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#74b9ff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
-        <h3>Live Chat</h3>
-        <p>Real-time P2P messaging alongside file transfers</p>
-      </div>
-      <div class="feature-card">
-        <div class="feature-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#FFD93D" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2z"/></svg></div>
-        <h3>Completely Free</h3>
-        <p>Sign in with Google and start sharing instantly</p>
+    <!-- Demo Card -->
+    <div class="landing-demo">
+      <div class="demo-card">
+        <div class="demo-header">
+          <div class="demo-avatar">K</div>
+          <div class="demo-name">Kavan</div>
+          <div class="demo-handle">@kvnrvi</div>
+        </div>
+        <div class="demo-drop">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          <span>Send files to Kavan</span>
+        </div>
+        <div class="demo-pins">
+          <div class="demo-pin-label">Pinned</div>
+          <div class="demo-pin-item"><div class="demo-pin-ext">PDF</div><div class="demo-pin-info"><div class="demo-pin-name">Resume 2026</div><div class="demo-pin-size">2.1 MB</div></div></div>
+          <div class="demo-pin-item"><div class="demo-pin-ext">FIG</div><div class="demo-pin-info"><div class="demo-pin-name">Portfolio — Q1</div><div class="demo-pin-size">18.4 MB</div></div></div>
+        </div>
       </div>
     </div>
 
-    <footer class="site-footer">
-      <a href="/privacy.html">Privacy</a>
-      <span class="footer-sep">·</span>
-      <span class="footer-note">Encrypted end-to-end. Fast. Private.</span>
+    <!-- How it works -->
+    <div class="landing-section">
+      <div class="landing-tag">How it works</div>
+      <h2 class="landing-section-title">Three steps. No setup.</h2>
+      <div class="landing-steps">
+        <div class="landing-step">
+          <div class="step-num">1</div>
+          <h3>Sign in</h3>
+          <p>One click with Google. Your profile page is live instantly.</p>
+        </div>
+        <div class="landing-step">
+          <div class="step-num">2</div>
+          <h3>Share your link</h3>
+          <p>Pin files for download. Generate an upload link so people can send you files.</p>
+        </div>
+        <div class="landing-step">
+          <div class="step-num">3</div>
+          <h3>Send & receive</h3>
+          <p>Files go peer-to-peer when possible. Larger files get a shareable cloud link.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Features -->
+    <div class="landing-section">
+      <div class="landing-tag">Features</div>
+      <h2 class="landing-section-title">Everything in one link</h2>
+      <div class="landing-features">
+        <div class="landing-feature">
+          <div class="lf-icon" style="background:rgba(108,92,231,0.1);color:var(--accent-bright);">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+          </div>
+          <h4>Personal sharing page</h4>
+          <p>Profile with bio, social links, pinned files, and contact card.</p>
+        </div>
+        <div class="landing-feature">
+          <div class="lf-icon" style="background:rgba(0,210,160,0.1);color:var(--success);">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+          </div>
+          <h4>Receive files from anyone</h4>
+          <p>Generate a secure upload link. Anyone can send you files — no account needed.</p>
+        </div>
+        <div class="landing-feature">
+          <div class="lf-icon" style="background:rgba(255,217,61,0.1);color:#FFD93D;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          </div>
+          <h4>P2P encrypted</h4>
+          <p>Small files transfer directly between browsers via WebRTC. End-to-end encrypted.</p>
+        </div>
+        <div class="landing-feature">
+          <div class="lf-icon" style="background:rgba(116,185,255,0.1);color:#74b9ff;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          </div>
+          <h4>Shareable download links</h4>
+          <p>Upload a file, get a link. Share it anywhere — Slack, WhatsApp, email.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Pricing -->
+    <div class="landing-section" id="pricing-section">
+      <div class="landing-tag">Pricing</div>
+      <h2 class="landing-section-title">Start free. Upgrade when you need more.</h2>
+      <div class="pricing-cards">
+        <div class="price-card">
+          <div class="price-name">Free</div>
+          <div class="price-amount">$0</div>
+          <div class="price-desc">For personal use</div>
+          <ul class="price-features">
+            <li>100 MB per file</li>
+            <li>1 GB lifetime transfer</li>
+            <li>24-hour link expiry</li>
+            <li>3 pinned files</li>
+            <li>Profile page & inbox</li>
+            <li>P2P encrypted transfers</li>
+          </ul>
+          <button class="price-btn free" onclick="signIn()">Get started — free</button>
+        </div>
+        <div class="price-card pro">
+          <div class="price-label">RECOMMENDED</div>
+          <div class="price-name">Pro</div>
+          <div class="price-amount">$1.99 <span>/ month</span></div>
+          <div class="price-desc">For creatives and professionals</div>
+          <ul class="price-features">
+            <li>2 GB per file</li>
+            <li>100 GB monthly transfer</li>
+            <li>7-day link expiry</li>
+            <li>10 pinned files</li>
+            <li>No Stickr branding</li>
+            <li>Profile badge</li>
+          </ul>
+          <button class="price-btn upgrade" onclick="signIn()">Upgrade to Pro</button>
+        </div>
+      </div>
+    </div>
+
+    <footer class="site-footer landing-footer">
+      <div class="footer-brand">Stickr</div>
+      <p>One link. Share everything.</p>
+      <div class="footer-links">
+        <a href="/privacy.html">Privacy</a>
+        <span class="footer-sep">·</span>
+        <a href="mailto:privacy@getstickr.in">Contact</a>
+      </div>
+      <p class="footer-copy">© 2026 Stickr. Built in India.</p>
     </footer>
   </div>
 
