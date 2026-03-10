@@ -1469,15 +1469,16 @@ header {
   bottom: 30px;
   left: 50%;
   transform: translateX(-50%) translateY(100px);
-  background: var(--danger);
-  color: white;
+  background: #1a1a2e;
+  color: #e8e8f0;
   padding: 12px 24px;
   border-radius: var(--radius);
+  border: 1px solid var(--border);
   font-size: 14px;
   font-weight: 500;
   z-index: 999;
   transition: transform 0.3s ease;
-  box-shadow: 0 4px 24px rgba(255,107,107,0.3);
+  box-shadow: 0 4px 24px rgba(0,0,0,0.4);
 }
 .toast.show { transform: translateX(-50%) translateY(0); }
 
@@ -2890,7 +2891,7 @@ function cancelSend(fileId) {
 async function sendFileAsync(file) {
   const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
   if (file.size > MAX_FILE_SIZE) {
-    showToast('Maximum file size is 100 MB');
+    showToastError('Maximum file size is 100 MB');
     return;
   }
 
@@ -2953,7 +2954,7 @@ async function sendFileAsync(file) {
   } catch (err) {
     console.error('Async upload error:', err);
     if (err.error === 'file_too_large') {
-      showToast('Maximum file size is 100 MB');
+      showToastError('Maximum file size is 100 MB');
       removeFileItem(fileId);
     } else {
       updateFileStatus(fileId, 'cancelled');
@@ -2976,7 +2977,7 @@ function shareAsyncLink(url, fileId) {
     }).catch(() => {});
   } else {
     navigator.clipboard.writeText(url);
-    showToast('Link copied to clipboard');
+    showToastSuccess('Link copied to clipboard');
   }
 }
 
@@ -3080,7 +3081,7 @@ async function uploadLinkFiles(files) {
 async function uploadLinkFile(file, batchToken) {
   const MAX_FILE_SIZE = 100 * 1024 * 1024;
   if (file.size > MAX_FILE_SIZE) {
-    showToast('Maximum file size is 100 MB');
+    showToastError('Maximum file size is 100 MB');
     return;
   }
 
@@ -3857,7 +3858,17 @@ function copyRoomCode() {
 function showToast(msg) {
   const toast = document.getElementById('toast');
   toast.textContent = msg;
+  toast.style.background = '#1a1a2e';
+  toast.style.borderColor = 'var(--border)';
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 3000);
+}
+
+function showToastError(msg) {
+  const toast = document.getElementById('toast');
+  toast.textContent = msg;
   toast.style.background = 'var(--danger)';
+  toast.style.borderColor = 'var(--danger)';
   toast.classList.add('show');
   setTimeout(() => toast.classList.remove('show'), 3000);
 }
@@ -3865,7 +3876,8 @@ function showToast(msg) {
 function showToastSuccess(msg) {
   const toast = document.getElementById('toast');
   toast.textContent = msg;
-  toast.style.background = 'var(--success)';
+  toast.style.background = 'rgba(0, 210, 160, 0.15)';
+  toast.style.borderColor = 'rgba(0, 210, 160, 0.3)';
   toast.classList.add('show');
   setTimeout(() => toast.classList.remove('show'), 2000);
 }
@@ -3873,7 +3885,8 @@ function showToastSuccess(msg) {
 function showToastInfo(msg) {
   const toast = document.getElementById('toast');
   toast.textContent = msg;
-  toast.style.background = 'var(--accent)';
+  toast.style.background = 'rgba(108, 92, 231, 0.15)';
+  toast.style.borderColor = 'rgba(108, 92, 231, 0.3)';
   toast.classList.add('show');
   setTimeout(() => toast.classList.remove('show'), 2000);
 }
@@ -4180,8 +4193,8 @@ async function generateUploadLink() {
     document.getElementById('upload-link-value').value = data.url;
     document.getElementById('upload-link-display').style.display = 'block';
     document.getElementById('upload-link-btn').textContent = 'New link';
-    showToast('Upload link generated — expires in 24h');
-  } catch { showToast('Failed to generate link'); }
+    showToastSuccess('Upload link generated — expires in 24h');
+  } catch { showToastError('Failed to generate link'); }
 }
 
 function copyUploadLink() {
@@ -4254,10 +4267,10 @@ async function saveProfile() {
       currentUser.profile_data = data;
       document.getElementById('edit-profile-form').style.display = 'none';
       document.getElementById('edit-profile-btn').textContent = 'Edit';
-      showToast('Profile updated');
+      showToastSuccess('Profile updated');
     }
   } catch {
-    showToast('Failed to save profile');
+    showToastError('Failed to save profile');
   }
 }
 
@@ -4336,10 +4349,10 @@ async function saveMyCard() {
       document.getElementById('mycard-form').style.display = 'none';
       document.getElementById('mycard-btn').textContent = 'Show QR';
       generateCardQR(card);
-      showToast('Card saved');
+      showToastSuccess('Card saved');
     }
   } catch {
-    showToast('Failed to save card');
+    showToastError('Failed to save card');
   }
 }
 
@@ -4426,7 +4439,7 @@ document.getElementById('pin-file-input').addEventListener('change', (e) => {
 
   const MAX_PIN = 25 * 1024 * 1024;
   if (file.size > MAX_PIN) {
-    showToast('Pinned files must be under 25 MB');
+    showToastError('Pinned files must be under 25 MB');
     return;
   }
 
@@ -4468,7 +4481,7 @@ async function confirmPinUpload() {
       xhr.setRequestHeader('X-Mime-Type', file.type || 'application/octet-stream');
       xhr.send(file);
     });
-    showToast('File pinned');
+    showToastSuccess('File pinned');
     loadPinnedFiles();
   } catch (err) {
     showToast(err.error || 'Failed to pin file');
@@ -4480,7 +4493,7 @@ async function deletePin(id) {
     const res = await fetch('/api/pin/' + id, { method: 'DELETE' });
     if (res.ok) {
       loadPinnedFiles();
-      showToast('Pin removed');
+      showToastSuccess('Pin removed');
     }
   } catch {}
 }
