@@ -166,8 +166,11 @@ header {
 @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
 /* ─── Home View ─── */
-.home-view { align-items: center; justify-content: center; padding: 40px 20px; gap: 50px; display: none !important; }
+.home-view { align-items: stretch; justify-content: flex-start; padding: 0; gap: 0; display: none !important; overflow-x: hidden; }
 .home-view.active.ready { display: flex !important; }
+#landing-content { width: 100%; }
+.landing-hero-grid { width: 100%; }
+.signed-in-home { padding: 40px 20px; align-self: center; }
 
 /* ─── Get a Link View ─── */
 .link-view { padding: 40px 20px; max-width: 600px; margin: 0 auto; width: 100%; flex-direction: column; gap: 24px; }
@@ -274,7 +277,8 @@ header {
 .cmp-check { color: var(--success); font-weight: 500; font-size: 12px; }
 
 /* Landing Sections */
-.landing-section { width: 100%; max-width: 680px; margin: 0 auto; padding: 56px 0 0; text-align: center; }
+.landing-section { width: 100%; padding: 56px 20px 0; text-align: center; }
+.landing-section > * { max-width: 680px; margin-left: auto; margin-right: auto; }
 .landing-tag { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 2px; color: var(--accent); margin-bottom: 8px; }
 .landing-section-title { font-family: var(--font-display); font-size: clamp(20px, 3vw, 28px); font-weight: 400; letter-spacing: -0.3px; margin-bottom: 36px; }
 
@@ -313,7 +317,7 @@ header {
 .price-btn.topup:hover { background: #4a3bc4; }
 
 /* Landing footer */
-.landing-footer { display: flex; align-items: center; justify-content: space-between; padding: 28px 0; margin-top: 56px; border-top: 1px solid var(--border); font-size: 12px; color: var(--text-muted); max-width: 680px; margin-left: auto; margin-right: auto; }
+.landing-footer { display: flex; align-items: center; justify-content: space-between; padding: 28px 20px; margin-top: 56px; border-top: 1px solid var(--border); font-size: 12px; color: var(--text-muted); max-width: 720px; margin-left: auto; margin-right: auto; }
 .footer-links { display: flex; gap: 6px; align-items: center; }
 .footer-links a { color: var(--text-secondary); text-decoration: none; font-size: 12px; }
 .footer-links a:hover { color: var(--text-primary); }
@@ -584,7 +588,8 @@ body.in-room .nav-links { display: none; }
 .landing-section-title em { font-style: italic; }
 
 /* Landing features grid */
-.landing-features-section { background: var(--bg-secondary); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 80px 20px !important; margin-top: 56px; }
+.landing-features-section { width: 100%; background: var(--bg-secondary); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 80px 20px !important; margin-top: 56px; text-align: center; }
+.landing-features-section > * { max-width: 680px; margin-left: auto; margin-right: auto; }
 .landing-features-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; max-width: 680px; margin: 0 auto; }
 .landing-feature-card { padding: 28px 22px; border-radius: 14px; background: var(--bg-primary); border: 1px solid var(--border); text-align: left; transition: all 0.2s; }
 .landing-feature-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.04); }
@@ -630,8 +635,8 @@ body.in-room .nav-links { display: none; }
 .river-img img { width: 100%; height: 100%; object-fit: cover; }
 
 /* ═══ Showcase CTA ═══ */
-.showcase-section { max-width: 1100px; margin: 0 auto; padding: 80px 32px; }
-.showcase-frame { position: relative; border-radius: 24px; overflow: hidden; height: 380px; }
+.showcase-section { width: 100%; padding: 80px 32px; }
+.showcase-frame { position: relative; border-radius: 24px; overflow: hidden; height: 380px; max-width: 1100px; margin: 0 auto; }
 .showcase-frame > img { width: 100%; height: 100%; object-fit: cover; }
 .showcase-overlay { position: absolute; inset: 0; background: linear-gradient(135deg, rgba(91,76,219,0.85), rgba(45,159,111,0.75)); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 40px; }
 .showcase-overlay h2 { font-family: var(--font-display); font-size: clamp(28px, 4vw, 44px); color: #fff; margin-bottom: 12px; letter-spacing: -0.5px; font-weight: 400; }
