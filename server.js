@@ -685,6 +685,22 @@ app.post('/api/receive-link/validate', (req, res) => {
   res.json({ valid: true, linkId: link.id });
 });
 
+// Create a batch for receive link uploads (no auth needed, just valid link)
+app.post('/api/receive/batch', rateLimit('receive-batch', 20, 60 * 1000), (req, res) => {
+  const linkId = req.headers['x-receive-link-id'];
+  if (!linkId) return res.status(400).json({ error: 'Missing link ID' });
+
+  const link = stmts.findReceiveLinkById.get(linkId);
+  if (!link || !link.active) return res.status(403).json({ error: 'Invalid receive link' });
+  if (new Date(link.expires_at) < new Date()) return res.status(410).json({ error: 'Link expired' });
+
+  const token = crypto.randomBytes(16).toString('hex');
+  const expiresAt = new Date(Date.now() + ASYNC_FILE_EXPIRY).toISOString();
+  stmts.createBatch.run(token, link.user_id, expiresAt);
+
+  res.json({ token });
+});
+
 // Upload to someone's profile (passcode verified, no auth needed for sender)
 app.post('/api/receive/upload', rateLimit('receive-upload', 10, 60 * 1000), async (req, res) => {
   if (!s3) return res.status(503).json({ error: 'Storage not available' });
@@ -693,6 +709,7 @@ app.post('/api/receive/upload', rateLimit('receive-upload', 10, 60 * 1000), asyn
   const filename = decodeURIComponent(req.headers['x-filename'] || '');
   const mimeType = req.headers['x-mime-type'] || 'application/octet-stream';
   const declaredSize = parseInt(req.headers['content-length'], 10);
+  const batchToken = req.headers['x-batch-token'] || null;
 
   if (!linkId || !filename) return res.status(400).json({ error: 'Missing link ID or filename' });
 
@@ -735,6 +752,10 @@ app.post('/api/receive/upload', rateLimit('receive-upload', 10, 60 * 1000), asyn
     await upload.done();
 
     stmts.createReceivedFile.run(token, link.user_id, filename, bytesReceived, mimeType, r2Key, expiresAt, link.id);
+    // Also tag with batch if provided
+    if (batchToken) {
+      try { db.prepare('UPDATE async_files SET batch_token = ? WHERE token = ?').run(batchToken, token); } catch(e) {}
+    }
 
     // Push inbox notification via WebSocket
     notifyInbox(link.user_id);
@@ -746,14 +767,40 @@ app.post('/api/receive/upload', rateLimit('receive-upload', 10, 60 * 1000), asyn
   }
 });
 
-// Inbox — list received files
+// Inbox — list received files (grouped by batch)
 app.get('/api/inbox', (req, res) => {
   const user = getUserFromCookie(req);
   if (!user) return res.status(401).json({ error: 'Not authenticated' });
 
   const files = stmts.findReceivedFiles.all(user.id);
   const active = files.filter(f => new Date(f.expires_at) > new Date());
-  res.json(active);
+
+  // Group batched files, keep singles as-is
+  const seen = new Set();
+  const result = [];
+  for (const f of active) {
+    if (f.batch_token && !seen.has(f.batch_token)) {
+      seen.add(f.batch_token);
+      const batchFiles = active.filter(bf => bf.batch_token === f.batch_token);
+      const totalSize = batchFiles.reduce((s, bf) => s + bf.file_size, 0);
+      result.push({
+        token: f.batch_token,
+        is_batch: true,
+        file_count: batchFiles.length,
+        filename: batchFiles.length + ' files',
+        file_size: totalSize,
+        mime_type: null,
+        created_at: f.created_at,
+        expires_at: f.expires_at,
+        batch_url: '/dl/b/' + f.batch_token,
+      });
+    } else if (f.batch_token && seen.has(f.batch_token)) {
+      // skip — already grouped
+    } else {
+      result.push(f);
+    }
+  }
+  res.json(result);
 });
 
 // Mark inbox as seen
@@ -1099,12 +1146,21 @@ document.getElementById('recv-file-input').addEventListener('change',e=>{const f
 
 let uploadQueue=[];
 let uploadIdx=0;
+let currentBatchToken=null;
 
-function startQueue(files){
+async function startQueue(files){
   uploadQueue=files.filter(f=>f.size<=MAX_RECV);
   if(uploadQueue.length===0){alert('All files are over 100 MB limit');return}
   if(uploadQueue.length<files.length){alert((files.length-uploadQueue.length)+' file(s) skipped — over 100 MB limit')}
   uploadIdx=0;
+  currentBatchToken=null;
+  // Create a batch if multiple files
+  if(uploadQueue.length>1){
+    try{
+      const r=await fetch('/api/receive/batch',{method:'POST',headers:{'X-Receive-Link-Id':LINK_ID}});
+      if(r.ok){const d=await r.json();currentBatchToken=d.token}
+    }catch(e){}
+  }
   showUpload(uploadQueue[0]);
 }
 
@@ -1137,6 +1193,7 @@ async function doUpload(){
       xhr.setRequestHeader('X-Receive-Link-Id',LINK_ID);
       xhr.setRequestHeader('X-Filename',encodeURIComponent(pendingFile.name));
       xhr.setRequestHeader('X-Mime-Type',pendingFile.type||'application/octet-stream');
+      if(currentBatchToken)xhr.setRequestHeader('X-Batch-Token',currentBatchToken);
       xhr.send(pendingFile);
     });
     prog.classList.remove('active');
