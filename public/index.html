@@ -123,8 +123,10 @@ header {
 .user-usage.empty { color: var(--danger); border-color: var(--danger); }
 
 /* ─── Profile Dropdown ─── */
-.profile-menu { display: none; position: absolute; top: calc(100% + 8px); right: 0; background: var(--bg-primary); border: 1px solid var(--border); border-radius: 12px; padding: 16px; min-width: 240px; box-shadow: 0 8px 30px rgba(0,0,0,0.1); z-index: 300; max-height: calc(100vh - 80px); overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.profile-menu { display: none; position: absolute; top: calc(100% + 8px); right: 0; background: var(--bg-primary); border: 1px solid var(--border); border-radius: 12px; padding: 16px; padding-top: 44px; min-width: 240px; box-shadow: 0 8px 30px rgba(0,0,0,0.1); z-index: 300; max-height: calc(100vh - 80px); overflow-y: auto; -webkit-overflow-scrolling: touch; }
 .profile-menu.active { display: block; }
+.profile-menu-close { position: absolute; top: 12px; right: 12px; width: 28px; height: 28px; border-radius: 50%; border: none; background: var(--bg-tertiary); color: var(--text-muted); font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; z-index: 1; }
+.profile-menu-close:hover { background: var(--border); color: var(--text-primary); }
 .profile-menu-backdrop { display: none; position: fixed; inset: 0; z-index: 299; background: transparent; }
 .profile-menu-backdrop.active { display: block; }
 @media (max-width: 860px) {
@@ -721,6 +723,7 @@ body.in-room .nav-links { display: none; }
         <!-- Profile dropdown -->
         <div class="profile-menu-backdrop" id="profile-menu-backdrop" onclick="closeProfileMenu()"></div>
         <div class="profile-menu" id="profile-menu">
+          <button class="profile-menu-close" onclick="closeProfileMenu()" title="Close">✕</button>
           <div class="profile-menu-header">
             <img class="profile-menu-avatar" id="profile-menu-avatar" src="" alt="">
             <div>
