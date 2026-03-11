@@ -123,8 +123,11 @@ header {
 .user-usage.empty { color: var(--danger); border-color: var(--danger); }
 
 /* ─── Profile Dropdown ─── */
-.profile-menu { display: none; position: absolute; top: calc(100% + 8px); right: 0; background: var(--bg-primary); border: 1px solid var(--border); border-radius: 12px; padding: 16px; min-width: 240px; box-shadow: 0 8px 30px rgba(0,0,0,0.1); z-index: 300; }
+.profile-menu { display: none; position: absolute; top: calc(100% + 8px); right: 0; background: var(--bg-primary); border: 1px solid var(--border); border-radius: 12px; padding: 16px; min-width: 240px; box-shadow: 0 8px 30px rgba(0,0,0,0.1); z-index: 300; max-height: calc(100vh - 80px); overflow-y: auto; -webkit-overflow-scrolling: touch; }
 .profile-menu.active { display: block; }
+@media (max-width: 860px) {
+  .profile-menu { position: fixed; top: 60px; right: 12px; left: 12px; min-width: 0; max-height: calc(100vh - 80px); max-height: calc(100dvh - 80px); }
+}
 .profile-menu-header { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
 .profile-menu-avatar { width: 40px; height: 40px; border-radius: 50%; border: 2px solid var(--border); }
 .profile-menu-name { font-size: 14px; font-weight: 600; color: var(--text-primary); }
