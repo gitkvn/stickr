@@ -2152,10 +2152,8 @@ wss.on('connection', (ws, req) => {
   stats.wsConnections++;
   if (wss.clients.size > stats.peakConcurrentConnections) stats.peakConcurrentConnections = wss.clients.size;
 
-  const wsToken = generateTurnSessionToken();
-  turnSessionTokens.set(wsToken, { peerId: ws.id, createdAt: Date.now() });
-  ws.turnSessionToken = wsToken;
-  ws.send(JSON.stringify({ type: 'session-token', token: wsToken }));
+  // TURN token issued on room join/create, not on connection
+  ws.turnSessionToken = null;
 
   ws.on('pong', () => { ws.isAlive = true; });
 
@@ -2188,6 +2186,11 @@ wss.on('connection', (ws, req) => {
         rooms.set(roomId, { host: ws, hostId: ws.id, hostUserId: ws.user.id, peers: new Map() });
         ws.roomId = roomId;
         ws.role = 'host';
+        // Issue TURN token now that user is in a room
+        const wsToken = generateTurnSessionToken();
+        turnSessionTokens.set(wsToken, { peerId: ws.id, createdAt: Date.now() });
+        ws.turnSessionToken = wsToken;
+        ws.send(JSON.stringify({ type: 'session-token', token: wsToken }));
         ws.send(JSON.stringify({ type: 'room-created', roomId, peerId: ws.id }));
         stats.roomsCreated++;
         if (rooms.size > stats.peakConcurrentRooms) stats.peakConcurrentRooms = rooms.size;
@@ -2204,6 +2207,11 @@ wss.on('connection', (ws, req) => {
         ws.roomId = msg.roomId;
         ws.role = 'peer';
         room.peers.set(ws.id, ws);
+        // Issue TURN token now that peer is in a room
+        const joinToken = generateTurnSessionToken();
+        turnSessionTokens.set(joinToken, { peerId: ws.id, createdAt: Date.now() });
+        ws.turnSessionToken = joinToken;
+        ws.send(JSON.stringify({ type: 'session-token', token: joinToken }));
         if (room.host && room.host.readyState === WebSocket.OPEN) {
           ws.send(JSON.stringify({ type: 'room-joined', roomId: msg.roomId, peerId: ws.id, hostId: room.hostId }));
           room.host.send(JSON.stringify({ type: 'peer-joined', peerId: ws.id }));
@@ -2236,6 +2244,11 @@ wss.on('connection', (ws, req) => {
         room.hostId = ws.id;
         ws.roomId = msg.roomId;
         ws.role = 'host';
+        // Issue fresh TURN token on rejoin
+        const rejoinToken = generateTurnSessionToken();
+        turnSessionTokens.set(rejoinToken, { peerId: ws.id, createdAt: Date.now() });
+        ws.turnSessionToken = rejoinToken;
+        ws.send(JSON.stringify({ type: 'session-token', token: rejoinToken }));
         ws.send(JSON.stringify({ type: 'rejoin-confirmed', roomId: msg.roomId, peerId: ws.id }));
         for (const [peerId, peer] of room.peers) {
           if (peer.readyState === WebSocket.OPEN) {

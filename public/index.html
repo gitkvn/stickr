@@ -717,7 +717,7 @@ body.in-room .nav-links { display: none; }
           <div class="profile-menu-section">
             <div class="profile-menu-item">
               <span class="profile-menu-label" title="Pin files to your profile for anyone to download">Pinned files</span>
-              <span class="profile-menu-value" id="pin-count">0 / 3</span>
+              <span class="profile-menu-value" id="pin-count">—</span>
             </div>
             <div class="pinned-files-list" id="pinned-files-list"></div>
             <div id="pin-rename-section" style="display:none;margin-top:8px;">
@@ -727,7 +727,7 @@ body.in-room .nav-links { display: none; }
                 <button class="profile-menu-small-btn" onclick="event.stopPropagation();cancelPinUpload();" style="flex:1;text-align:center;padding:6px;background:var(--bg-tertiary);color:var(--text-muted);">Cancel</button>
               </div>
             </div>
-            <button class="profile-menu-small-btn" onclick="event.stopPropagation();document.getElementById('pin-file-input').click();" id="pin-upload-btn" style="margin-top:8px;width:100%;text-align:center;">+ Add file (max 25 MB)</button>
+            <button class="profile-menu-small-btn" onclick="event.stopPropagation();document.getElementById('pin-file-input').click();" id="pin-upload-btn" style="margin-top:8px;width:100%;text-align:center;">+ Add file</button>
             <input type="file" id="pin-file-input" style="display:none">
           </div>
           <div class="profile-menu-divider"></div>
@@ -1361,7 +1361,7 @@ function connectWS() {
 
     ws.onopen = () => {
       clearTimeout(timeout);
-      // Don't resolve yet - wait for session-token
+      resolve();
     };
     ws.onerror = () => {
       clearTimeout(timeout);
@@ -1374,9 +1374,6 @@ function connectWS() {
       let msg;
       try { msg = JSON.parse(e.data); } catch { return; }
       handleSignalingMessage(msg);
-      if (msg.type === 'session-token') {
-        resolve();
-      }
     };
   });
 }
@@ -1389,6 +1386,8 @@ function handleSignalingMessage(msg) {
   switch (msg.type) {
     case 'session-token':
       sessionToken = msg.token;
+      // Fetch TURN credentials now that we have a session token
+      fetchIceServers();
       break;
 
     case 'inbox-update': {
@@ -2806,15 +2805,14 @@ async function createRoom() {
   try {
     updateStatus('connecting');
     await connectWS();
-    await fetchIceServers();
     ws.send(JSON.stringify({ type: 'create-room' }));
     isHost = true;
+    // ICE servers fetched after session-token arrives (triggered by room-created handler)
   } catch (err) {
     updateStatus('retrying');
     setTimeout(async () => {
       try {
         await connectWS();
-        await fetchIceServers();
         ws.send(JSON.stringify({ type: 'create-room' }));
         isHost = true;
       } catch (err2) {
@@ -2835,16 +2833,15 @@ async function joinRoom() {
   try {
     updateStatus('connecting');
     await connectWS();
-    await fetchIceServers();
     roomId = code;
     isHost = false;
     ws.send(JSON.stringify({ type: 'join-room', roomId: code }));
+    // ICE servers fetched after session-token arrives (triggered by room-joined handler)
   } catch (err) {
     updateStatus('retrying');
     setTimeout(async () => {
       try {
         await connectWS();
-        await fetchIceServers();
         roomId = code;
         isHost = false;
         ws.send(JSON.stringify({ type: 'join-room', roomId: code }));
@@ -3058,7 +3055,6 @@ async function attemptResume() {
   try {
     if (wsDown) {
       await connectWS();
-      await fetchIceServers();
     }
     // Re-join the room — server will send room-joined and host gets peer-joined,
     // which triggers a fresh createPeerConnection on both sides
@@ -3592,7 +3588,11 @@ async function loadPinnedFiles() {
     const res = await fetch('/api/pins');
     if (!res.ok) return;
     const pins = await res.json();
-    document.getElementById('pin-count').textContent = pins.length + ' / 3';
+    const maxPins = (currentUser && currentUser.planLimits) ? currentUser.planLimits.maxPins : 3;
+    const maxPinSize = (currentUser && currentUser.planLimits) ? currentUser.planLimits.maxPinSize : 25 * 1024 * 1024;
+    const maxPinLabel = maxPinSize >= 1048576 ? Math.round(maxPinSize / 1048576) + ' MB' : Math.round(maxPinSize / 1024) + ' KB';
+    document.getElementById('pin-count').textContent = pins.length + ' / ' + maxPins;
+    document.getElementById('pin-upload-btn').textContent = '+ Add file (max ' + maxPinLabel + ')';
     const list = document.getElementById('pinned-files-list');
     if (pins.length === 0) {
       list.innerHTML = '';
@@ -3605,7 +3605,7 @@ async function loadPinnedFiles() {
         <button class="pinned-file-del" onclick="event.stopPropagation();deletePin('${p.id}');" title="Remove">✕</button>
       </div>
     `).join('');
-    document.getElementById('pin-upload-btn').style.display = pins.length >= 3 ? 'none' : '';
+    document.getElementById('pin-upload-btn').style.display = pins.length >= maxPins ? 'none' : '';
     updateHomeStats();
   } catch {}
 }
@@ -3615,9 +3615,10 @@ document.getElementById('pin-file-input').addEventListener('change', (e) => {
   e.target.value = '';
   if (!file) return;
 
-  const MAX_PIN = 25 * 1024 * 1024;
-  if (file.size > MAX_PIN) {
-    showToastError('Pinned files must be under 25 MB');
+  const maxPinSize = (currentUser && currentUser.planLimits) ? currentUser.planLimits.maxPinSize : 25 * 1024 * 1024;
+  const maxPinLabel = maxPinSize >= 1048576 ? Math.round(maxPinSize / 1048576) + ' MB' : Math.round(maxPinSize / 1024) + ' KB';
+  if (file.size > maxPinSize) {
+    showToastError('Pinned files must be under ' + maxPinLabel);
     return;
   }
 
@@ -3810,8 +3811,8 @@ if (hasRoomHash) {
     (async function tryConnect(attempt) {
       try {
         await connectWS();
-        await fetchIceServers();
         ws.send(JSON.stringify({ type: 'join-room', roomId: hash }));
+        // ICE servers fetched automatically when session-token arrives
       } catch (err) {
         if (attempt < 3) {
           updateStatus('retrying');
