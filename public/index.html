@@ -1770,13 +1770,7 @@ function setupFileChannel(channel, remotePeerId) {
 }
 
 async function sendFile(file) {
-  const ASYNC_THRESHOLD = 25 * 1024 * 1024; // 25MB
-
-  // Route large files through async R2 upload
-  if (file.size >= ASYNC_THRESHOLD) {
-    return sendFileAsync(file);
-  }
-
+  // In a room, always use P2P WebRTC — async R2 upload is for "Get a Link" only
   const fileId = 'f-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6);
   const abortCtrl = new AbortController();
   activeSendAbort.set(fileId, abortCtrl);
