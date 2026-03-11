@@ -1972,6 +1972,9 @@ async function sendFileAsync(file) {
     if (err.error === 'file_too_large') {
       showToastError('Maximum file size is ' + formatMaxSize());
       removeFileItem(fileId);
+    } else if (err.error === 'quota_exceeded') {
+      showToastError('Transfer limit reached. Upgrade your plan for more.');
+      removeFileItem(fileId);
     } else {
       updateFileStatus(fileId, 'cancelled');
       showToast(err.error || 'Upload failed');
@@ -2169,6 +2172,8 @@ async function uploadLinkFile(file, batchToken) {
     statusEl.className = 'link-file-status error';
     if (err.error === 'file_too_large') {
       statusEl.textContent = '✕ File too large (max ' + formatMaxSize() + ')';
+    } else if (err.error === 'quota_exceeded') {
+      statusEl.textContent = '✕ Transfer limit reached — upgrade for more';
     } else {
       statusEl.textContent = '✕ ' + (err.error || 'Upload failed');
     }

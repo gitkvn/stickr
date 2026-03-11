@@ -749,7 +749,10 @@ app.post('/api/receive/upload', rateLimit('receive-upload', 10, 60 * 1000), asyn
       partSize: 5 * 1024 * 1024,
     });
 
+    const uploadTimeout = setTimeout(() => { upload.abort(); passthrough.destroy(new Error("Upload timeout")); req.destroy(); }, 10 * 60 * 1000);
+
     await upload.done();
+    clearTimeout(uploadTimeout);
 
     stmts.createReceivedFile.run(token, link.user_id, filename, bytesReceived, mimeType, r2Key, expiresAt, link.id);
     // Also tag with batch if provided
@@ -872,8 +875,9 @@ app.post('/api/pin', rateLimit('pin', 10, 60 * 1000), async (req, res) => {
   const user = getUserFromCookie(req);
   if (!user) return res.status(401).json({ error: 'Not authenticated' });
 
+  const pinLimits = getUserPlanLimits(user.id);
   const count = stmts.countPinnedFiles.get(user.id);
-  if (count.count >= 3) return res.status(400).json({ error: 'Maximum 3 pinned files' });
+  if (count.count >= pinLimits.maxPins) return res.status(400).json({ error: `Maximum ${pinLimits.maxPins} pinned files` });
 
   const filename = decodeURIComponent(req.headers['x-filename'] || '');
   const displayName = decodeURIComponent(req.headers['x-display-name'] || '') || filename;
@@ -882,9 +886,9 @@ app.post('/api/pin', rateLimit('pin', 10, 60 * 1000), async (req, res) => {
 
   if (!filename) return res.status(400).json({ error: 'Missing filename' });
 
-  const MAX_PIN_SIZE = 25 * 1024 * 1024;
-  if (declaredSize > MAX_PIN_SIZE) {
-    return res.status(413).json({ error: 'Pinned files must be under 25 MB' });
+  const maxPinSize = pinLimits.maxPinSize;
+  if (declaredSize > maxPinSize) {
+    return res.status(413).json({ error: `Pinned files must be under ${Math.round(maxPinSize / 1048576)} MB` });
   }
 
   const id = crypto.randomBytes(8).toString('hex');
@@ -895,7 +899,7 @@ app.post('/api/pin', rateLimit('pin', 10, 60 * 1000), async (req, res) => {
 
   req.on('data', (chunk) => {
     bytesReceived += chunk.length;
-    if (bytesReceived > MAX_PIN_SIZE) {
+    if (bytesReceived > maxPinSize) {
       passthrough.destroy(new Error('File too large'));
       req.destroy();
       return;
@@ -913,7 +917,9 @@ app.post('/api/pin', rateLimit('pin', 10, 60 * 1000), async (req, res) => {
       partSize: 5 * 1024 * 1024,
     });
 
+    const pinTimeout = setTimeout(() => { upload.abort(); passthrough.destroy(new Error('Upload timeout')); req.destroy(); }, 5 * 60 * 1000);
     await upload.done();
+    clearTimeout(pinTimeout);
 
     stmts.createPinnedFile.run(id, user.id, filename, bytesReceived, mimeType, r2Key, displayName);
     res.json({ id, filename, display_name: displayName, file_size: bytesReceived });
@@ -1307,6 +1313,17 @@ app.post('/api/upload', rateLimit('upload', 20, 60 * 1000), async (req, res) => 
     return res.status(413).json({ error: 'file_too_large', maxSize: effectiveMaxSize, plan: isProUser(user.id) ? 'pro' : 'free' });
   }
 
+  // Quota enforcement — check remaining transfer allowance
+  const quota = checkTransferQuota(user.id, declaredSize);
+  if (!quota.allowed) {
+    return res.status(413).json({
+      error: 'quota_exceeded',
+      remaining: quota.remaining,
+      limit: quota.limit,
+      plan: isProUser(user.id) ? 'pro' : 'free',
+    });
+  }
+
   const token = crypto.randomBytes(16).toString('hex');
   const r2Key = `${user.id}/${token}/${sanitizeFilename(filename)}`;
   const expiresAt = new Date(Date.now() + planLimits.linkExpiry).toISOString();
@@ -1341,7 +1358,15 @@ app.post('/api/upload', rateLimit('upload', 20, 60 * 1000), async (req, res) => 
       partSize: 10 * 1024 * 1024, // 10MB parts (200 parts for 2GB)
     });
 
+    // Timeout: 10 minutes for uploads (generous for 2GB on slow connections)
+    const uploadTimeout = setTimeout(() => {
+      upload.abort();
+      passthrough.destroy(new Error('Upload timeout'));
+      req.destroy();
+    }, 10 * 60 * 1000);
+
     await upload.done();
+    clearTimeout(uploadTimeout);
 
     const fileSize = bytesReceived;
 
@@ -1947,6 +1972,36 @@ function isProUser(userId) {
   if (!row || row.plan !== 'pro') return false;
   if (row.plan_expires_at && new Date(row.plan_expires_at) < new Date()) return false;
   return true;
+}
+
+// Check transfer quota — returns { allowed, remaining, used, limit }
+function checkTransferQuota(userId, fileSize) {
+  const limits = getUserPlanLimits(userId);
+  const row = stmts.getUserPlan.get(userId);
+  let used = row ? (row.transfer_used || 0) : 0;
+
+  // Monthly reset for Pro users
+  if (row && row.plan === 'pro' && row.transfer_used_reset) {
+    const resetDate = new Date(row.transfer_used_reset);
+    const now = new Date();
+    // Reset if last reset was more than 30 days ago
+    if (now - resetDate > 30 * 24 * 60 * 60 * 1000) {
+      stmts.resetTransferUsed.run(userId);
+      used = 0;
+    }
+  }
+  // First-time setup: set reset date if missing
+  if (row && row.plan === 'pro' && !row.transfer_used_reset) {
+    stmts.resetTransferUsed.run(userId);
+    used = 0;
+  }
+
+  // For free users, maxTransfer is lifetime (balance-based)
+  // For pro users, maxTransfer is monthly
+  const remaining = Math.max(0, limits.maxTransfer - used);
+  const allowed = fileSize <= remaining;
+
+  return { allowed, remaining, used, limit: limits.maxTransfer };
 }
 
 function escapeHtml(str) {
