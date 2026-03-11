@@ -535,6 +535,15 @@ header {
   .panel-header { padding: 12px 16px; }
   .drop-zone-container { padding: 12px; }
   .drop-zone { padding: 16px 12px; min-height: 100px; }
+  .drop-zone.collapsed { padding: 10px 12px; min-height: 0; }
+  .drop-zone.collapsed h3 { font-size: 12px; }
+  .file-item { padding: 10px 12px; gap: 10px; }
+  .file-item.compact { display: none; }
+  .file-summary { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px; background: var(--bg-tertiary); border-radius: var(--radius); font-size: 13px; color: var(--text-secondary); font-weight: 500; margin-top: 8px; }
+  .file-summary .summary-check { color: var(--success); }
+  .share-bar { padding: 10px 12px; }
+  .share-bar .share-label { display: none; }
+  #qr-inline { max-height: 200px; overflow: hidden; }
   .chat-input-area { padding: 8px 12px; padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)); gap: 8px; }
   .chat-input { padding: 10px 14px; font-size: 16px; }
   .chat-send { width: 40px; height: 40px; min-width: 40px; font-size: 16px; }
@@ -2026,14 +2035,16 @@ function startGetLink() {
     showSigninModal();
     return;
   }
-  document.getElementById('home-view').classList.remove('active');
+  document.getElementById('home-view').classList.remove('active', 'ready');
   document.getElementById('link-view').classList.add('active');
   document.getElementById('link-file-list').innerHTML = '';
+  window.scrollTo(0, 0);
 }
 
 function closeLinkView() {
   document.getElementById('link-view').classList.remove('active');
-  document.getElementById('home-view').classList.add('active');
+  document.getElementById('home-view').classList.add('active', 'ready');
+  window.scrollTo(0, 0);
 }
 
 // File input handler for link view
@@ -2416,12 +2427,45 @@ function formatSpeed(bytesPerSec) {
   return Math.round(bytesPerSec) + ' B/s';
 }
 
+function collapseCompletedFiles() {
+  if (!isMobile) return;
+  const list = document.getElementById('file-list');
+  const items = list.querySelectorAll('.file-item');
+  let completedCount = 0;
+  let activeItem = null;
+  items.forEach(item => {
+    const statusEl = item.querySelector('.file-status');
+    if (statusEl && (statusEl.classList.contains('complete') || statusEl.classList.contains('link-ready'))) {
+      completedCount++;
+      item.classList.add('compact');
+    } else {
+      activeItem = item;
+    }
+  });
+  // Update or create summary badge
+  let summary = list.querySelector('.file-summary');
+  if (completedCount > 0) {
+    if (!summary) {
+      summary = document.createElement('div');
+      summary.className = 'file-summary';
+      list.insertBefore(summary, list.firstChild);
+    }
+    summary.innerHTML = '<span class="summary-check">✓</span> ' + completedCount + ' file' + (completedCount > 1 ? 's' : '') + ' transferred';
+  } else if (summary) {
+    summary.remove();
+  }
+}
+
 function updateFileStatus(id, status, pct, url) {
   const el = document.getElementById(`status-${id}`);
   if (el) {
     el.className = 'file-status ' + status;
     if (status === 'complete') {
       el.textContent = '✓ Done';
+      // On mobile, collapse completed files after a delay and show summary
+      if (isMobile) {
+        setTimeout(() => collapseCompletedFiles(), 1500);
+      }
     } else if (status === 'uploading') {
       el.textContent = '⬆ Uploading...';
     } else if (status === 'link-ready') {
