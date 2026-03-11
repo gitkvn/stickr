@@ -4,8 +4,8 @@
   "description": "Share files directly and chat privately. Peer-to-peer encrypted, no sign-ups needed.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0a0a0f",
-  "theme_color": "#0a0a0f",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
   "orientation": "any",
   "icons": [
     {
