@@ -1072,7 +1072,7 @@ ${canUpload ? `<div class="drop-target" id="drop-target">
     ${linksHtml}
   </div>
   ${canUpload ? `<div class="drop-hint" id="drop-hint" onclick="document.getElementById('recv-file-input').click()">
-    <input type="file" id="recv-file-input" style="display:none">
+    <input type="file" id="recv-file-input" style="display:none" multiple>
     <div class="drop-hint-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
     <h3>Send files to ${userName}</h3>
     <p>Drop here or click to browse · up to 100 MB · zip folders before uploading</p>
@@ -1094,13 +1094,23 @@ const modal=document.getElementById('upload-modal');
 document.addEventListener('dragenter',e=>{e.preventDefault();dragCounter++;dropTarget.classList.add('active')});
 document.addEventListener('dragleave',e=>{e.preventDefault();dragCounter--;if(dragCounter<=0){dragCounter=0;dropTarget.classList.remove('active')}});
 document.addEventListener('dragover',e=>e.preventDefault());
-document.addEventListener('drop',e=>{e.preventDefault();dragCounter=0;dropTarget.classList.remove('active');const f=e.dataTransfer.files[0];if(f)showUpload(f)});
-document.getElementById('recv-file-input').addEventListener('change',e=>{const f=e.target.files[0];e.target.value='';if(f)showUpload(f)});
+document.addEventListener('drop',e=>{e.preventDefault();dragCounter=0;dropTarget.classList.remove('active');const files=Array.from(e.dataTransfer.files);if(files.length)startQueue(files)});
+document.getElementById('recv-file-input').addEventListener('change',e=>{const files=Array.from(e.target.files);e.target.value='';if(files.length)startQueue(files)});
+
+let uploadQueue=[];
+let uploadIdx=0;
+
+function startQueue(files){
+  uploadQueue=files.filter(f=>f.size<=MAX_RECV);
+  if(uploadQueue.length===0){alert('All files are over 100 MB limit');return}
+  if(uploadQueue.length<files.length){alert((files.length-uploadQueue.length)+' file(s) skipped — over 100 MB limit')}
+  uploadIdx=0;
+  showUpload(uploadQueue[0]);
+}
 
 function showUpload(file){
-  if(file.size>MAX_RECV){alert('File too large (max 100 MB)');return}
   pendingFile=file;
-  document.getElementById('p-fname').textContent=file.name;
+  document.getElementById('p-fname').textContent=file.name+(uploadQueue.length>1?' ('+(uploadIdx+1)+'/'+uploadQueue.length+')':'');
   document.getElementById('p-fsize').textContent=fmtSize(file.size);
   document.getElementById('upload-form').style.display='';
   document.getElementById('upload-progress').classList.remove('active');
@@ -1130,7 +1140,15 @@ async function doUpload(){
       xhr.send(pendingFile);
     });
     prog.classList.remove('active');
-    document.getElementById('upload-success').classList.add('active');
+    uploadIdx++;
+    if(uploadIdx<uploadQueue.length){
+      // More files to upload — show next
+      showUpload(uploadQueue[uploadIdx]);
+    } else {
+      document.getElementById('upload-success').classList.add('active');
+      var msg=document.querySelector('#upload-success p');
+      if(msg)msg.textContent=uploadQueue.length>1?uploadQueue.length+' files sent to ${userName}':'${userName} will find it in their inbox';
+    }
   }catch(err){
     prog.classList.remove('active');
     document.getElementById('upload-form').style.display='';
@@ -1139,7 +1157,7 @@ async function doUpload(){
   }
 }
 
-function resetUpload(){modal.classList.remove('active');pendingFile=null;document.getElementById('progress-fill').style.width='0%'}
+function resetUpload(){modal.classList.remove('active');pendingFile=null;uploadQueue=[];uploadIdx=0;document.getElementById('progress-fill').style.width='0%'}
 function fmtSize(b){if(b<1024)return b+' B';if(b<1048576)return(b/1024).toFixed(1)+' KB';return(b/1048576).toFixed(1)+' MB'}
 <\/script>` : ''}
 </body></html>`;
@@ -1552,7 +1570,7 @@ h1{font-family:'Instrument Serif',Georgia,serif;font-size:22px;font-weight:400;m
 <h1>${files.length} file${files.length > 1 ? 's' : ''}</h1>
 <p class="meta">${formatBytes(totalSize)} total</p>
 <p class="expiry">Expires in ${expiresIn}</p>
-<button class="btn-all" onclick="document.querySelectorAll('.dl-link').forEach((a,i)=>setTimeout(()=>{var l=document.createElement('a');l.href=a.href;l.download='';document.body.appendChild(l);l.click();l.remove()},i*500))">
+<button class="btn-all" onclick="var links=document.querySelectorAll('.album-dl, .file-row-btn');links.forEach(function(a,i){setTimeout(function(){var el=document.createElement('a');el.href=a.href;el.download='';el.style.display='none';document.body.appendChild(el);el.click();document.body.removeChild(el)},i*800)})">
 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
 Download All
 </button>
