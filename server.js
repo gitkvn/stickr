@@ -348,6 +348,108 @@ setInterval(() => {
   }
 }, 5 * 60 * 1000);
 
+// Dodo webhook handler — MUST be before express.json() to receive raw body
+app.post('/api/webhook/dodo', express.raw({ type: 'application/json' }), (req, res) => {
+  if (!DODO_WEBHOOK_SECRET) {
+    console.warn('Dodo webhook received but no secret configured');
+    return res.status(200).send('OK');
+  }
+
+  const rawBody = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body || '');
+
+  // Verify webhook signature (Dodo uses standard webhook signature scheme)
+  const webhookId = req.headers['webhook-id'];
+  const webhookTimestamp = req.headers['webhook-timestamp'];
+  const webhookSignature = req.headers['webhook-signature'];
+
+  if (!webhookId || !webhookTimestamp || !webhookSignature) {
+    console.warn('Dodo webhook missing headers');
+    return res.status(400).send('Missing webhook headers');
+  }
+
+  // Replay protection: reject timestamps older than 5 minutes
+  const ts = parseInt(webhookTimestamp, 10);
+  if (isNaN(ts) || Math.abs(Date.now() / 1000 - ts) > 300) {
+    console.warn('Dodo webhook timestamp too old or invalid');
+    return res.status(400).send('Invalid timestamp');
+  }
+
+  // HMAC-SHA256 signature verification
+  const signedContent = `${webhookId}.${webhookTimestamp}.${rawBody.toString()}`;
+  const secretBytes = Buffer.from(DODO_WEBHOOK_SECRET.startsWith('whsec_') ? DODO_WEBHOOK_SECRET.slice(6) : DODO_WEBHOOK_SECRET, 'base64');
+  const expectedSig = crypto.createHmac('sha256', secretBytes).update(signedContent).digest('base64');
+
+  // Dodo sends multiple signatures separated by space, each prefixed with "v1,"
+  const signatures = webhookSignature.split(' ').map(s => s.replace('v1,', ''));
+  const valid = signatures.some(sig => {
+    try {
+      return crypto.timingSafeEqual(Buffer.from(sig, 'base64'), Buffer.from(expectedSig, 'base64'));
+    } catch { return false; }
+  });
+
+  if (!valid) {
+    console.warn('Dodo webhook signature verification failed');
+    return res.status(401).send('Invalid signature');
+  }
+
+  let payload;
+  try {
+    payload = JSON.parse(rawBody.toString());
+  } catch {
+    return res.status(400).send('Invalid JSON');
+  }
+
+  console.log('Dodo webhook verified:', payload.type, JSON.stringify(payload).slice(0, 200));
+
+  const eventType = payload.type || payload.event_type;
+
+  switch (eventType) {
+    case 'subscription.active':
+    case 'subscription.renewed': {
+      const sub = payload.data || payload;
+      const customerId = sub.customer_id || (sub.customer && sub.customer.customer_id);
+      const subscriptionId = sub.subscription_id || sub.id;
+      const userId = sub.metadata && sub.metadata.user_id;
+
+      if (userId) {
+        const expiresAt = sub.current_period_end || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+        stmts.updateUserPlan.run('pro', expiresAt, customerId || null, subscriptionId || null, userId);
+        console.log(`Pro activated for user ${userId}`);
+      } else if (customerId) {
+        const user = stmts.findUserByDodoCustomer.get(customerId);
+        if (user) {
+          const expiresAt = sub.current_period_end || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+          stmts.updateUserPlan.run('pro', expiresAt, customerId, subscriptionId || null, user.id);
+          console.log(`Pro activated for user ${user.id} via customer ${customerId}`);
+        }
+      }
+      break;
+    }
+
+    case 'subscription.cancelled':
+    case 'subscription.expired':
+    case 'subscription.failed': {
+      const sub = payload.data || payload;
+      const customerId = sub.customer_id || (sub.customer && sub.customer.customer_id);
+      const userId = sub.metadata && sub.metadata.user_id;
+
+      if (userId) {
+        stmts.updateUserPlan.run('free', null, null, null, userId);
+        console.log(`Pro deactivated for user ${userId}`);
+      } else if (customerId) {
+        stmts.updateUserPlanByDodoCustomer.run('free', null, customerId);
+        console.log(`Pro deactivated for customer ${customerId}`);
+      }
+      break;
+    }
+
+    default:
+      console.log('Dodo webhook unhandled event:', eventType);
+  }
+
+  res.status(200).send('OK');
+});
+
 app.use(express.json());
 
 app.get('/auth/google', (req, res) => {
@@ -552,83 +654,6 @@ app.post('/api/checkout/pro', async (req, res) => {
   }
 });
 
-// Dodo webhook handler
-app.post('/api/webhook/dodo', express.raw({ type: 'application/json' }), (req, res) => {
-  if (!DODO_WEBHOOK_SECRET) {
-    console.warn('Dodo webhook received but no secret configured');
-    return res.status(200).send('OK');
-  }
-
-  // Verify webhook signature
-  const webhookId = req.headers['webhook-id'];
-  const webhookTimestamp = req.headers['webhook-timestamp'];
-  const webhookSignature = req.headers['webhook-signature'];
-
-  if (!webhookId || !webhookTimestamp || !webhookSignature) {
-    console.warn('Dodo webhook missing headers');
-    return res.status(400).send('Missing webhook headers');
-  }
-
-  let payload;
-  try {
-    payload = JSON.parse(req.body.toString());
-  } catch {
-    return res.status(400).send('Invalid JSON');
-  }
-
-  console.log('Dodo webhook:', payload.type, JSON.stringify(payload).slice(0, 200));
-
-  const eventType = payload.type || payload.event_type;
-
-  switch (eventType) {
-    case 'subscription.active':
-    case 'subscription.renewed': {
-      const sub = payload.data || payload;
-      const customerId = sub.customer_id || (sub.customer && sub.customer.customer_id);
-      const subscriptionId = sub.subscription_id || sub.id;
-      const userId = sub.metadata && sub.metadata.user_id;
-
-      if (userId) {
-        // Find by user_id from metadata
-        const expiresAt = sub.current_period_end || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-        stmts.updateUserPlan.run('pro', expiresAt, customerId || null, subscriptionId || null, userId);
-        console.log(`Pro activated for user ${userId}`);
-      } else if (customerId) {
-        // Find by Dodo customer ID
-        const user = stmts.findUserByDodoCustomer.get(customerId);
-        if (user) {
-          const expiresAt = sub.current_period_end || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-          stmts.updateUserPlan.run('pro', expiresAt, customerId, subscriptionId || null, user.id);
-          console.log(`Pro activated for user ${user.id} via customer ${customerId}`);
-        }
-      }
-      break;
-    }
-
-    case 'subscription.cancelled':
-    case 'subscription.expired':
-    case 'subscription.failed': {
-      const sub = payload.data || payload;
-      const customerId = sub.customer_id || (sub.customer && sub.customer.customer_id);
-      const userId = sub.metadata && sub.metadata.user_id;
-
-      if (userId) {
-        stmts.updateUserPlan.run('free', null, null, null, userId);
-        console.log(`Pro deactivated for user ${userId}`);
-      } else if (customerId) {
-        stmts.updateUserPlanByDodoCustomer.run('free', null, customerId);
-        console.log(`Pro deactivated for customer ${customerId}`);
-      }
-      break;
-    }
-
-    default:
-      console.log('Dodo webhook unhandled event:', eventType);
-  }
-
-  res.status(200).send('OK');
-});
-
 // Get current plan status
 app.get('/api/plan', (req, res) => {
   const user = getUserFromCookie(req);
@@ -749,15 +774,19 @@ app.post('/api/receive/upload', rateLimit('receive-upload', 10, 60 * 1000), asyn
       partSize: 5 * 1024 * 1024,
     });
 
-    const uploadTimeout = setTimeout(() => { upload.abort(); passthrough.destroy(new Error("Upload timeout")); req.destroy(); }, 10 * 60 * 1000);
+    const recvTimeoutMs = Math.max(5 * 60 * 1000, Math.ceil(declaredSize / (1024 * 1024)) * 1000 + 5 * 60 * 1000);
+    const uploadTimeout = setTimeout(() => { upload.abort(); passthrough.destroy(new Error("Upload timeout")); req.destroy(); }, recvTimeoutMs);
 
     await upload.done();
     clearTimeout(uploadTimeout);
 
     stmts.createReceivedFile.run(token, link.user_id, filename, bytesReceived, mimeType, r2Key, expiresAt, link.id);
-    // Also tag with batch if provided
+    // Tag with batch if provided AND batch belongs to this recipient
     if (batchToken) {
-      try { db.prepare('UPDATE async_files SET batch_token = ? WHERE token = ?').run(batchToken, token); } catch(e) {}
+      const batch = stmts.findBatch.get(batchToken);
+      if (batch && batch.user_id === link.user_id) {
+        try { db.prepare('UPDATE async_files SET batch_token = ? WHERE token = ?').run(batchToken, token); } catch(e) {}
+      }
     }
 
     // Push inbox notification via WebSocket
@@ -1358,12 +1387,14 @@ app.post('/api/upload', rateLimit('upload', 20, 60 * 1000), async (req, res) => 
       partSize: 10 * 1024 * 1024, // 10MB parts (200 parts for 2GB)
     });
 
-    // Timeout: 10 minutes for uploads (generous for 2GB on slow connections)
+    // Size-aware timeout: minimum 5 minutes, plus 1 second per MB
+    // 100MB = 5 min, 500MB = ~13 min, 2GB = ~39 min (allows ~7 Mbps sustained)
+    const timeoutMs = Math.max(5 * 60 * 1000, Math.ceil(declaredSize / (1024 * 1024)) * 1000 + 5 * 60 * 1000);
     const uploadTimeout = setTimeout(() => {
       upload.abort();
       passthrough.destroy(new Error('Upload timeout'));
       req.destroy();
-    }, 10 * 60 * 1000);
+    }, timeoutMs);
 
     await upload.done();
     clearTimeout(uploadTimeout);
@@ -1372,7 +1403,18 @@ app.post('/api/upload', rateLimit('upload', 20, 60 * 1000), async (req, res) => 
 
     // Record in database
     const batchToken = req.headers['x-batch-token'] || null;
-    stmts.createAsyncFile.run(token, user.id, filename, fileSize, mimeType, r2Key, expiresAt, batchToken);
+    // Validate batch ownership — prevent cross-batch injection
+    if (batchToken) {
+      const batch = stmts.findBatch.get(batchToken);
+      if (!batch || batch.user_id !== user.id) {
+        // Invalid or someone else's batch — ignore the token
+        stmts.createAsyncFile.run(token, user.id, filename, fileSize, mimeType, r2Key, expiresAt, null);
+      } else {
+        stmts.createAsyncFile.run(token, user.id, filename, fileSize, mimeType, r2Key, expiresAt, batchToken);
+      }
+    } else {
+      stmts.createAsyncFile.run(token, user.id, filename, fileSize, mimeType, r2Key, expiresAt, null);
+    }
 
     // Track transfer for stats
     const fileId = 'async-' + token;
