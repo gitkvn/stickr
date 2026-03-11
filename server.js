@@ -1316,7 +1316,40 @@ app.get('/api/download/:token', async (req, res) => {
   }
 });
 
-// Download page HTML generator
+// Inline preview (serves file without Content-Disposition: attachment)
+app.get('/api/preview/:token', async (req, res) => {
+  if (!s3) return res.status(503).send('Not available');
+
+  const file = stmts.findAsyncFile.get(req.params.token);
+  if (!file) return res.status(404).send('File not found');
+  if (new Date(file.expires_at) < new Date()) return res.status(410).send('Expired');
+
+  // Only allow image previews
+  if (!file.mime_type || !file.mime_type.startsWith('image/')) {
+    return res.status(400).send('Preview not available');
+  }
+
+  try {
+    const obj = await s3.send(new GetObjectCommand({
+      Bucket: R2_BUCKET_NAME,
+      Key: file.r2_key,
+    }));
+
+    res.set({
+      'Content-Type': file.mime_type,
+      'Content-Length': file.file_size,
+      'Cache-Control': 'private, max-age=3600',
+    });
+
+    const stream = obj.Body;
+    stream.on('data', (chunk) => res.write(chunk));
+    stream.on('end', () => res.end());
+    stream.on('error', () => res.end());
+  } catch (err) {
+    console.error('Preview error:', err);
+    res.status(500).send('Preview failed');
+  }
+});
 function getDownloadPage(file, expired = false) {
   const sizeFormatted = file ? formatBytes(file.file_size) : '';
   const expiresIn = file ? getTimeRemaining(file.expires_at) : '';
@@ -1332,7 +1365,7 @@ h1{font-size:24px;margin-bottom:8px}
 p{color:#8888a8;font-size:14px;line-height:1.6;margin-bottom:24px}
 .btn{display:inline-flex;align-items:center;justify-content:center;padding:14px 32px;border-radius:12px;font-size:15px;font-weight:600;text-decoration:none;background:linear-gradient(135deg,#6c5ce7,#a29bfe);color:white;transition:all 0.2s}
 .btn:hover{transform:translateY(-1px);box-shadow:0 4px 20px #6c5ce730}
-.logo{font-size:28px;font-weight:800;margin-bottom:24px;background:linear-gradient(135deg,#6c5ce7,#a29bfe);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.logo{font-size:28px;font-weight:600;margin-bottom:24px;background:linear-gradient(135deg,#6c5ce7,#a29bfe);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
 </style></head><body>
 <div class="card">
 <div class="logo">Stickr</div>
@@ -1342,26 +1375,59 @@ p{color:#8888a8;font-size:14px;line-height:1.6;margin-bottom:24px}
 </div></body></html>`;
   }
 
+  const isImage = file.mime_type && file.mime_type.startsWith('image/');
+
   return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Stickr — Download ${escapeHtml(file.filename)}</title>
+<title>Stickr — ${isImage ? '' : 'Download '}${escapeHtml(file.filename)}</title>
+${isImage ? `<meta property="og:image" content="/api/preview/${file.token}">` : ''}
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:'Outfit',-apple-system,sans-serif;background:#0a0a0f;color:#e8e8f0;min-height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;padding:24px}
-.card{background:#12121a;border:1px solid #2a2a3e;border-radius:16px;padding:48px 36px;max-width:420px;width:100%;text-align:center}
-h1{font-size:20px;margin-bottom:4px;word-break:break-all}
-.meta{color:#8888a8;font-size:13px;margin-bottom:24px}
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:16px 32px;border-radius:12px;font-size:16px;font-weight:600;text-decoration:none;background:linear-gradient(135deg,#6c5ce7,#a29bfe);color:white;transition:all 0.2s;margin-bottom:16px;border:none;cursor:pointer}
+.card{background:#12121a;border:1px solid #2a2a3e;border-radius:16px;max-width:${isImage ? '640px' : '420px'};width:100%;text-align:center;overflow:hidden}
+.card-body{padding:${isImage ? '20px 28px 28px' : '48px 36px'}}
+h1{font-size:${isImage ? '16px' : '20px'};margin-bottom:4px;word-break:break-all}
+.meta{color:#8888a8;font-size:13px;margin-bottom:${isImage ? '16px' : '24px'}}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:14px 32px;border-radius:12px;font-size:15px;font-weight:600;text-decoration:none;background:linear-gradient(135deg,#6c5ce7,#a29bfe);color:white;transition:all 0.2s;margin-bottom:16px;border:none;cursor:pointer}
 .btn:hover{transform:translateY(-1px);box-shadow:0 4px 20px #6c5ce730}
 .btn svg{flex-shrink:0}
-.logo{font-size:28px;font-weight:800;margin-bottom:24px;background:linear-gradient(135deg,#6c5ce7,#a29bfe);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.logo{font-size:28px;font-weight:600;margin-bottom:${isImage ? '0' : '24px'};background:linear-gradient(135deg,#6c5ce7,#a29bfe);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
 .expiry{color:#555570;font-size:11px;margin-bottom:20px}
 .promo{border-top:1px solid #2a2a3e;padding-top:20px;margin-top:8px}
 .promo p{color:#8888a8;font-size:13px;margin-bottom:12px}
 .promo a{color:#a29bfe;text-decoration:none;font-weight:600;font-size:14px}
 .promo a:hover{text-decoration:underline}
 .file-icon{margin-bottom:16px}
+.img-preview{width:100%;max-height:70vh;object-fit:contain;display:block;background:#0a0a0f;cursor:zoom-in}
+.img-wrap{position:relative;background:#0a0a0f;border-bottom:1px solid #2a2a3e}
+.img-wrap .logo{position:absolute;top:16px;left:20px;font-size:20px;z-index:1}
+.fullscreen-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.95);z-index:1000;display:none;align-items:center;justify-content:center;cursor:zoom-out}
+.fullscreen-overlay.active{display:flex}
+.fullscreen-overlay img{max-width:95vw;max-height:95vh;object-fit:contain}
 </style></head><body>
 <div class="card">
+${isImage ? `
+<div class="img-wrap">
+<div class="logo">Stickr</div>
+<img class="img-preview" src="/api/preview/${file.token}" alt="${escapeHtml(file.filename)}" onclick="document.getElementById('fs').classList.add('active')" loading="lazy">
+</div>
+<div class="card-body">
+<h1>${escapeHtml(file.filename)}</h1>
+<p class="meta">${sizeFormatted}</p>
+<p class="expiry">Expires in ${expiresIn}</p>
+<a class="btn" href="/api/download/${file.token}">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+Download original
+</a>
+<div class="promo">
+<p>Want to share files too?</p>
+<a href="/">Start free on Stickr</a>
+</div>
+</div>
+<div class="fullscreen-overlay" id="fs" onclick="this.classList.remove('active')">
+<img src="/api/preview/${file.token}" alt="${escapeHtml(file.filename)}">
+</div>
+` : `
+<div class="card-body">
 <div class="logo">Stickr</div>
 <div class="file-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#a29bfe" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><polyline points="9 15 12 18 15 15"/></svg></div>
 <h1>${escapeHtml(file.filename)}</h1>
@@ -1375,8 +1441,11 @@ Download
 <p>Want to share files too?</p>
 <a href="/">Start free on Stickr</a>
 </div>
+</div>
+`}
 </div></body></html>`;
 }
+
 
 function getTimeRemaining(expiresAt) {
   const diff = new Date(expiresAt) - new Date();
@@ -1390,13 +1459,29 @@ function getTimeRemaining(expiresAt) {
 function getBatchDownloadPage(batch, files) {
   const totalSize = files.reduce((sum, f) => sum + f.file_size, 0);
   const expiresIn = getTimeRemaining(batch.expires_at);
-  const fileListHtml = files.map(f => `
+  const imageFiles = files.filter(f => f.mime_type && f.mime_type.startsWith('image/'));
+  const otherFiles = files.filter(f => !f.mime_type || !f.mime_type.startsWith('image/'));
+  const hasImages = imageFiles.length > 0;
+
+  const imageGridHtml = imageFiles.map(f => `
+    <div class="album-item">
+      <img src="/api/preview/${f.token}" alt="${escapeHtml(f.filename)}" loading="lazy" onclick="openFs(this.src, '${escapeHtml(f.filename)}')">
+      <div class="album-info">
+        <span class="album-name">${escapeHtml(f.filename)}</span>
+        <a href="/api/download/${f.token}" class="dl-link album-dl" title="Download">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        </a>
+      </div>
+    </div>
+  `).join('');
+
+  const fileListHtml = otherFiles.map(f => `
     <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;background:var(--bg);border:1px solid #2a2a3e;border-radius:10px;">
       <div style="min-width:0;flex:1;">
         <div style="font-size:14px;font-weight:600;color:#e8e8f0;word-break:break-all;">${escapeHtml(f.filename)}</div>
         <div style="font-size:12px;color:#8888a8;margin-top:2px;">${formatBytes(f.file_size)}</div>
       </div>
-      <a href="/api/download/${f.token}" style="flex-shrink:0;margin-left:16px;padding:8px 16px;background:linear-gradient(135deg,#6c5ce7,#a29bfe);color:white;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600;">Download</a>
+      <a href="/api/download/${f.token}" class="dl-link" style="flex-shrink:0;margin-left:16px;padding:8px 16px;background:linear-gradient(135deg,#6c5ce7,#a29bfe);color:white;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600;">Download</a>
     </div>
   `).join('');
 
@@ -1411,6 +1496,18 @@ h1{font-size:22px;margin-bottom:4px;text-align:center}
 .meta{color:#8888a8;font-size:13px;text-align:center;margin-bottom:4px}
 .expiry{color:#555570;font-size:11px;text-align:center;margin-bottom:20px}
 .files{display:flex;flex-direction:column;gap:8px;margin-bottom:20px}
+.album{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;margin-bottom:20px}
+.album-item{position:relative;border-radius:10px;overflow:hidden;background:#0a0a0f;border:1px solid #2a2a3e}
+.album-item img{width:100%;aspect-ratio:1;object-fit:cover;display:block;cursor:zoom-in;transition:opacity 0.2s}
+.album-item img:hover{opacity:0.85}
+.album-info{display:flex;align-items:center;justify-content:space-between;padding:8px 10px;gap:8px}
+.album-name{font-size:11px;color:#8888a8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.album-dl{flex-shrink:0;color:#a29bfe;padding:4px;border-radius:6px;display:flex;align-items:center}
+.album-dl:hover{background:rgba(108,92,231,0.15)}
+.fullscreen-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.95);z-index:1000;display:none;align-items:center;justify-content:center;cursor:zoom-out;flex-direction:column;gap:12px}
+.fullscreen-overlay.active{display:flex}
+.fullscreen-overlay img{max-width:95vw;max-height:85vh;object-fit:contain}
+.fullscreen-overlay .fs-name{color:#8888a8;font-size:13px}
 .btn-all{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:14px;border-radius:12px;font-size:15px;font-weight:600;text-decoration:none;background:linear-gradient(135deg,#6c5ce7,#a29bfe);color:white;border:none;cursor:pointer;transition:all 0.2s;margin-bottom:20px}
 .btn-all:hover{transform:translateY(-1px);box-shadow:0 4px 20px #6c5ce730}
 .logo{font-size:28px;font-weight:800;margin-bottom:24px;text-align:center;background:linear-gradient(135deg,#6c5ce7,#a29bfe);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
@@ -1428,7 +1525,9 @@ h1{font-size:22px;margin-bottom:4px;text-align:center}
 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
 Download All
 </button>
-<div class="files">${fileListHtml.replace(/href="/g, 'class="dl-link" href="')}</div>
+<div class="files">${hasImages ? `<div class="album">${imageGridHtml}</div>` : ''}${fileListHtml}</div>
+<div class="fullscreen-overlay" id="fs" onclick="this.classList.remove('active')"><img id="fs-img" src=""><div class="fs-name" id="fs-name"></div></div>
+<script>function openFs(src,name){var o=document.getElementById('fs');o.classList.add('active');document.getElementById('fs-img').src=src;document.getElementById('fs-name').textContent=name;}</script>
 <div class="promo">
 <p>Want to share files too?</p>
 <a href="/">Start free on Stickr</a>
