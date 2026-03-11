@@ -3763,21 +3763,43 @@ async function checkAuth() {
 function updateUsageDisplay() {} // No-op — balance system removed
 
 // Check auth on page load
+const hasRoomHash = location.hash.length === 7; // # + 6 chars
 checkAuth().finally(() => {
-  document.getElementById('home-view').classList.add('ready');
+  // Only show home view if not joining a room via hash
+  if (!hasRoomHash) {
+    document.getElementById('home-view').classList.add('ready');
+  }
 });
 
 // ─── Auto-join from URL hash ───
-window.addEventListener('load', () => {
+if (hasRoomHash) {
+  // Join immediately — don't wait for window.load
   const hash = location.hash.slice(1);
-  if (hash && hash.length === 6) {
-    // Show room view immediately so user sees something happening
-    roomId = hash;
-    isHost = false;
-    isJoiningRoom = true;
-    showRoomView();
-    updateStatus('connecting');
+  roomId = hash;
+  isHost = false;
+  isJoiningRoom = true;
+  
+  // Show room view right away
+  document.getElementById('home-view').classList.remove('active');
+  document.getElementById('room-view').classList.add('active');
+  document.body.classList.add('in-room');
+  sessionStartTime = Date.now();
+  updateStatus('connecting');
+  
+  // Update share link and room code displays
+  document.getElementById('share-link').value = location.origin + '/#' + hash;
+  document.getElementById('share-bar').style.display = 'flex';
+  if (isMobile && navigator.share) {
+    document.getElementById('copy-btn').textContent = 'Share';
+  }
+  document.getElementById('room-code-display').style.display = 'flex';
+  document.getElementById('room-code-text').textContent = hash;
+  const mobileCode = document.getElementById('mobile-room-code');
+  if (mobileCode) mobileCode.textContent = hash;
+  switchMobileTab('files');
 
+  // Connect after a brief delay to let page settle
+  setTimeout(() => {
     (async function tryConnect(attempt) {
       try {
         await connectWS();
@@ -3793,8 +3815,10 @@ window.addEventListener('load', () => {
         }
       }
     })(1);
-  }
-});
+    // Generate QR after QRCode lib is ready
+    try { generateInlineQR(); } catch(e) {}
+  }, 100);
+}
 
 // Close modal on overlay click
 document.getElementById('join-modal').addEventListener('click', (e) => {
