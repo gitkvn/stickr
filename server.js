@@ -22,7 +22,6 @@ const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID;
 const R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY;
 const R2_BUCKET_NAME = process.env.R2_BUCKET_NAME || 'stickr-files';
 const ASYNC_FILE_EXPIRY = 24 * 60 * 60 * 1000; // 24 hours
-const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB per file (free tier)
 
 let s3 = null;
 if (R2_ACCOUNT_ID && R2_ACCESS_KEY_ID && R2_SECRET_ACCESS_KEY) {
@@ -56,7 +55,7 @@ db.exec(`
     name TEXT,
     picture TEXT,
     username TEXT UNIQUE,
-    transfer_balance INTEGER DEFAULT 524288000,
+    transfer_balance INTEGER DEFAULT 1073741824,
     created_at TEXT DEFAULT (datetime('now'))
   );
 
@@ -716,9 +715,11 @@ app.post('/api/receive/upload', rateLimit('receive-upload', 10, 60 * 1000), asyn
   if (!link || !link.active) return res.status(403).json({ error: 'Invalid receive link' });
   if (new Date(link.expires_at) < new Date()) return res.status(410).json({ error: 'Link expired' });
 
-  // Use global MAX_FILE_SIZE for receive uploads too
-  if (declaredSize > MAX_FILE_SIZE) {
-    return res.status(413).json({ error: 'file_too_large', maxSize: MAX_FILE_SIZE });
+  // Use the recipient's plan limits for max file size
+  const recipientLimits = getUserPlanLimits(link.user_id);
+  const recvMaxSize = recipientLimits.maxFileSize;
+  if (declaredSize > recvMaxSize) {
+    return res.status(413).json({ error: 'file_too_large', maxSize: recvMaxSize });
   }
 
   const token = crypto.randomBytes(16).toString('hex');
@@ -730,7 +731,7 @@ app.post('/api/receive/upload', rateLimit('receive-upload', 10, 60 * 1000), asyn
 
   req.on('data', (chunk) => {
     bytesReceived += chunk.length;
-    if (bytesReceived > MAX_FILE_SIZE) {
+    if (bytesReceived > recvMaxSize) {
       passthrough.destroy(new Error('File too large'));
       req.destroy();
       return;
@@ -998,6 +999,9 @@ function getProfilePage(user, pinnedFiles, validKey) {
   const bio = profile.bio || '';
   const links = profile.links || [];
   const canUpload = !!validKey;
+  const recvLimits = getUserPlanLimits(user.id);
+  const maxRecvSize = recvLimits.maxFileSize;
+  const maxRecvLabel = maxRecvSize >= 1073741824 ? (maxRecvSize / 1073741824) + ' GB' : Math.round(maxRecvSize / 1048576) + ' MB';
 
   const socialIcons = {
     'twitter.com': '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>',
@@ -1099,7 +1103,7 @@ ${canUpload ? `<div class="drop-target" id="drop-target">
   <div class="drop-target-content">
     <div class="drop-target-icon"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
     <h2>Drop to send to ${userName}</h2>
-    <p>Up to 100 MB</p>
+    <p>Up to ${maxRecvLabel}</p>
   </div>
 </div>
 <div class="upload-modal" id="upload-modal">
@@ -1136,7 +1140,7 @@ ${canUpload ? `<div class="drop-target" id="drop-target">
     <input type="file" id="recv-file-input" style="display:none" multiple>
     <div class="drop-hint-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
     <h3>Send files to ${userName}</h3>
-    <p>Drop here or click to browse · up to 100 MB · zip folders before uploading</p>
+    <p>Drop here or click to browse · up to ${maxRecvLabel} · zip folders before uploading</p>
   </div>` : ''}
   ${pinsHtml}
   <div class="footer">
@@ -1146,7 +1150,7 @@ ${canUpload ? `<div class="drop-target" id="drop-target">
 </div>
 ${canUpload ? `<script>
 const LINK_ID='${validKey}';
-const MAX_RECV=100*1024*1024;
+const MAX_RECV=${maxRecvSize};
 let pendingFile=null;
 let dragCounter=0;
 const dropTarget=document.getElementById('drop-target');
@@ -1164,8 +1168,8 @@ let currentBatchToken=null;
 
 async function startQueue(files){
   uploadQueue=files.filter(f=>f.size<=MAX_RECV);
-  if(uploadQueue.length===0){alert('All files are over 100 MB limit');return}
-  if(uploadQueue.length<files.length){alert((files.length-uploadQueue.length)+' file(s) skipped — over 100 MB limit')}
+  if(uploadQueue.length===0){alert('All files are over ${maxRecvLabel} limit');return}
+  if(uploadQueue.length<files.length){alert((files.length-uploadQueue.length)+' file(s) skipped — over ${maxRecvLabel} limit')}
   uploadIdx=0;
   currentBatchToken=null;
   // Create a batch if multiple files
@@ -1313,7 +1317,7 @@ app.post('/api/upload', rateLimit('upload', 20, 60 * 1000), async (req, res) => 
 
   req.on('data', (chunk) => {
     bytesReceived += chunk.length;
-    if (bytesReceived > MAX_FILE_SIZE) {
+    if (bytesReceived > effectiveMaxSize) {
       passthrough.destroy(new Error('File too large'));
       req.destroy();
       return;
@@ -1334,7 +1338,7 @@ app.post('/api/upload', rateLimit('upload', 20, 60 * 1000), async (req, res) => 
         ContentType: mimeType,
       },
       queueSize: 4,
-      partSize: 5 * 1024 * 1024, // 5MB parts
+      partSize: 10 * 1024 * 1024, // 10MB parts (200 parts for 2GB)
     });
 
     await upload.done();
@@ -1912,7 +1916,7 @@ function formatBytes(bytes) {
 const PLAN_LIMITS = {
   free: {
     maxFileSize: 100 * 1024 * 1024,        // 100MB
-    maxTransfer: 500 * 1024 * 1024,        // 500MB (matches DB default)
+    maxTransfer: 1 * 1024 * 1024 * 1024,    // 1GB (matches DB default)
     linkExpiry: 24 * 60 * 60 * 1000,       // 24 hours
     maxPins: 3,
     maxPinSize: 25 * 1024 * 1024,          // 25MB
