@@ -837,6 +837,25 @@ app.delete('/api/inbox/:token', async (req, res) => {
   res.json({ success: true });
 });
 
+// Delete all files in a batch from inbox
+app.delete('/api/inbox/batch/:batchToken', async (req, res) => {
+  const user = getUserFromCookie(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+
+  const files = stmts.findBatchFiles.all(req.params.batchToken);
+  const userFiles = files.filter(f => f.user_id === user.id);
+  if (userFiles.length === 0) return res.status(404).json({ error: 'Batch not found' });
+
+  for (const file of userFiles) {
+    if (s3) {
+      try { await s3.send(new DeleteObjectCommand({ Bucket: R2_BUCKET_NAME, Key: file.r2_key })); } catch {}
+    }
+    stmts.deleteAsyncFile.run(file.token);
+  }
+  stmts.deleteBatch.run(req.params.batchToken);
+  res.json({ success: true, deleted: userFiles.length });
+});
+
 // ═══════════════════════════════════════════
 // PINNED FILES
 // ═══════════════════════════════════════════
@@ -1470,7 +1489,9 @@ p{color:#5a5a5a;font-size:14px;line-height:1.6;margin-bottom:24px}
 .btn:hover{transform:translateY(-1px);box-shadow:0 4px 20px rgba(91,76,219,0.2)}
 .logo{font-family:'Instrument Serif',Georgia,serif;font-size:28px;font-weight:400;margin-bottom:24px;color:#1a1a1a}
 .logo em{font-style:italic;color:#5b4cdb}
+.back-nav{width:100%;max-width:480px;margin-bottom:12px;}.back-link{display:inline-flex;align-items:center;gap:6px;color:#8a8a8a;text-decoration:none;font-size:13px;font-weight:500;transition:color .2s;}.back-link:hover{color:#5b4cdb}.back-link svg{flex-shrink:0}
 </style></head><body>
+<div class="back-nav"><a class="back-link" href="/"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>Back to Stickr</a></div>
 <div class="card">
 <div class="logo">St<em>i</em>ckr</div>
 <h1>${expired ? 'File Expired' : 'File Not Found'}</h1>
@@ -1509,7 +1530,9 @@ h1{font-family:'Instrument Serif',Georgia,serif;font-size:${isImage ? '16px' : '
 .fullscreen-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:1000;display:none;align-items:center;justify-content:center;cursor:zoom-out}
 .fullscreen-overlay.active{display:flex}
 .fullscreen-overlay img{max-width:95vw;max-height:95vh;object-fit:contain}
+.back-nav{width:100%;max-width:480px;margin-bottom:12px;}.back-link{display:inline-flex;align-items:center;gap:6px;color:#8a8a8a;text-decoration:none;font-size:13px;font-weight:500;transition:color .2s;}.back-link:hover{color:#5b4cdb}.back-link svg{flex-shrink:0}
 </style></head><body>
+<div class="back-nav"><a class="back-link" href="/"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>Back to Stickr</a></div>
 <div class="card">
 ${isImage ? `
 <div class="img-wrap">
@@ -1648,7 +1671,9 @@ h1{font-family:'Instrument Serif',Georgia,serif;font-size:22px;font-weight:400;m
 .gallery-nav.prev{left:16px}
 .gallery-nav.next{right:16px}
 @media(max-width:640px){.gallery-nav{display:none}}
+.back-nav{width:100%;max-width:480px;margin-bottom:12px;}.back-link{display:inline-flex;align-items:center;gap:6px;color:#8a8a8a;text-decoration:none;font-size:13px;font-weight:500;transition:color .2s;}.back-link:hover{color:#5b4cdb}.back-link svg{flex-shrink:0}
 </style></head><body>
+<div class="back-nav"><a class="back-link" href="/"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>Back to Stickr</a></div>
 <div class="card">
 <div class="logo">St<em>i</em>ckr</div>
 <h1>${files.length} file${files.length > 1 ? 's' : ''}</h1>

@@ -3151,6 +3151,7 @@ async function loadInbox() {
           </div>
           <div class="inbox-file-actions">
             <a class="inbox-action-btn dl" href="${f.batch_url}" title="View album" style="border-radius:8px;padding:6px 12px;width:auto;font-size:12px;font-weight:600;">View</a>
+            <button class="inbox-action-btn del" onclick="deleteBatchInbox('${f.token}')" title="Delete"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
           </div>
         </div>`;
       }
@@ -3175,6 +3176,26 @@ async function deleteInboxFile(token) {
     const res = await fetch('/api/inbox/' + token, { method: 'DELETE' });
     if (res.ok) {
       const el = document.getElementById('inbox-' + token);
+      if (el) { el.style.opacity = '0'; el.style.transition = 'opacity 0.2s'; setTimeout(() => { el.remove(); checkInboxCount(); }, 200); }
+      const list = document.getElementById('inbox-list');
+      setTimeout(() => {
+        if (!list.querySelector('.inbox-file-item')) {
+          list.innerHTML = '<div class="inbox-empty">No files received yet. Share your profile link and passkey to receive files.</div>';
+          document.getElementById('inbox-count-label').textContent = '0 files';
+        } else {
+          const count = list.querySelectorAll('.inbox-file-item').length;
+          document.getElementById('inbox-count-label').textContent = count + ' file' + (count !== 1 ? 's' : '');
+        }
+      }, 250);
+    }
+  } catch {}
+}
+
+async function deleteBatchInbox(batchToken) {
+  try {
+    const res = await fetch('/api/inbox/batch/' + batchToken, { method: 'DELETE' });
+    if (res.ok) {
+      const el = document.getElementById('inbox-' + batchToken);
       if (el) { el.style.opacity = '0'; el.style.transition = 'opacity 0.2s'; setTimeout(() => { el.remove(); checkInboxCount(); }, 200); }
       const list = document.getElementById('inbox-list');
       setTimeout(() => {
