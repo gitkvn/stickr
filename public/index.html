@@ -631,12 +631,67 @@ body.in-room .nav-links { display: none; }
 .showcase-section { width: 100%; padding: 80px 32px; }
 .showcase-frame { position: relative; border-radius: 24px; overflow: hidden; max-width: 1100px; margin: 0 auto; background: linear-gradient(135deg, rgba(91,76,219,1), rgba(45,159,111,0.9)); }
 .showcase-frame > img { display: none; }
-.showcase-overlay { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 64px 40px; }
+.showcase-overlay { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 48px 40px 24px; }
 .showcase-overlay h2 { font-family: var(--font-display); font-size: clamp(28px, 4vw, 44px); color: #fff; margin-bottom: 12px; letter-spacing: -0.5px; font-weight: 400; }
 .showcase-overlay h2 em { font-style: italic; }
-.showcase-overlay p { color: rgba(255,255,255,0.85); font-size: 16px; margin-bottom: 28px; max-width: 420px; }
+.showcase-overlay p { color: rgba(255,255,255,0.85); font-size: 16px; margin-bottom: 0; max-width: 420px; }
 .showcase-btn { background: #fff !important; color: var(--accent) !important; font-weight: 600; }
 .showcase-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 30px rgba(0,0,0,0.15); }
+
+/* QR Demo Animation */
+.qr-demo { display: flex; align-items: flex-end; justify-content: center; gap: 0; padding: 32px 32px 48px; position: relative; }
+.demo-laptop { display: flex; flex-direction: column; align-items: center; }
+.demo-laptop-screen { width: 200px; height: 140px; background: #1a1a2e; border-radius: 8px 8px 0 0; border: 2px solid rgba(255,255,255,0.2); overflow: hidden; }
+.demo-screen-bar { display: flex; gap: 4px; padding: 6px 8px; background: rgba(255,255,255,0.05); }
+.demo-dot { width: 5px; height: 5px; border-radius: 50%; background: rgba(255,255,255,0.2); }
+.demo-screen-body { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 8px; flex: 1; }
+.demo-qr { width: 70px; height: 70px; background: #fff; border-radius: 4px; padding: 6px; animation: qrAppear 0.4s ease 0.5s both; }
+.demo-qr-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; width: 100%; height: 100%; }
+.demo-qr-grid div { border-radius: 1px; }
+.demo-qr-grid div:nth-child(odd) { background: #5b4cdb; }
+.demo-qr-grid div:nth-child(even) { background: rgba(91,76,219,0.15); }
+.demo-qr-grid div:nth-child(3n) { background: #1a1a2e; }
+.demo-room-code { font-family: var(--font-mono); font-size: 9px; color: rgba(255,255,255,0.5); margin-top: 6px; animation: qrAppear 0.3s ease 0.8s both; }
+.demo-laptop-base { width: 230px; height: 10px; background: rgba(255,255,255,0.15); border-radius: 0 0 4px 4px; }
+
+.demo-phone { width: 90px; margin-left: -20px; z-index: 2; animation: phoneSlideIn 0.6s ease 1.2s both; }
+.demo-phone-screen { background: #1a1a2e; border-radius: 12px; border: 2px solid rgba(255,255,255,0.2); padding: 16px 10px; min-height: 160px; position: relative; overflow: hidden; }
+
+/* Phone steps — appear sequentially */
+.demo-phone-step { display: flex; flex-direction: column; align-items: center; gap: 6px; position: absolute; inset: 0; justify-content: center; opacity: 0; }
+.demo-step-scan { animation: stepShow 1.5s ease 1.8s both; }
+.demo-step-connected { animation: stepShow 1.2s ease 3.5s both; }
+.demo-step-transfer { animation: stepShow 3s ease 5s both; }
+
+.demo-scan-viewfinder { width: 44px; height: 44px; border: 2px solid #5b4cdb; border-radius: 6px; animation: scanPulse 1s ease infinite; }
+.demo-scan-label { font-size: 9px; color: rgba(255,255,255,0.6); }
+.demo-connected-icon { width: 32px; height: 32px; border-radius: 50%; background: #2d9f6f; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; }
+.demo-connected-label { font-size: 9px; color: #2d9f6f; font-weight: 600; }
+.demo-transfer-file { font-size: 9px; color: rgba(255,255,255,0.8); white-space: nowrap; }
+.demo-transfer-bar { width: 54px; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; overflow: hidden; }
+.demo-transfer-fill { height: 100%; width: 0; background: #5b4cdb; border-radius: 2px; animation: fillBar 1.5s ease 5.5s both; }
+.demo-transfer-label { font-size: 9px; color: #2d9f6f; font-weight: 600; opacity: 0; animation: qrAppear 0.3s ease 7s both; }
+
+/* Connection line between devices */
+.demo-connection-line { position: absolute; bottom: 90px; left: 50%; width: 60px; height: 2px; margin-left: -30px; opacity: 0; animation: qrAppear 0.3s ease 3.8s both; }
+.demo-connection-line::before { content: ''; position: absolute; inset: 0; background: rgba(255,255,255,0.3); border-radius: 1px; }
+.demo-connection-dot { width: 6px; height: 6px; border-radius: 50%; background: #2d9f6f; position: absolute; top: -2px; animation: dotTravel 1.5s ease 5s infinite; }
+
+@keyframes qrAppear { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
+@keyframes phoneSlideIn { from { opacity: 0; transform: translateX(20px) translateY(10px); } to { opacity: 1; transform: translateX(0) translateY(0); } }
+@keyframes stepShow { 0% { opacity: 0; } 10% { opacity: 1; } 90% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes scanPulse { 0%, 100% { border-color: #5b4cdb; } 50% { border-color: rgba(91,76,219,0.3); } }
+@keyframes fillBar { from { width: 0; } to { width: 100%; } }
+@keyframes dotTravel { 0% { left: 0; } 100% { left: calc(100% - 6px); } }
+
+@media (max-width: 640px) {
+  .qr-demo { padding: 24px 16px 36px; }
+  .demo-laptop-screen { width: 160px; height: 110px; }
+  .demo-laptop-base { width: 190px; }
+  .demo-qr { width: 50px; height: 50px; padding: 4px; }
+  .demo-phone { width: 76px; }
+  .demo-phone-screen { min-height: 130px; padding: 12px 8px; }
+}
 
 /* Mobile hero responsive */
 @media (max-width: 860px) {
@@ -963,7 +1018,51 @@ body.in-room .nav-links { display: none; }
         <div class="showcase-overlay">
           <h2>Phone to laptop<br>in <em>seconds.</em></h2>
           <p>Scan a QR code to connect. No cables, no email chains, no cloud uploads.</p>
-          <button class="btn showcase-btn" onclick="createRoom()">Start sharing free →</button>
+        </div>
+        <div class="qr-demo">
+          <!-- Laptop -->
+          <div class="demo-laptop">
+            <div class="demo-laptop-screen">
+              <div class="demo-screen-bar"><span class="demo-dot"></span><span class="demo-dot"></span><span class="demo-dot"></span></div>
+              <div class="demo-screen-body">
+                <div class="demo-qr">
+                  <div class="demo-qr-grid">
+                    <div></div><div></div><div></div><div></div><div></div><div></div><div></div>
+                    <div></div><div></div><div></div><div></div><div></div><div></div><div></div>
+                    <div></div><div></div><div></div><div></div><div></div><div></div><div></div>
+                    <div></div><div></div><div></div><div></div><div></div><div></div><div></div>
+                    <div></div><div></div><div></div><div></div><div></div><div></div><div></div>
+                    <div></div><div></div><div></div><div></div><div></div><div></div><div></div>
+                    <div></div><div></div><div></div><div></div><div></div><div></div><div></div>
+                  </div>
+                </div>
+                <div class="demo-room-code">Room: abc123</div>
+              </div>
+            </div>
+            <div class="demo-laptop-base"></div>
+          </div>
+          <!-- Phone -->
+          <div class="demo-phone">
+            <div class="demo-phone-screen">
+              <div class="demo-phone-step demo-step-scan">
+                <div class="demo-scan-viewfinder"></div>
+                <div class="demo-scan-label">Scanning...</div>
+              </div>
+              <div class="demo-phone-step demo-step-connected">
+                <div class="demo-connected-icon">✓</div>
+                <div class="demo-connected-label">Connected</div>
+              </div>
+              <div class="demo-phone-step demo-step-transfer">
+                <div class="demo-transfer-file">📸 vacation.jpg</div>
+                <div class="demo-transfer-bar"><div class="demo-transfer-fill"></div></div>
+                <div class="demo-transfer-label">Sent ✓</div>
+              </div>
+            </div>
+          </div>
+          <!-- Connection line -->
+          <div class="demo-connection-line">
+            <div class="demo-connection-dot"></div>
+          </div>
         </div>
       </div>
     </div>
