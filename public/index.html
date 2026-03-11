@@ -409,6 +409,7 @@ header {
 .file-status { font-size: 11px; font-family: var(--font-mono); color: var(--text-muted); flex-shrink: 0; min-width: 90px; text-align: right; }
 .file-status.complete { color: var(--success); }
 .file-status.link-ready { color: var(--success); }
+.file-status.download-ready { color: var(--accent); }
 .file-status.uploading { color: var(--accent); }
 .download-link { color: var(--accent); text-decoration: none; font-weight: 600; cursor: pointer; }
 .download-link:hover { text-decoration: underline; }
@@ -620,11 +621,11 @@ body.in-room .nav-links { display: none; }
 
 /* ═══ Photo River ═══ */
 .photo-river { padding: 64px 0; overflow: hidden; background: var(--bg-secondary); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); margin-top: 64px; }
-.river-label { text-align: center; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 2px; color: var(--text-muted); margin-bottom: 32px; }
-.river-track { display: flex; gap: 16px; animation: scrollRiver 35s linear infinite; width: max-content; }
+.river-label { text-align: center; font-family: var(--font-display); font-size: clamp(22px, 3.5vw, 32px); font-weight: 400; color: var(--text-primary); margin-bottom: 32px; letter-spacing: -0.5px; line-height: 1.2; }
+.river-label em { font-style: italic; color: var(--accent); font-weight: 700; }
+.river-track { display: flex; gap: 16px; animation: scrollRiver 30s linear infinite; width: max-content; }
 @keyframes scrollRiver { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
-.river-img { width: 260px; height: 180px; border-radius: 14px; overflow: hidden; flex-shrink: 0; }
-.river-img img { width: 100%; height: 100%; object-fit: cover; }
+.filetype-pill { flex-shrink: 0; padding: 12px 24px; background: var(--bg-primary); border: 1px solid var(--border); border-radius: 100px; font-size: 15px; font-weight: 500; color: var(--text-primary); white-space: nowrap; letter-spacing: -0.2px; }
 
 /* ═══ Showcase CTA ═══ */
 .showcase-section { width: 100%; padding: 80px 32px; }
@@ -657,7 +658,6 @@ body.in-room .nav-links { display: none; }
   .showcase-section { padding: 48px 20px; }
   .landing-section { padding: 40px 16px 0; max-width: 100%; }
   .photo-river { padding: 40px 0; margin-top: 40px; }
-  .river-img { width: 200px; height: 140px; }
   .landing-features-section { padding: 48px 16px !important; }
 }
 
@@ -672,7 +672,6 @@ body.in-room .nav-links { display: none; }
   .showcase-overlay h2 { font-size: 22px; }
   .showcase-overlay p { font-size: 14px; margin-bottom: 20px; }
   .btn { padding: 12px 24px; font-size: 14px; }
-  .river-img { width: 160px; height: 110px; }
   .landing-hero h1 { font-size: clamp(26px, 7vw, 36px); }
   .price-card.pro { order: -1; }
   .landing-footer { flex-direction: column; gap: 10px; text-align: center; }
@@ -894,26 +893,28 @@ body.in-room .nav-links { display: none; }
 
     <!-- Photo river -->
     <div class="photo-river">
-      <div class="river-label">Your files. Your way. No compression.</div>
+      <div class="river-label">One link to share <em>large</em> files.</div>
       <div class="river-track">
-        <div class="river-img"><img src="/img/IMG_0084.jpg" alt="" loading="lazy"></div>
-        <div class="river-img"><img src="/img/IMG_0108.jpg" alt="" loading="lazy"></div>
-        <div class="river-img"><img src="/img/IMG_1598.jpg" alt="" loading="lazy"></div>
-        <div class="river-img"><img src="/img/IMG_0193.jpg" alt="" loading="lazy"></div>
-        <div class="river-img"><img src="/img/IMG_0211.jpg" alt="" loading="lazy"></div>
-        <div class="river-img"><img src="/img/IMG_1250.jpg" alt="" loading="lazy"></div>
-        <div class="river-img"><img src="/img/IMG_1303.jpg" alt="" loading="lazy"></div>
-        <div class="river-img"><img src="/img/IMG_0166.jpg" alt="" loading="lazy"></div>
-        <div class="river-img"><img src="/img/IMG_1135.jpg" alt="" loading="lazy"></div>
-        <div class="river-img"><img src="/img/IMG_0084.jpg" alt="" loading="lazy"></div>
-        <div class="river-img"><img src="/img/IMG_0108.jpg" alt="" loading="lazy"></div>
-        <div class="river-img"><img src="/img/IMG_1598.jpg" alt="" loading="lazy"></div>
-        <div class="river-img"><img src="/img/IMG_0193.jpg" alt="" loading="lazy"></div>
-        <div class="river-img"><img src="/img/IMG_0211.jpg" alt="" loading="lazy"></div>
-        <div class="river-img"><img src="/img/IMG_1250.jpg" alt="" loading="lazy"></div>
-        <div class="river-img"><img src="/img/IMG_1303.jpg" alt="" loading="lazy"></div>
-        <div class="river-img"><img src="/img/IMG_0166.jpg" alt="" loading="lazy"></div>
-        <div class="river-img"><img src="/img/IMG_1135.jpg" alt="" loading="lazy"></div>
+        <div class="filetype-pill">📸 Photos</div>
+        <div class="filetype-pill">🎬 Videos</div>
+        <div class="filetype-pill">📁 Project folders</div>
+        <div class="filetype-pill">🎵 Music</div>
+        <div class="filetype-pill">📄 Documents</div>
+        <div class="filetype-pill">🎨 Design files</div>
+        <div class="filetype-pill">📦 ZIP archives</div>
+        <div class="filetype-pill">💻 Code repos</div>
+        <div class="filetype-pill">🎙️ Podcasts</div>
+        <div class="filetype-pill">📊 Spreadsheets</div>
+        <div class="filetype-pill">📸 Photos</div>
+        <div class="filetype-pill">🎬 Videos</div>
+        <div class="filetype-pill">📁 Project folders</div>
+        <div class="filetype-pill">🎵 Music</div>
+        <div class="filetype-pill">📄 Documents</div>
+        <div class="filetype-pill">🎨 Design files</div>
+        <div class="filetype-pill">📦 ZIP archives</div>
+        <div class="filetype-pill">💻 Code repos</div>
+        <div class="filetype-pill">🎙️ Podcasts</div>
+        <div class="filetype-pill">📊 Spreadsheets</div>
       </div>
     </div>
 
@@ -1733,6 +1734,14 @@ function setupFileChannel(channel, remotePeerId) {
           delete incomingFiles[msg.id];
           if (receivingFileId === msg.id) receivingFileId = null;
         }
+      } else if (msg.type === 'file-link') {
+        // Pro sender uploaded to R2, show download card
+        addFileItem(msg.id, msg.name, msg.size, 'receiving');
+        updateFileStatus(msg.id, 'download-ready', 100, msg.url);
+        playChime('file');
+        sendNotification('File ready to download', msg.name);
+        sessionStats.filesReceived++;
+        sessionStats.bytesReceived += msg.size;
       }
     } else {
       // Binary chunk — route to this channel's current file
@@ -1770,7 +1779,43 @@ function setupFileChannel(channel, remotePeerId) {
 }
 
 async function sendFile(file) {
-  // In a room, always use P2P WebRTC — async R2 upload is for "Get a Link" only
+  const P2P_LIMIT_ANON = 25 * 1024 * 1024;   // 25 MB for unauthenticated
+  const P2P_LIMIT_FREE = 50 * 1024 * 1024;    // 50 MB for signed-in free
+  const P2P_LIMIT_PRO = 50 * 1024 * 1024;     // 50 MB P2P, above this R2
+
+  const isPro = currentUser && currentUser.plan === 'pro';
+  const isFree = currentUser && currentUser.plan !== 'pro';
+  const isAnon = !currentUser;
+
+  // Determine the P2P limit for this user
+  let p2pLimit = P2P_LIMIT_ANON;
+  if (isPro) p2pLimit = P2P_LIMIT_PRO;
+  else if (isFree) p2pLimit = P2P_LIMIT_FREE;
+
+  // File exceeds P2P limit
+  if (file.size > p2pLimit) {
+    if (isPro) {
+      // Pro: route through R2 and send download card to peer
+      return sendFileViaR2(file);
+    } else if (isFree) {
+      showToast('Files over 50 MB require Pro. Upgrade for up to 2 GB transfers.');
+      showUpgradePrompt();
+      return;
+    } else {
+      // Anonymous
+      showToast('Sign up to send files over 25 MB.');
+      showSigninModal();
+      return;
+    }
+  }
+
+  // Also check plan max (Pro 2GB cap)
+  if (file.size > getMaxFileSize()) {
+    showToastError('Maximum file size is ' + formatMaxSize());
+    return;
+  }
+
+  // P2P WebRTC transfer
   const fileId = 'f-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6);
   const abortCtrl = new AbortController();
   activeSendAbort.set(fileId, abortCtrl);
@@ -1907,6 +1952,77 @@ function cancelSend(fileId) {
   if (ctrl) ctrl.abort();
 }
 
+// Pro room transfer: upload to R2, send download card to peer via data channel
+async function sendFileViaR2(file) {
+  if (file.size > getMaxFileSize()) {
+    showToastError('Maximum file size is ' + formatMaxSize());
+    return;
+  }
+
+  const fileId = 'r2-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6);
+  addFileItem(fileId, file.name, file.size, 'sending');
+  updateFileStatus(fileId, 'uploading');
+
+  try {
+    const xhr = new XMLHttpRequest();
+    const uploadPromise = new Promise((resolve, reject) => {
+      xhr.upload.addEventListener('progress', (e) => {
+        if (e.lengthComputable) {
+          const pct = Math.round((e.loaded / e.total) * 100);
+          const speed = e.loaded / ((Date.now() - uploadStart) / 1000);
+          updateFileProgress(fileId, pct, speed);
+        }
+      });
+      xhr.addEventListener('load', () => {
+        if (xhr.status >= 200 && xhr.status < 300) resolve(JSON.parse(xhr.responseText));
+        else { try { reject(JSON.parse(xhr.responseText)); } catch { reject({ error: 'Upload failed' }); } }
+      });
+      xhr.addEventListener('error', () => reject({ error: 'Network error' }));
+      xhr.addEventListener('abort', () => reject({ error: 'Cancelled' }));
+    });
+
+    const uploadStart = Date.now();
+    xhr.open('POST', '/api/upload');
+    xhr.setRequestHeader('X-Filename', encodeURIComponent(file.name));
+    xhr.setRequestHeader('X-Mime-Type', file.type || 'application/octet-stream');
+    xhr.send(file);
+
+    const result = await uploadPromise;
+
+    updateFileStatus(fileId, 'complete');
+
+    // Send download card to peer via data channel
+    for (const [, peer] of peers) {
+      if (peer.dataChannel && peer.dataChannel.readyState === 'open') {
+        peer.dataChannel.send(JSON.stringify({
+          type: 'file-link',
+          id: fileId,
+          name: file.name,
+          size: file.size,
+          mimeType: file.type,
+          url: result.url,
+        }));
+      }
+    }
+
+    sessionStats.filesSent++;
+    sessionStats.bytesSent += file.size;
+  } catch (err) {
+    console.error('R2 room upload error:', err);
+    if (err.error === 'file_too_large') {
+      showToastError('Maximum file size is ' + formatMaxSize());
+      removeFileItem(fileId);
+    } else if (err.error === 'quota_exceeded') {
+      showToastError('Transfer limit reached. Upgrade your plan for more.');
+      removeFileItem(fileId);
+    } else {
+      updateFileStatus(fileId, 'cancelled');
+      showToast(err.error || 'Upload failed');
+    }
+  }
+}
+
+// Get a Link: upload to R2 and show download link (not in a room context)
 async function sendFileAsync(file) {
   if (file.size > getMaxFileSize()) {
     showToastError('Maximum file size is ' + formatMaxSize());
@@ -2429,7 +2545,7 @@ function collapseCompletedFiles() {
   let activeItem = null;
   items.forEach(item => {
     const statusEl = item.querySelector('.file-status');
-    if (statusEl && (statusEl.classList.contains('complete') || statusEl.classList.contains('link-ready'))) {
+    if (statusEl && (statusEl.classList.contains('complete') || statusEl.classList.contains('link-ready') || statusEl.classList.contains('download-ready'))) {
       completedCount++;
       item.classList.add('compact');
     } else {
@@ -2464,6 +2580,8 @@ function updateFileStatus(id, status, pct, url) {
       el.textContent = '⬆ Uploading...';
     } else if (status === 'link-ready') {
       el.innerHTML = '✓ <span class="download-link" onclick="event.stopPropagation();navigator.clipboard.writeText(\'' + url + '\');this.textContent=\'Copied!\';setTimeout(()=>this.textContent=\'Copy\',2000);">Copy</span> · <span class="download-link" onclick="event.stopPropagation();shareAsyncLink(\'' + url + '\',\'' + id + '\');">Share</span> · <span class="download-link" onclick="event.stopPropagation();showQrCode(\'' + url + '\');">QR</span>';
+    } else if (status === 'download-ready') {
+      el.innerHTML = '<a href="' + url + '" class="download-link" style="font-weight:600;" target="_blank">⬇ Download</a>';
     } else if (status === 'interrupted') {
       el.textContent = pct !== undefined ? `✕ Failed at ${pct}%` : '✕ Failed';
     } else if (status === 'cancelled') {
@@ -2473,10 +2591,10 @@ function updateFileStatus(id, status, pct, url) {
     }
   }
   const bar = document.getElementById(`progress-${id}`);
-  if (bar && (status === 'complete' || status === 'link-ready')) bar.style.width = '100%';
+  if (bar && (status === 'complete' || status === 'link-ready' || status === 'download-ready')) bar.style.width = '100%';
 
   // Hide cancel button when transfer is no longer active
-  if (status === 'complete' || status === 'interrupted' || status === 'cancelled' || status === 'link-ready') {
+  if (status === 'complete' || status === 'interrupted' || status === 'cancelled' || status === 'link-ready' || status === 'download-ready') {
     const cancelBtn = document.getElementById(`cancel-${id}`);
     if (cancelBtn) cancelBtn.remove();
   }
