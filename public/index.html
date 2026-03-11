@@ -85,6 +85,8 @@ header {
 }
 
 .logo { display: flex; align-items: center; gap: 12px; text-decoration: none; cursor: pointer; }
+.logo:hover .logo-text { animation: logoJiggle 0.4s ease; }
+@keyframes logoJiggle { 0% { transform: rotate(0); } 20% { transform: rotate(-3deg); } 40% { transform: rotate(3deg); } 60% { transform: rotate(-2deg); } 80% { transform: rotate(1deg); } 100% { transform: rotate(0); } }
 
 .logo-text {
   font-family: var(--font-display);
