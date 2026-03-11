@@ -1088,25 +1088,21 @@ ${canUpload ? `<div class="drop-target" id="drop-target">
   <div class="upload-modal-inner">
     <div id="upload-form">
       <h3 style="font-size:20px;font-weight:700;margin-bottom:16px">Send to ${userName}</h3>
-      <div class="file-preview" id="file-preview">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5b4cdb" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-        <span class="fname" id="p-fname"></span>
-        <span class="fsize" id="p-fsize"></span>
-      </div>
+      <div id="upload-file-list" style="max-height:200px;overflow-y:auto;margin-bottom:16px;"></div>
       <button class="upload-btn" id="upload-btn">Send file</button>
-      <button class="cancel-btn" onclick="document.getElementById('upload-modal').classList.remove('active')">Cancel</button>
+      <button class="cancel-btn" onclick="resetUpload()">Cancel</button>
       <div class="upload-error" id="upload-error"></div>
     </div>
     <div class="upload-state" id="upload-progress">
-      <p>Sending to ${userName}...</p>
+      <p id="progress-label">Sending to ${userName}...</p>
       <div class="progress-bar-bg"><div class="progress-bar-fill" id="progress-fill"></div></div>
       <p id="progress-text">0%</p>
     </div>
     <div class="upload-state" id="upload-success">
       <div class="success-check"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg></div>
       <h3 style="font-size:18px;margin-bottom:4px">Sent!</h3>
-      <p>${userName} will find it in their inbox</p>
-      <button class="send-another" onclick="resetUpload()">Send another file</button>
+      <p id="success-msg">${userName} will find it in their inbox</p>
+      <button class="send-another" onclick="resetUpload()">Send more files</button>
     </div>
   </div>
 </div>` : ''}
@@ -1161,13 +1157,16 @@ async function startQueue(files){
       if(r.ok){const d=await r.json();currentBatchToken=d.token}
     }catch(e){}
   }
-  showUpload(uploadQueue[0]);
+  showFileList();
 }
 
-function showUpload(file){
-  pendingFile=file;
-  document.getElementById('p-fname').textContent=file.name+(uploadQueue.length>1?' ('+(uploadIdx+1)+'/'+uploadQueue.length+')':'');
-  document.getElementById('p-fsize').textContent=fmtSize(file.size);
+function showFileList(){
+  var list=document.getElementById('upload-file-list');
+  var totalSize=uploadQueue.reduce(function(s,f){return s+f.size},0);
+  list.innerHTML=uploadQueue.map(function(f,i){
+    return '<div class="file-preview" style="margin-bottom:6px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5b4cdb" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg><span class="fname">'+f.name+'</span><span class="fsize">'+fmtSize(f.size)+'</span></div>';
+  }).join('');
+  document.getElementById('upload-btn').textContent=uploadQueue.length>1?'Send '+uploadQueue.length+' files ('+fmtSize(totalSize)+')':'Send file';
   document.getElementById('upload-form').style.display='';
   document.getElementById('upload-progress').classList.remove('active');
   document.getElementById('upload-success').classList.remove('active');
@@ -1175,46 +1174,74 @@ function showUpload(file){
   modal.classList.add('active');
 }
 
-document.getElementById('upload-btn').addEventListener('click',doUpload);
-modal.addEventListener('click',e=>{if(e.target===modal){modal.classList.remove('active');pendingFile=null}});
+document.getElementById('upload-btn').addEventListener('click',doUploadAll);
+modal.addEventListener('click',function(e){if(e.target===modal)resetUpload()});
 
-async function doUpload(){
-  if(!pendingFile)return;
+async function doUploadAll(){
   document.getElementById('upload-form').style.display='none';
-  const prog=document.getElementById('upload-progress');prog.classList.add('active');
-  const fill=document.getElementById('progress-fill');const txt=document.getElementById('progress-text');
-  try{
-    const xhr=new XMLHttpRequest();
-    await new Promise((resolve,reject)=>{
-      xhr.upload.addEventListener('progress',e=>{if(e.lengthComputable){const p=Math.round(e.loaded/e.total*100);fill.style.width=p+'%';txt.textContent=p+'%'}});
-      xhr.addEventListener('load',()=>{if(xhr.status>=200&&xhr.status<300)resolve(JSON.parse(xhr.responseText));else{try{reject(JSON.parse(xhr.responseText))}catch{reject({error:'Upload failed'})}}});
-      xhr.addEventListener('error',()=>reject({error:'Network error'}));
-      xhr.open('POST','/api/receive/upload');
-      xhr.setRequestHeader('X-Receive-Link-Id',LINK_ID);
-      xhr.setRequestHeader('X-Filename',encodeURIComponent(pendingFile.name));
-      xhr.setRequestHeader('X-Mime-Type',pendingFile.type||'application/octet-stream');
-      if(currentBatchToken)xhr.setRequestHeader('X-Batch-Token',currentBatchToken);
-      xhr.send(pendingFile);
-    });
-    prog.classList.remove('active');
-    uploadIdx++;
-    if(uploadIdx<uploadQueue.length){
-      // More files to upload — show next
-      showUpload(uploadQueue[uploadIdx]);
-    } else {
-      document.getElementById('upload-success').classList.add('active');
-      var msg=document.querySelector('#upload-success p');
-      if(msg)msg.textContent=uploadQueue.length>1?uploadQueue.length+' files sent to ${userName}':'${userName} will find it in their inbox';
+  var prog=document.getElementById('upload-progress');prog.classList.add('active');
+  var fill=document.getElementById('progress-fill');
+  var txt=document.getElementById('progress-text');
+  var label=document.getElementById('progress-label');
+  var failed=0;
+
+  for(uploadIdx=0;uploadIdx<uploadQueue.length;uploadIdx++){
+    var file=uploadQueue[uploadIdx];
+    if(uploadQueue.length>1){
+      label.textContent='Sending '+(uploadIdx+1)+' of '+uploadQueue.length+'...';
     }
-  }catch(err){
-    prog.classList.remove('active');
+    fill.style.width='0%';
+    txt.textContent='0%';
+    try{
+      await new Promise(function(resolve,reject){
+        var xhr=new XMLHttpRequest();
+        xhr.upload.addEventListener('progress',function(e){
+          if(e.lengthComputable){
+            var filePct=Math.round(e.loaded/e.total*100);
+            // Show combined progress: file progress + overall position
+            var overallPct=Math.round(((uploadIdx+filePct/100)/uploadQueue.length)*100);
+            fill.style.width=overallPct+'%';
+            txt.textContent=uploadQueue.length>1?(uploadIdx+1)+'/'+uploadQueue.length+' · '+filePct+'%':filePct+'%';
+          }
+        });
+        xhr.addEventListener('load',function(){
+          if(xhr.status>=200&&xhr.status<300)resolve();
+          else{try{reject(JSON.parse(xhr.responseText))}catch(e2){reject({error:'Upload failed'})}}
+        });
+        xhr.addEventListener('error',function(){reject({error:'Network error'})});
+        xhr.open('POST','/api/receive/upload');
+        xhr.setRequestHeader('X-Receive-Link-Id',LINK_ID);
+        xhr.setRequestHeader('X-Filename',encodeURIComponent(file.name));
+        xhr.setRequestHeader('X-Mime-Type',file.type||'application/octet-stream');
+        if(currentBatchToken)xhr.setRequestHeader('X-Batch-Token',currentBatchToken);
+        xhr.send(file);
+      });
+    }catch(err){
+      failed++;
+      console.error('Upload failed for '+file.name,err);
+    }
+  }
+
+  prog.classList.remove('active');
+  var sent=uploadQueue.length-failed;
+  if(sent>0){
+    document.getElementById('upload-success').classList.add('active');
+    var msg=document.getElementById('success-msg');
+    if(sent===1&&uploadQueue.length===1){
+      msg.textContent='${userName} will find it in their inbox';
+    }else if(failed>0){
+      msg.textContent=sent+' of '+uploadQueue.length+' files sent to ${userName}';
+    }else{
+      msg.textContent=sent+' files sent to ${userName}';
+    }
+  }else{
     document.getElementById('upload-form').style.display='';
-    document.getElementById('upload-error').textContent=err.error||'Upload failed';
+    document.getElementById('upload-error').textContent='All uploads failed. Please try again.';
     document.getElementById('upload-error').classList.add('show');
   }
 }
 
-function resetUpload(){modal.classList.remove('active');pendingFile=null;uploadQueue=[];uploadIdx=0;document.getElementById('progress-fill').style.width='0%'}
+function resetUpload(){modal.classList.remove('active');pendingFile=null;uploadQueue=[];uploadIdx=0;currentBatchToken=null;document.getElementById('progress-fill').style.width='0%'}
 function fmtSize(b){if(b<1024)return b+' B';if(b<1048576)return(b/1024).toFixed(1)+' KB';return(b/1048576).toFixed(1)+' MB'}
 <\/script>` : ''}
 </body></html>`;

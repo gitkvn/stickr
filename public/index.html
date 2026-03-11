@@ -647,15 +647,20 @@ body.in-room .nav-links { display: none; }
 
 /* Mobile hero responsive */
 @media (max-width: 860px) {
-  .landing-hero-grid { grid-template-columns: 1fr; gap: 32px; padding: 32px 20px 0; text-align: center; }
+  .landing-hero-grid { grid-template-columns: 1fr; gap: 24px; padding: 32px 20px 0; text-align: center; }
   .landing-sub { margin-left: auto; margin-right: auto; }
   .hero-actions { justify-content: center; }
   .actions { flex-wrap: wrap; }
-  .hero-collage { height: 340px; margin: 0 -10px; }
-  .hp-1 { width: 170px; height: 210px; left: 5px; }
-  .hp-2 { width: 130px; height: 170px; right: 5px; }
-  .hp-3 { width: 150px; height: 110px; left: 20px; }
-  .hp-4 { width: 110px; height: 140px; }
+  /* Switch collage to 2x2 grid on mobile */
+  .hero-collage { position: relative; height: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 0 16px; max-width: 400px; margin: 0 auto; }
+  .hero-photo { position: relative; border-radius: 12px; width: 100%; height: auto; aspect-ratio: 4/5; top: auto; left: auto; right: auto; bottom: auto; transform: none; animation: scaleIn .5s ease both; }
+  .hp-1 { transform: rotate(-1.5deg); animation-delay: .1s; }
+  .hp-2 { transform: rotate(1.5deg); animation-delay: .2s; }
+  .hp-3 { transform: rotate(1deg); animation-delay: .3s; }
+  .hp-4 { transform: rotate(-1deg); animation-delay: .4s; }
+  .transfer-pill { font-size: 11px; padding: 8px 10px; }
+  .tp-top { top: -8px; right: 10px; }
+  .tp-bottom { bottom: -8px; left: 10px; }
   .showcase-frame { height: 280px; }
   .showcase-section { padding: 48px 20px; }
   .landing-section { padding: 40px 16px 0; max-width: 100%; }
@@ -665,19 +670,12 @@ body.in-room .nav-links { display: none; }
 }
 
 @media (max-width: 640px) {
-  .landing-hero-grid { padding: 24px 16px 0; gap: 24px; }
+  .landing-hero-grid { padding: 24px 16px 0; gap: 20px; }
+  .hero-collage { max-width: 340px; gap: 8px; padding: 0 8px; }
   .pricing-cards { grid-template-columns: 1fr; }
   .landing-features-grid { grid-template-columns: 1fr; }
   .landing-features-section { margin-top: 32px; padding: 40px 12px !important; }
   .landing-steps { grid-template-columns: 1fr; }
-  .hero-collage { height: 260px; }
-  .hp-1 { width: 140px; height: 175px; left: 0; }
-  .hp-2 { width: 110px; height: 140px; right: 0; }
-  .hp-3 { width: 120px; height: 90px; bottom: 30px; left: 10px; }
-  .hp-4 { width: 95px; height: 120px; right: 10px; bottom: 10px; }
-  .transfer-pill { font-size: 10px; padding: 6px 8px; }
-  .tp-top { right: 20px; top: 5px; }
-  .tp-bottom { left: -5px; bottom: 70px; }
   .showcase-frame { height: 220px; }
   .showcase-overlay h2 { font-size: 22px; }
   .showcase-overlay p { font-size: 14px; margin-bottom: 20px; }
