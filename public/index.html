@@ -125,8 +125,11 @@ header {
 /* ─── Profile Dropdown ─── */
 .profile-menu { display: none; position: absolute; top: calc(100% + 8px); right: 0; background: var(--bg-primary); border: 1px solid var(--border); border-radius: 12px; padding: 16px; min-width: 240px; box-shadow: 0 8px 30px rgba(0,0,0,0.1); z-index: 300; max-height: calc(100vh - 80px); overflow-y: auto; -webkit-overflow-scrolling: touch; }
 .profile-menu.active { display: block; }
+.profile-menu-backdrop { display: none; position: fixed; inset: 0; z-index: 299; background: transparent; }
+.profile-menu-backdrop.active { display: block; }
 @media (max-width: 860px) {
   .profile-menu { position: fixed; top: 60px; right: 12px; left: 12px; min-width: 0; max-height: calc(100vh - 80px); max-height: calc(100dvh - 80px); }
+  .profile-menu-backdrop.active { background: rgba(0,0,0,0.15); }
 }
 .profile-menu-header { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
 .profile-menu-avatar { width: 40px; height: 40px; border-radius: 50%; border: 2px solid var(--border); }
@@ -716,6 +719,7 @@ body.in-room .nav-links { display: none; }
         <span class="user-name" id="user-name"></span>
         <button class="user-logout" onclick="logout()" title="Sign out">Sign out</button>
         <!-- Profile dropdown -->
+        <div class="profile-menu-backdrop" id="profile-menu-backdrop" onclick="closeProfileMenu()"></div>
         <div class="profile-menu" id="profile-menu">
           <div class="profile-menu-header">
             <img class="profile-menu-avatar" id="profile-menu-avatar" src="" alt="">
@@ -3119,7 +3123,7 @@ function hideSigninModal() {
 // INBOX
 // ═══════════════════════════════════════════
 function showInbox() {
-  document.getElementById('profile-menu').classList.remove('active');
+  closeProfileMenu();
   document.getElementById('home-view').classList.remove('active');
   document.getElementById('link-view').classList.remove('active');
   document.getElementById('inbox-view').classList.add('active');
@@ -3393,7 +3397,20 @@ function loadUploadLink() {
 
 function toggleProfileMenu() {
   const menu = document.getElementById('profile-menu');
-  menu.classList.toggle('active');
+  const backdrop = document.getElementById('profile-menu-backdrop');
+  const isOpen = menu.classList.contains('active');
+  if (isOpen) {
+    menu.classList.remove('active');
+    backdrop.classList.remove('active');
+  } else {
+    menu.classList.add('active');
+    backdrop.classList.add('active');
+  }
+}
+
+function closeProfileMenu() {
+  document.getElementById('profile-menu').classList.remove('active');
+  document.getElementById('profile-menu-backdrop').classList.remove('active');
 }
 
 // ═══════════════════════════════════════════
