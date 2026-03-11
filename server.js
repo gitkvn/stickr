@@ -963,17 +963,16 @@ function getProfilePage(user, pinnedFiles, validKey) {
 
   return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>${userName} — Stickr</title>
-
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'DM Sans',-apple-system,sans-serif;background:#ffffff;color:#1a1a1a;min-height:100vh}
-body::before{display:none}
+body{font-family:'DM Sans',-apple-system,sans-serif;background:#fff;color:#1a1a1a;min-height:100vh}
 .page{max-width:440px;margin:0 auto;padding:56px 20px 40px;position:relative;z-index:1}
 .profile{text-align:center;margin-bottom:32px}
-.avatar-ring{width:96px;height:96px;border-radius:50%;padding:3px;background:linear-gradient(135deg,#5b4cdb,#5b4cdb);display:inline-block;margin-bottom:16px}
-.avatar{width:100%;height:100%;border-radius:50%;object-fit:cover;background:#ffffff;border:3px solid #ffffff}
-.name{.name{font-size:28px;font-weight:600;letter-spacing:-0.5px;margin-bottom:4px}
-.handle{font-family:'SF Mono','Fira Code',monospace;font-size:13px;color:#8a8a8a;margin-bottom:10px}
+.avatar-ring{width:96px;height:96px;border-radius:50%;padding:3px;background:linear-gradient(135deg,#5b4cdb,#7c6fef);display:inline-block;margin-bottom:16px}
+.avatar{width:100%;height:100%;border-radius:50%;object-fit:cover;background:#fff;border:3px solid #fff}
+.name{font-family:'Instrument Serif',Georgia,serif;font-size:28px;font-weight:400;letter-spacing:-0.5px;margin-bottom:4px}
+.handle{font-family:'JetBrains Mono','SF Mono','Fira Code',monospace;font-size:13px;color:#8a8a8a;margin-bottom:10px}
 .bio{font-size:14px;color:#5a5a5a;line-height:1.6;max-width:320px;margin:0 auto 14px}
 .social-row{display:flex;justify-content:center;gap:10px;margin-bottom:4px}
 .social-icon{width:38px;height:38px;border-radius:10px;background:#fafaf8;border:1px solid #e0ddd4;display:flex;align-items:center;justify-content:center;color:#8a8a8a;text-decoration:none;transition:all .2s}
@@ -994,32 +993,33 @@ body::before{display:none}
 .pin-meta{font-size:11px;color:#8a8a8a;margin-top:2px}
 .pin-dl{width:32px;height:32px;border-radius:8px;background:rgba(91,76,219,0.08);display:flex;align-items:center;justify-content:center;color:#5b4cdb;flex-shrink:0}
 .footer{text-align:center;padding-top:24px;border-top:1px solid #e0ddd4}
-.footer-logo{font-size:16px;font-weight:800;margin-bottom:4px;background:linear-gradient(135deg,#5b4cdb,#5b4cdb);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.footer-logo{font-family:'Instrument Serif',Georgia,serif;font-size:18px;font-weight:400;margin-bottom:4px;color:#1a1a1a}
+.footer-logo em{font-style:italic;color:#5b4cdb}
 .footer p{font-size:11px;color:#8a8a8a}
 .footer a{color:#5b4cdb;text-decoration:none;font-weight:600}
 .drop-target{display:none;position:fixed;inset:0;z-index:100;align-items:center;justify-content:center;background:rgba(255,255,255,0.92);backdrop-filter:blur(20px);border:3px dashed transparent}
 .drop-target.active{display:flex;border-color:#5b4cdb;animation:borderPulse 1.5s ease infinite}
-@keyframes borderPulse{0%,100%{border-color:#5b4cdb}50%{border-color:#5b4cdb}}
+@keyframes borderPulse{0%,100%{border-color:#5b4cdb}50%{border-color:#7c6fef}}
 .drop-target-content{text-align:center}
-.drop-target-icon{width:80px;height:80px;border-radius:50%;background:rgba(91,76,219,0.1);display:flex;align-items:center;justify-content:center;margin:0 auto 20px;color:#5b4cdb}
-.drop-target h2{font-size:24px;font-weight:700;margin-bottom:8px}
+.drop-target-icon{width:80px;height:80px;border-radius:50%;background:rgba(91,76,219,0.08);display:flex;align-items:center;justify-content:center;margin:0 auto 20px;color:#5b4cdb}
+.drop-target h2{font-family:'Instrument Serif',Georgia,serif;font-size:24px;font-weight:400;margin-bottom:8px}
 .drop-target p{color:#8a8a8a;font-size:14px}
 .upload-modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(255,255,255,0.85);backdrop-filter:blur(12px);z-index:200}
 .upload-modal.active{display:flex}
 .upload-modal-inner{background:#fafaf8;border:1px solid #e0ddd4;border-radius:20px;padding:36px;max-width:360px;width:90%;text-align:center}
-.file-preview{display:flex;align-items:center;gap:10px;padding:10px 14px;background:rgba(91,76,219,0.08);border-radius:10px;margin-bottom:20px;font-size:13px}
+.file-preview{display:flex;align-items:center;gap:10px;padding:10px 14px;background:rgba(91,76,219,0.06);border-radius:10px;margin-bottom:20px;font-size:13px}
 .file-preview .fname{flex:1;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .file-preview .fsize{color:#8a8a8a;font-size:12px;flex-shrink:0}
-.upload-btn{width:100%;padding:14px;background:linear-gradient(135deg,#5b4cdb,#5b4cdb);color:white;border:none;border-radius:12px;font-family:inherit;font-size:15px;font-weight:600;cursor:pointer;transition:all .2s;margin-bottom:10px}
+.upload-btn{width:100%;padding:14px;background:#5b4cdb;color:white;border:none;border-radius:12px;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:600;cursor:pointer;transition:all .2s;margin-bottom:10px}
 .upload-btn:hover{transform:translateY(-1px);box-shadow:0 4px 20px rgba(91,76,219,0.2)}
 .cancel-btn{background:none;border:none;color:#8a8a8a;font-family:inherit;font-size:13px;cursor:pointer}
 .cancel-btn:hover{color:#1a1a1a}
 .progress-bar-bg{width:100%;height:6px;background:#e0ddd4;border-radius:3px;overflow:hidden;margin:16px 0 12px}
-.progress-bar-fill{height:100%;background:linear-gradient(90deg,#5b4cdb,#5b4cdb);border-radius:3px;width:0%;transition:width .3s}
+.progress-bar-fill{height:100%;background:linear-gradient(90deg,#5b4cdb,#7c6fef);border-radius:3px;width:0%;transition:width .3s}
 .upload-state{display:none;text-align:center;padding:16px 0}
 .upload-state.active{display:block}
 .upload-state p{font-size:13px;color:#5a5a5a}
-.success-check{width:56px;height:56px;border-radius:50%;background:rgba(45,159,111,0.1);display:flex;align-items:center;justify-content:center;margin:0 auto 14px;color:#2d9f6f}
+.success-check{width:56px;height:56px;border-radius:50%;background:rgba(45,159,111,0.08);display:flex;align-items:center;justify-content:center;margin:0 auto 14px;color:#2d9f6f}
 .send-another{margin-top:16px;background:none;border:1px solid #e0ddd4;color:#5a5a5a;padding:10px 24px;border-radius:10px;font-family:inherit;font-size:13px;cursor:pointer}
 .send-another:hover{border-color:#5b4cdb;color:#1a1a1a}
 .upload-error{color:#e8604c;font-size:13px;margin-top:12px;display:none}
@@ -1079,7 +1079,7 @@ ${canUpload ? `<div class="drop-target" id="drop-target">
   </div>` : ''}
   ${pinsHtml}
   <div class="footer">
-    <div class="footer-logo">Stickr</div>
+    <div class="footer-logo">St<em>i</em>ckr</div>
     <p>One link. Share everything. <a href="/">Get yours</a></p>
   </div>
 </div>
@@ -1357,18 +1357,20 @@ function getDownloadPage(file, expired = false) {
   if (!file || expired) {
     return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Stickr — File ${expired ? 'Expired' : 'Not Found'}</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Outfit',-apple-system,sans-serif;background:#0a0a0f;color:#1a1a1a;min-height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;padding:24px}
-.card{background:#12121a;border:1px solid #2a2a3e;border-radius:16px;padding:48px 36px;max-width:420px;width:100%;text-align:center}
-h1{font-size:24px;margin-bottom:8px}
+body{font-family:'DM Sans',-apple-system,sans-serif;background:#fff;color:#1a1a1a;min-height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;padding:24px}
+.card{background:#fafaf8;border:1px solid #e0ddd4;border-radius:16px;padding:48px 36px;max-width:420px;width:100%;text-align:center}
+h1{font-family:'Instrument Serif',Georgia,serif;font-size:24px;font-weight:400;margin-bottom:8px}
 p{color:#5a5a5a;font-size:14px;line-height:1.6;margin-bottom:24px}
-.btn{display:inline-flex;align-items:center;justify-content:center;padding:14px 32px;border-radius:12px;font-size:15px;font-weight:600;text-decoration:none;background:linear-gradient(135deg,#5b4cdb,#5b4cdb);color:white;transition:all 0.2s}
-.btn:hover{transform:translateY(-1px);box-shadow:0 4px 20px #5b4cdb30}
-.logo{font-size:28px;font-weight:600;margin-bottom:24px;background:linear-gradient(135deg,#5b4cdb,#5b4cdb);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.btn{display:inline-flex;align-items:center;justify-content:center;padding:14px 32px;border-radius:12px;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:600;text-decoration:none;background:#5b4cdb;color:white;transition:all 0.2s}
+.btn:hover{transform:translateY(-1px);box-shadow:0 4px 20px rgba(91,76,219,0.2)}
+.logo{font-family:'Instrument Serif',Georgia,serif;font-size:28px;font-weight:400;margin-bottom:24px;color:#1a1a1a}
+.logo em{font-style:italic;color:#5b4cdb}
 </style></head><body>
 <div class="card">
-<div class="logo">Stickr</div>
+<div class="logo">St<em>i</em>ckr</div>
 <h1>${expired ? 'File Expired' : 'File Not Found'}</h1>
 <p>${expired ? 'This download link has expired. Ask the sender for a new link.' : 'This download link does not exist or has been removed.'}</p>
 <a class="btn" href="/">Share files with Stickr</a>
@@ -1380,34 +1382,36 @@ p{color:#5a5a5a;font-size:14px;line-height:1.6;margin-bottom:24px}
   return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Stickr — ${isImage ? '' : 'Download '}${escapeHtml(file.filename)}</title>
 ${isImage ? `<meta property="og:image" content="/api/preview/${file.token}">` : ''}
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Outfit',-apple-system,sans-serif;background:#0a0a0f;color:#1a1a1a;min-height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;padding:24px}
-.card{background:#12121a;border:1px solid #2a2a3e;border-radius:16px;max-width:${isImage ? '640px' : '420px'};width:100%;text-align:center;overflow:hidden}
+body{font-family:'DM Sans',-apple-system,sans-serif;background:#fff;color:#1a1a1a;min-height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;padding:24px}
+.card{background:#fafaf8;border:1px solid #e0ddd4;border-radius:16px;max-width:${isImage ? '640px' : '420px'};width:100%;text-align:center;overflow:hidden}
 .card-body{padding:${isImage ? '20px 28px 28px' : '48px 36px'}}
-h1{font-size:${isImage ? '16px' : '20px'};margin-bottom:4px;word-break:break-all}
-.meta{color:#5a5a5a;font-size:13px;margin-bottom:${isImage ? '16px' : '24px'}}
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:14px 32px;border-radius:12px;font-size:15px;font-weight:600;text-decoration:none;background:linear-gradient(135deg,#5b4cdb,#5b4cdb);color:white;transition:all 0.2s;margin-bottom:16px;border:none;cursor:pointer}
-.btn:hover{transform:translateY(-1px);box-shadow:0 4px 20px #5b4cdb30}
+h1{font-family:'Instrument Serif',Georgia,serif;font-size:${isImage ? '16px' : '22px'};font-weight:400;margin-bottom:4px;word-break:break-all}
+.meta{color:#8a8a8a;font-size:13px;margin-bottom:${isImage ? '16px' : '24px'}}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:14px 32px;border-radius:12px;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:600;text-decoration:none;background:#5b4cdb;color:white;transition:all 0.2s;margin-bottom:16px;border:none;cursor:pointer}
+.btn:hover{transform:translateY(-1px);box-shadow:0 4px 20px rgba(91,76,219,0.2)}
 .btn svg{flex-shrink:0}
-.logo{font-size:28px;font-weight:600;margin-bottom:${isImage ? '0' : '24px'};background:linear-gradient(135deg,#5b4cdb,#5b4cdb);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.logo{font-family:'Instrument Serif',Georgia,serif;font-size:28px;font-weight:400;margin-bottom:${isImage ? '0' : '24px'};color:#1a1a1a}
+.logo em{font-style:italic;color:#5b4cdb}
 .expiry{color:#8a8a8a;font-size:11px;margin-bottom:20px}
-.promo{border-top:1px solid #2a2a3e;padding-top:20px;margin-top:8px}
-.promo p{color:#5a5a5a;font-size:13px;margin-bottom:12px}
+.promo{border-top:1px solid #e0ddd4;padding-top:20px;margin-top:8px}
+.promo p{color:#8a8a8a;font-size:13px;margin-bottom:12px}
 .promo a{color:#5b4cdb;text-decoration:none;font-weight:600;font-size:14px}
 .promo a:hover{text-decoration:underline}
 .file-icon{margin-bottom:16px}
-.img-preview{width:100%;max-height:70vh;object-fit:contain;display:block;background:#0a0a0f;cursor:zoom-in}
-.img-wrap{position:relative;background:#0a0a0f;border-bottom:1px solid #2a2a3e}
+.img-preview{width:100%;max-height:70vh;object-fit:contain;display:block;background:#f5f3ee;cursor:zoom-in}
+.img-wrap{position:relative;background:#f5f3ee;border-bottom:1px solid #e0ddd4}
 .img-wrap .logo{position:absolute;top:16px;left:20px;font-size:20px;z-index:1}
-.fullscreen-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.95);z-index:1000;display:none;align-items:center;justify-content:center;cursor:zoom-out}
+.fullscreen-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:1000;display:none;align-items:center;justify-content:center;cursor:zoom-out}
 .fullscreen-overlay.active{display:flex}
 .fullscreen-overlay img{max-width:95vw;max-height:95vh;object-fit:contain}
 </style></head><body>
 <div class="card">
 ${isImage ? `
 <div class="img-wrap">
-<div class="logo">Stickr</div>
+<div class="logo">St<em>i</em>ckr</div>
 <img class="img-preview" src="/api/preview/${file.token}" alt="${escapeHtml(file.filename)}" onclick="document.getElementById('fs').classList.add('active')" loading="lazy">
 </div>
 <div class="card-body">
@@ -1428,7 +1432,7 @@ Download original
 </div>
 ` : `
 <div class="card-body">
-<div class="logo">Stickr</div>
+<div class="logo">St<em>i</em>ckr</div>
 <div class="file-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#5b4cdb" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><polyline points="9 15 12 18 15 15"/></svg></div>
 <h1>${escapeHtml(file.filename)}</h1>
 <p class="meta">${sizeFormatted}</p>
@@ -1463,9 +1467,9 @@ function getBatchDownloadPage(batch, files) {
   const otherFiles = files.filter(f => !f.mime_type || !f.mime_type.startsWith('image/'));
   const hasImages = imageFiles.length > 0;
 
-  const imageGridHtml = imageFiles.map(f => `
+  const imageGridHtml = imageFiles.map((f, i) => `
     <div class="album-item">
-      <img src="/api/preview/${f.token}" alt="${escapeHtml(f.filename)}" loading="lazy" onclick="openFs(this.src, '${escapeHtml(f.filename)}')">
+      <img src="/api/preview/${f.token}" alt="${escapeHtml(f.filename)}" loading="lazy" onclick="openGallery(${i})">
       <div class="album-info">
         <span class="album-name">${escapeHtml(f.filename)}</span>
         <a href="/api/download/${f.token}" class="dl-link album-dl" title="Download">
@@ -1476,62 +1480,148 @@ function getBatchDownloadPage(batch, files) {
   `).join('');
 
   const fileListHtml = otherFiles.map(f => `
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;background:var(--bg);border:1px solid #2a2a3e;border-radius:10px;">
-      <div style="min-width:0;flex:1;">
-        <div style="font-size:14px;font-weight:600;color:#1a1a1a;word-break:break-all;">${escapeHtml(f.filename)}</div>
-        <div style="font-size:12px;color:#5a5a5a;margin-top:2px;">${formatBytes(f.file_size)}</div>
+    <div class="file-row">
+      <div class="file-row-info">
+        <div class="file-row-name">${escapeHtml(f.filename)}</div>
+        <div class="file-row-size">${formatBytes(f.file_size)}</div>
       </div>
-      <a href="/api/download/${f.token}" class="dl-link" style="flex-shrink:0;margin-left:16px;padding:8px 16px;background:linear-gradient(135deg,#5b4cdb,#5b4cdb);color:white;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600;">Download</a>
+      <a href="/api/download/${f.token}" class="dl-link file-row-btn">Download</a>
     </div>
   `).join('');
 
+  // Build gallery data for JS
+  const galleryData = imageFiles.map(f => ({
+    src: '/api/preview/' + f.token,
+    name: f.filename,
+    dl: '/api/download/' + f.token
+  }));
+
   return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Stickr — ${files.length} files</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-:root{--bg:#12121a}
-body{font-family:'Outfit',-apple-system,sans-serif;background:#0a0a0f;color:#1a1a1a;min-height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;padding:24px}
-.card{background:#12121a;border:1px solid #2a2a3e;border-radius:16px;padding:36px;max-width:480px;width:100%}
-h1{font-size:22px;margin-bottom:4px;text-align:center}
-.meta{color:#5a5a5a;font-size:13px;text-align:center;margin-bottom:4px}
+body{font-family:'DM Sans',-apple-system,sans-serif;background:#fff;color:#1a1a1a;min-height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;padding:24px}
+.card{background:#fafaf8;border:1px solid #e0ddd4;border-radius:16px;padding:36px;max-width:520px;width:100%}
+h1{font-family:'Instrument Serif',Georgia,serif;font-size:22px;font-weight:400;margin-bottom:4px;text-align:center}
+.meta{color:#8a8a8a;font-size:13px;text-align:center;margin-bottom:4px}
 .expiry{color:#8a8a8a;font-size:11px;text-align:center;margin-bottom:20px}
 .files{display:flex;flex-direction:column;gap:8px;margin-bottom:20px}
-.album{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;margin-bottom:20px}
-.album-item{position:relative;border-radius:10px;overflow:hidden;background:#0a0a0f;border:1px solid #2a2a3e}
-.album-item img{width:100%;aspect-ratio:1;object-fit:cover;display:block;cursor:zoom-in;transition:opacity 0.2s}
+.album{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin-bottom:20px}
+.album-item{position:relative;border-radius:10px;overflow:hidden;background:#f5f3ee;border:1px solid #e0ddd4;transition:transform 0.2s}
+.album-item:hover{transform:translateY(-2px);box-shadow:0 4px 16px rgba(0,0,0,0.06)}
+.album-item img{width:100%;aspect-ratio:1;object-fit:cover;display:block;cursor:pointer;transition:opacity 0.2s}
 .album-item img:hover{opacity:0.85}
 .album-info{display:flex;align-items:center;justify-content:space-between;padding:8px 10px;gap:8px}
-.album-name{font-size:11px;color:#5a5a5a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.album-name{font-size:11px;color:#8a8a8a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .album-dl{flex-shrink:0;color:#5b4cdb;padding:4px;border-radius:6px;display:flex;align-items:center}
-.album-dl:hover{background:rgba(91,76,219,0.1)}
-.fullscreen-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.95);z-index:1000;display:none;align-items:center;justify-content:center;cursor:zoom-out;flex-direction:column;gap:12px}
-.fullscreen-overlay.active{display:flex}
-.fullscreen-overlay img{max-width:95vw;max-height:85vh;object-fit:contain}
-.fullscreen-overlay .fs-name{color:#5a5a5a;font-size:13px}
-.btn-all{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:14px;border-radius:12px;font-size:15px;font-weight:600;text-decoration:none;background:linear-gradient(135deg,#5b4cdb,#5b4cdb);color:white;border:none;cursor:pointer;transition:all 0.2s;margin-bottom:20px}
-.btn-all:hover{transform:translateY(-1px);box-shadow:0 4px 20px #5b4cdb30}
-.logo{font-size:28px;font-weight:800;margin-bottom:24px;text-align:center;background:linear-gradient(135deg,#5b4cdb,#5b4cdb);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
-.promo{border-top:1px solid #2a2a3e;padding-top:20px;text-align:center}
-.promo p{color:#5a5a5a;font-size:13px;margin-bottom:12px}
+.album-dl:hover{background:rgba(91,76,219,0.08)}
+.file-row{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;background:#fff;border:1px solid #e0ddd4;border-radius:10px}
+.file-row-info{min-width:0;flex:1}
+.file-row-name{font-size:14px;font-weight:600;word-break:break-all}
+.file-row-size{font-size:12px;color:#8a8a8a;margin-top:2px}
+.file-row-btn{flex-shrink:0;margin-left:16px;padding:8px 16px;background:#5b4cdb;color:white;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600;transition:all 0.2s}
+.file-row-btn:hover{background:#4a3bc4}
+.btn-all{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:14px;border-radius:12px;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:600;text-decoration:none;background:#5b4cdb;color:white;border:none;cursor:pointer;transition:all 0.2s;margin-bottom:20px}
+.btn-all:hover{transform:translateY(-1px);box-shadow:0 4px 20px rgba(91,76,219,0.2)}
+.logo{font-family:'Instrument Serif',Georgia,serif;font-size:28px;font-weight:400;margin-bottom:24px;text-align:center;color:#1a1a1a}
+.logo em{font-style:italic;color:#5b4cdb}
+.promo{border-top:1px solid #e0ddd4;padding-top:20px;text-align:center}
+.promo p{color:#8a8a8a;font-size:13px;margin-bottom:12px}
 .promo a{color:#5b4cdb;text-decoration:none;font-weight:600;font-size:14px}
 .promo a:hover{text-decoration:underline}
+
+/* Gallery overlay */
+.gallery{position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:1000;display:none;align-items:center;justify-content:center;flex-direction:column;user-select:none;-webkit-user-select:none}
+.gallery.active{display:flex}
+.gallery-img{max-width:92vw;max-height:78vh;object-fit:contain;border-radius:4px;transition:opacity 0.2s}
+.gallery-info{color:rgba(255,255,255,0.6);font-size:13px;margin-top:12px;text-align:center}
+.gallery-counter{color:rgba(255,255,255,0.35);font-size:12px;margin-top:4px}
+.gallery-close{position:absolute;top:16px;right:20px;width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,0.1);border:none;color:#fff;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.2s}
+.gallery-close:hover{background:rgba(255,255,255,0.2)}
+.gallery-dl{position:absolute;top:16px;right:70px;width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,0.1);border:none;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.2s;text-decoration:none}
+.gallery-dl:hover{background:rgba(255,255,255,0.2)}
+.gallery-nav{position:absolute;top:50%;transform:translateY(-50%);width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,0.1);border:none;color:#fff;font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s;backdrop-filter:blur(4px)}
+.gallery-nav:hover{background:rgba(255,255,255,0.25)}
+.gallery-nav.prev{left:16px}
+.gallery-nav.next{right:16px}
+@media(max-width:640px){.gallery-nav{display:none}}
 </style></head><body>
 <div class="card">
-<div class="logo">Stickr</div>
+<div class="logo">St<em>i</em>ckr</div>
 <h1>${files.length} file${files.length > 1 ? 's' : ''}</h1>
 <p class="meta">${formatBytes(totalSize)} total</p>
 <p class="expiry">Expires in ${expiresIn}</p>
-<button class="btn-all" onclick="document.querySelectorAll('.dl-link').forEach((a,i)=>setTimeout(()=>a.click(),i*500))">
+<button class="btn-all" onclick="document.querySelectorAll('.dl-link').forEach((a,i)=>setTimeout(()=>{var l=document.createElement('a');l.href=a.href;l.download='';document.body.appendChild(l);l.click();l.remove()},i*500))">
 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
 Download All
 </button>
-<div class="files">${hasImages ? `<div class="album">${imageGridHtml}</div>` : ''}${fileListHtml}</div>
-<div class="fullscreen-overlay" id="fs" onclick="this.classList.remove('active')"><img id="fs-img" src=""><div class="fs-name" id="fs-name"></div></div>
-<script>function openFs(src,name){var o=document.getElementById('fs');o.classList.add('active');document.getElementById('fs-img').src=src;document.getElementById('fs-name').textContent=name;}</script>
+<div class="files">${hasImages ? '<div class="album">' + imageGridHtml + '</div>' : ''}${fileListHtml}</div>
 <div class="promo">
 <p>Want to share files too?</p>
 <a href="/">Start free on Stickr</a>
 </div>
+</div>
+
+<!-- Gallery overlay with swipe + arrows -->
+<div class="gallery" id="gallery">
+<button class="gallery-close" onclick="closeGallery()">✕</button>
+<a class="gallery-dl" id="gallery-dl" href="" download title="Download"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></a>
+<button class="gallery-nav prev" onclick="galleryNav(-1)">‹</button>
+<button class="gallery-nav next" onclick="galleryNav(1)">›</button>
+<img class="gallery-img" id="gallery-img" src="" alt="">
+<div class="gallery-info" id="gallery-name"></div>
+<div class="gallery-counter" id="gallery-counter"></div>
+</div>
+
+<script>
+var images=${JSON.stringify(galleryData)};
+var gIdx=0;
+var touchX=0;
+
+function openGallery(i){
+  gIdx=i;
+  renderGallery();
+  document.getElementById('gallery').classList.add('active');
+  document.body.style.overflow='hidden';
+}
+function closeGallery(){
+  document.getElementById('gallery').classList.remove('active');
+  document.body.style.overflow='';
+}
+function galleryNav(dir){
+  gIdx=(gIdx+dir+images.length)%images.length;
+  renderGallery();
+}
+function renderGallery(){
+  var img=images[gIdx];
+  document.getElementById('gallery-img').src=img.src;
+  document.getElementById('gallery-name').textContent=img.name;
+  document.getElementById('gallery-dl').href=img.dl;
+  document.getElementById('gallery-counter').textContent=(gIdx+1)+' / '+images.length;
+}
+// Keyboard arrows
+document.addEventListener('keydown',function(e){
+  if(!document.getElementById('gallery').classList.contains('active'))return;
+  if(e.key==='ArrowLeft')galleryNav(-1);
+  else if(e.key==='ArrowRight')galleryNav(1);
+  else if(e.key==='Escape')closeGallery();
+});
+// Touch swipe
+var g=document.getElementById('gallery');
+g.addEventListener('touchstart',function(e){touchX=e.touches[0].clientX},{passive:true});
+g.addEventListener('touchend',function(e){
+  var dx=e.changedTouches[0].clientX-touchX;
+  if(Math.abs(dx)>50){
+    if(dx<0)galleryNav(1);
+    else galleryNav(-1);
+  }
+},{passive:true});
+// Click background to close (but not on img/buttons)
+g.addEventListener('click',function(e){
+  if(e.target===g)closeGallery();
+});
+</script>
 </div></body></html>`;
 }
 

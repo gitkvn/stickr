@@ -3642,6 +3642,9 @@ async function checkAuth() {
       document.getElementById('landing-actions').style.display = 'none';
       document.getElementById('landing-note').style.display = 'none';
       document.getElementById('signed-in-hero').style.display = '';
+      // Hide landing nav links when signed in
+      const navLinks = document.getElementById('nav-links');
+      if (navLinks) navLinks.style.display = 'none';
       document.getElementById('greeting-name').textContent = (currentUser.name || 'there').split(' ')[0];
       // Profile link
       if (currentUser.username) {
@@ -3690,6 +3693,9 @@ async function checkAuth() {
       document.getElementById('landing-actions').style.display = '';
       document.getElementById('landing-note').style.display = '';
       document.getElementById('signed-in-hero').style.display = 'none';
+      // Restore landing nav links
+      const navLinks = document.getElementById('nav-links');
+      if (navLinks) navLinks.style.display = '';
     }
   } catch {
     currentUser = null;
