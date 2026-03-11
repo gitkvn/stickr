@@ -2729,6 +2729,10 @@ function newRoomFromEnded() {
   const ended = document.getElementById('session-ended-view');
   if (ended) ended.remove();
   resetSessionState();
+  document.getElementById('room-view').classList.remove('active');
+  document.getElementById('home-view').classList.add('active', 'ready');
+  document.body.classList.remove('in-room');
+  history.pushState(null, '', location.pathname);
   createRoom();
 }
 
@@ -2736,7 +2740,7 @@ function goHomeFromEnded() {
   const ended = document.getElementById('session-ended-view');
   if (ended) ended.remove();
   resetSessionState();
-  document.getElementById('home-view').classList.add('active');
+  document.getElementById('home-view').classList.add('active', 'ready');
 }
 
 function resetSessionState() {
@@ -2784,7 +2788,7 @@ function goHome() {
   if (ws) ws.close();
 
   document.getElementById('room-view').classList.remove('active');
-  document.getElementById('home-view').classList.add('active');
+  document.getElementById('home-view').classList.add('active', 'ready');
   document.body.classList.remove('in-room');
   history.pushState(null, '', location.pathname);
 
