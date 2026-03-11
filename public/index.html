@@ -619,13 +619,13 @@ body.in-room .nav-links { display: none; }
 .tp-dot.green { background: var(--success); }
 .tp-dot.coral { background: var(--danger); }
 
-/* ═══ Photo River ═══ */
-.photo-river { padding: 64px 0; overflow: hidden; background: var(--bg-secondary); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); margin-top: 64px; }
-.river-label { text-align: center; font-family: var(--font-display); font-size: clamp(22px, 3.5vw, 32px); font-weight: 400; color: var(--text-primary); margin-bottom: 32px; letter-spacing: -0.5px; line-height: 1.2; }
-.river-label em { font-style: italic; color: var(--accent); font-weight: 700; }
-.river-track { display: flex; gap: 16px; animation: scrollRiver 30s linear infinite; width: max-content; }
-@keyframes scrollRiver { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
-.filetype-pill { flex-shrink: 0; padding: 12px 24px; background: var(--bg-primary); border: 1px solid var(--border); border-radius: 100px; font-size: 15px; font-weight: 500; color: var(--text-primary); white-space: nowrap; letter-spacing: -0.2px; }
+/* ═══ File Types Section ═══ */
+.filetypes-section { padding: 64px 20px; background: var(--bg-secondary); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); margin-top: 64px; text-align: center; }
+.filetypes-label { font-family: var(--font-display); font-size: clamp(22px, 3.5vw, 32px); font-weight: 400; color: var(--text-primary); margin-bottom: 28px; letter-spacing: -0.5px; line-height: 1.2; }
+.filetypes-label em { font-style: italic; color: var(--accent); font-weight: 700; }
+.filetypes-grid { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; max-width: 680px; margin: 0 auto; }
+.filetype-chip { padding: 10px 20px; background: var(--bg-primary); border: 1px solid var(--border); border-radius: 100px; font-size: 14px; font-weight: 500; color: var(--text-primary); white-space: nowrap; letter-spacing: -0.2px; transition: all 0.2s; }
+.filetype-chip:hover { border-color: var(--accent); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.04); }
 
 /* ═══ Showcase CTA ═══ */
 .showcase-section { width: 100%; padding: 80px 32px; }
@@ -657,7 +657,7 @@ body.in-room .nav-links { display: none; }
   .showcase-frame { height: 280px; }
   .showcase-section { padding: 48px 20px; }
   .landing-section { padding: 40px 16px 0; max-width: 100%; }
-  .photo-river { padding: 40px 0; margin-top: 40px; }
+  .filetypes-section { padding: 40px 16px; margin-top: 40px; }
   .landing-features-section { padding: 48px 16px !important; }
 }
 
@@ -892,29 +892,19 @@ body.in-room .nav-links { display: none; }
     <div id="landing-content">
 
     <!-- Photo river -->
-    <div class="photo-river">
-      <div class="river-label">One link to share <em>large</em> files.</div>
-      <div class="river-track">
-        <div class="filetype-pill">📸 Photos</div>
-        <div class="filetype-pill">🎬 Videos</div>
-        <div class="filetype-pill">📁 Project folders</div>
-        <div class="filetype-pill">🎵 Music</div>
-        <div class="filetype-pill">📄 Documents</div>
-        <div class="filetype-pill">🎨 Design files</div>
-        <div class="filetype-pill">📦 ZIP archives</div>
-        <div class="filetype-pill">💻 Code repos</div>
-        <div class="filetype-pill">🎙️ Podcasts</div>
-        <div class="filetype-pill">📊 Spreadsheets</div>
-        <div class="filetype-pill">📸 Photos</div>
-        <div class="filetype-pill">🎬 Videos</div>
-        <div class="filetype-pill">📁 Project folders</div>
-        <div class="filetype-pill">🎵 Music</div>
-        <div class="filetype-pill">📄 Documents</div>
-        <div class="filetype-pill">🎨 Design files</div>
-        <div class="filetype-pill">📦 ZIP archives</div>
-        <div class="filetype-pill">💻 Code repos</div>
-        <div class="filetype-pill">🎙️ Podcasts</div>
-        <div class="filetype-pill">📊 Spreadsheets</div>
+    <div class="filetypes-section">
+      <div class="filetypes-label">Not just photos. <em>Anything</em> you want to share.</div>
+      <div class="filetypes-grid">
+        <div class="filetype-chip">📸 Photos</div>
+        <div class="filetype-chip">🎬 Videos</div>
+        <div class="filetype-chip">📁 Folders</div>
+        <div class="filetype-chip">🎵 Music</div>
+        <div class="filetype-chip">📄 Documents</div>
+        <div class="filetype-chip">🎨 Design files</div>
+        <div class="filetype-chip">📦 Archives</div>
+        <div class="filetype-chip">💻 Code</div>
+        <div class="filetype-chip">🎙️ Podcasts</div>
+        <div class="filetype-chip">📊 Spreadsheets</div>
       </div>
     </div>
 
