@@ -272,17 +272,7 @@ header {
 .install-hint svg { opacity: 0.4; }
 
 /* ─── Landing ─── */
-.landing-divider { max-width: 800px; margin: 0 auto; border: none; border-top: 1px solid var(--border); }
 .actions { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
-
-/* Comparison table */
-.compare-table-wrap { overflow-x: auto; max-width: 520px; margin: 0 auto; }
-.compare-table { width: 100%; border-collapse: collapse; text-align: left; }
-.compare-table th { text-align: left; font-size: 10px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; padding: 10px 0; border-bottom: 1px solid var(--border); }
-.compare-table th:last-child { color: var(--accent); text-align: right; }
-.compare-table td { font-size: 13px; color: var(--text-secondary); padding: 11px 0; border-bottom: 1px solid var(--border); }
-.compare-table td:last-child { text-align: right; }
-.cmp-check { color: var(--success); font-weight: 500; font-size: 12px; }
 
 /* Landing Sections */
 .landing-section { width: 100%; padding: 56px 20px 0; text-align: center; }
@@ -330,14 +320,6 @@ header {
 .footer-links a { color: var(--text-secondary); text-decoration: none; font-size: 12px; }
 .footer-links a:hover { color: var(--text-primary); }
 .footer-sep { color: var(--text-muted); }
-
-@media (max-width: 640px) {
-  .landing-steps { grid-template-columns: 1fr; }
-  .pricing-cards { grid-template-columns: 1fr; }
-  .price-card.pro { order: -1; }
-  .pain-pills { flex-wrap: wrap; }
-  .landing-footer { flex-direction: column; gap: 10px; text-align: center; }
-}
 
 .btn { font-family: var(--font-body); font-size: 15px; font-weight: 600; border: none; border-radius: var(--radius); padding: 14px 32px; cursor: pointer; transition: all 0.25s ease; display: inline-flex; align-items: center; gap: 10px; letter-spacing: -0.2px; }
 .btn-primary { background: var(--accent); color: #fff; border: 1.5px solid var(--accent); }
@@ -609,13 +591,6 @@ body.in-room .nav-links { display: none; }
 .landing-feature-card h3 { font-family: var(--font-display); font-size: 18px; font-weight: 400; margin-bottom: 6px; letter-spacing: -0.2px; }
 .landing-feature-card p { font-size: 13px; color: var(--text-secondary); line-height: 1.6; }
 
-/* Price btn topup */
-.price-btn.topup { background: var(--accent); color: white; }
-.price-btn.topup:hover { background: #4a3bc4; }
-
-/* 3-col pricing */
-.pricing-cards { grid-template-columns: repeat(3, 1fr); }
-
 /* ═══ Hero Photo Collage ═══ */
 .hero-collage { position: relative; height: 480px; }
 .hero-photo { position: absolute; border-radius: 16px; overflow: hidden; box-shadow: 0 8px 40px rgba(0,0,0,0.08); transition: transform .4s cubic-bezier(.22,1,.36,1); }
@@ -689,8 +664,9 @@ body.in-room .nav-links { display: none; }
   .showcase-overlay p { font-size: 14px; margin-bottom: 20px; }
   .btn { padding: 12px 24px; font-size: 14px; }
   .river-img { width: 160px; height: 110px; }
-  .compare-table-wrap { margin: 0; }
   .landing-hero h1 { font-size: clamp(26px, 7vw, 36px); }
+  .price-card.pro { order: -1; }
+  .landing-footer { flex-direction: column; gap: 10px; text-align: center; }
 }
 </style>
 
@@ -1193,7 +1169,6 @@ body.in-room .nav-links { display: none; }
 </div>
 
 <!-- QR Modal -->
-
 
 <!-- Toast -->
 <div class="toast" id="toast"></div>
@@ -3301,9 +3276,9 @@ function showUpgradePrompt() {
   modal.innerHTML = `
     <div class="modal" style="text-align:center; max-width:380px;">
       <h2 style="font-size:22px;margin-bottom:6px;">Upgrade to Pro</h2>
-      <p style="color:var(--text-secondary); font-size:14px; margin-bottom:24px; line-height:1.6;">$1.99/month · Send files up to 2 GB · 7-day link expiry · 10 pinned files · No branding</p>
+      <p style="color:var(--text-secondary); font-size:14px; margin-bottom:24px; line-height:1.6;">$2/month · 100 GB monthly transfers · 2 GB per file · 7-day links · 10 pinned files · No branding</p>
       <div style="display:flex;flex-direction:column;gap:10px;">
-        <button class="btn btn-primary" style="width:100%;justify-content:center;" onclick="startCheckout()" id="checkout-btn">Upgrade to Pro — $1.99/mo</button>
+        <button class="btn btn-primary" style="width:100%;justify-content:center;" onclick="startCheckout()" id="checkout-btn">Subscribe — $2/mo</button>
         <button class="btn btn-secondary" style="width:100%;justify-content:center;" onclick="document.getElementById('upgrade-modal').remove()">Maybe later</button>
       </div>
     </div>
@@ -3324,19 +3299,19 @@ async function startCheckout() {
       } else {
         showToastError(data.error || 'Checkout failed');
       }
-      if (btn) { btn.disabled = false; btn.textContent = 'Upgrade to Pro — $1.99/mo'; }
+      if (btn) { btn.disabled = false; btn.textContent = 'Subscribe — $2/mo'; }
       return;
     }
     window.location.href = data.url;
   } catch {
     showToastError('Payment service unavailable');
-    if (btn) { btn.disabled = false; btn.textContent = 'Upgrade to Pro — $1.99/mo'; }
+    if (btn) { btn.disabled = false; btn.textContent = 'Subscribe — $2/mo'; }
   }
 }
 
 function updateHomeStats() {
   // Pin count
-  const pinList = document.getElementById('pinned-file-list');
+  const pinList = document.getElementById('pinned-files-list');
   const pinCount = pinList ? pinList.querySelectorAll('.pinned-file-item').length : 0;
   const el = document.getElementById('home-pin-count');
   if (el) el.textContent = pinCount;

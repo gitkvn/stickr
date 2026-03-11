@@ -6,7 +6,7 @@ const crypto = require('crypto');
 const path = require('path');
 const Database = require('better-sqlite3');
 const cookie = require('cookie');
-const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
+const { S3Client, GetObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const { Upload } = require('@aws-sdk/lib-storage');
 const { PassThrough } = require('stream');
 
@@ -22,7 +22,6 @@ const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID;
 const R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY;
 const R2_BUCKET_NAME = process.env.R2_BUCKET_NAME || 'stickr-files';
 const ASYNC_FILE_EXPIRY = 24 * 60 * 60 * 1000; // 24 hours
-const ASYNC_THRESHOLD = 25 * 1024 * 1024; // 25MB
 const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB per file (free tier)
 
 let s3 = null;
@@ -1913,7 +1912,7 @@ function formatBytes(bytes) {
 const PLAN_LIMITS = {
   free: {
     maxFileSize: 100 * 1024 * 1024,        // 100MB
-    maxTransfer: 1 * 1024 * 1024 * 1024,   // 1GB lifetime
+    maxTransfer: 500 * 1024 * 1024,        // 500MB (matches DB default)
     linkExpiry: 24 * 60 * 60 * 1000,       // 24 hours
     maxPins: 3,
     maxPinSize: 25 * 1024 * 1024,          // 25MB
