@@ -786,9 +786,9 @@ body.in-room .nav-links { display: none; }
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
           <span class="inbox-badge" id="inbox-badge" style="display:none">0</span>
         </button>
-        <div class="user-identity" onclick="toggleProfileMenu()" style="display:flex;align-items:center;gap:10px;cursor:pointer;">
-          <img class="user-avatar" id="user-avatar" src="" alt="">
-          <span class="user-name" id="user-name"></span>
+        <div class="user-identity" style="display:flex;align-items:center;gap:10px;cursor:pointer;">
+          <img class="user-avatar" id="user-avatar" src="" alt="" onclick="toggleProfileMenu()">
+          <span class="user-name" id="user-name" onclick="showUsageToast()"></span>
         </div>
         <button class="user-logout" onclick="logout()" title="Sign out">Sign out</button>
         <!-- Profile dropdown -->
@@ -3142,6 +3142,13 @@ function showToastSuccess(msg) {
   toast.style.borderColor = 'rgba(0, 210, 160, 0.3)';
   toast.classList.add('show');
   setTimeout(() => toast.classList.remove('show'), 2000);
+}
+
+function showUsageToast() {
+  if (!currentUser) return;
+  const balance = currentUser.transferBalance || 0;
+  const plan = currentUser.plan === 'pro' ? 'Pro' : (currentUser.planLimits && currentUser.planLimits.canReceiveLink) ? 'Top-up' : 'Free';
+  showToastInfo(formatSize(balance) + ' remaining · ' + plan + ' plan');
 }
 
 function showToastInfo(msg) {
