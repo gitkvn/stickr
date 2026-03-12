@@ -937,7 +937,7 @@ body.in-room .nav-links { display: none; }
         <div class="quick-stat" id="plan-card" onclick="showUpgradePrompt()">
           <div class="stat-value green" id="home-plan-label">Free</div>
           <div class="stat-label" id="home-plan-sub">Plan</div>
-          <div class="plan-upgrade-hint" id="plan-upgrade-hint">Upgrade — $1 →</div>
+          <div class="plan-upgrade-hint" id="plan-upgrade-hint">Upgrade →</div>
         </div>
       </div>
 
@@ -3628,28 +3628,76 @@ function showUpgradePrompt() {
     showToastInfo('You\'re on Pro!');
     return;
   }
+
+  const existing = document.getElementById('upgrade-modal');
+  if (existing) existing.remove();
+
+  const hasPurchased = currentUser && currentUser.planLimits && currentUser.planLimits.canReceiveLink;
   const modal = document.createElement('div');
   modal.className = 'modal-overlay active';
   modal.id = 'upgrade-modal';
-  modal.innerHTML = `
-    <div class="modal" style="text-align:center; max-width:380px;">
-      <h2 style="font-size:22px;margin-bottom:6px;">Upgrade to Pro</h2>
-      <p style="color:var(--text-secondary); font-size:14px; margin-bottom:24px; line-height:1.6;">$2/month · 100 GB monthly transfers · 2 GB per file · 7-day links · Personal receive link · No branding</p>
-      <div style="display:flex;flex-direction:column;gap:10px;">
-        <button class="btn btn-primary" style="width:100%;justify-content:center;" onclick="startCheckout()" id="checkout-btn">Subscribe — $2/mo</button>
+
+  if (hasPurchased) {
+    // Top-up user → show Pro only
+    modal.innerHTML = `
+      <div class="modal" style="text-align:center; max-width:380px;">
+        <h2 style="font-size:22px;margin-bottom:6px;">Go Pro</h2>
+        <p style="color:var(--text-secondary); font-size:13px; margin-bottom:20px; line-height:1.6;">You're on the Top-up plan (1 GB per file). Upgrade to Pro for more.</p>
+        <div style="background:var(--bg-tertiary);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:20px;text-align:left;">
+          <div style="font-weight:700;font-size:15px;margin-bottom:8px;">Pro — $2/month</div>
+          <div style="font-size:12px;color:var(--text-secondary);line-height:1.6;">100 GB monthly transfers · 2 GB per file · 7-day links · No branding</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px;">
+          <button class="btn btn-primary" style="width:100%;justify-content:center;" onclick="startCheckout('pro')" id="checkout-btn">Subscribe — $2/mo</button>
+          <button class="btn btn-secondary" style="width:100%;justify-content:center;" onclick="document.getElementById('upgrade-modal').remove()">Maybe later</button>
+        </div>
+      </div>
+    `;
+  } else {
+    // Free user → show both options
+    modal.innerHTML = `
+      <div class="modal" style="text-align:center; max-width:400px;">
+        <h2 style="font-size:22px;margin-bottom:6px;">Upgrade your plan</h2>
+        <p style="color:var(--text-secondary); font-size:13px; margin-bottom:20px; line-height:1.6;">You're on the Free plan (100 MB per file, 1 GB total). Choose an upgrade.</p>
+        <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px;">
+          <div style="background:var(--bg-tertiary);border:2px solid var(--accent);border-radius:12px;padding:18px;text-align:left;cursor:pointer;transition:all 0.2s;" onclick="startCheckout('topup')" id="topup-option">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+              <span style="font-weight:700;font-size:15px;">10 GB Top-up</span>
+              <span style="font-weight:700;font-size:15px;color:var(--accent);">$1</span>
+            </div>
+            <div style="font-size:12px;color:var(--text-secondary);line-height:1.5;">1 GB per file · Personal receive link · Never expires</div>
+          </div>
+          <div style="background:var(--bg-tertiary);border:1px solid var(--border);border-radius:12px;padding:18px;text-align:left;cursor:pointer;transition:all 0.2s;" onclick="startCheckout('pro')" id="pro-option">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+              <span style="font-weight:700;font-size:15px;">Pro</span>
+              <span style="font-weight:700;font-size:15px;color:var(--accent);">$2/mo</span>
+            </div>
+            <div style="font-size:12px;color:var(--text-secondary);line-height:1.5;">100 GB monthly · 2 GB per file · 7-day links · No branding</div>
+          </div>
+        </div>
         <button class="btn btn-secondary" style="width:100%;justify-content:center;" onclick="document.getElementById('upgrade-modal').remove()">Maybe later</button>
       </div>
-    </div>
-  `;
+    `;
+  }
+
   modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
   document.body.appendChild(modal);
 }
 
-async function startCheckout() {
+async function startCheckout(type) {
+  const endpoint = type === 'topup' ? '/api/checkout/topup' : '/api/checkout/pro';
+  const label = type === 'topup' ? 'Buy 10 GB — $1' : 'Subscribe — $2/mo';
+
+  // Disable both option cards if they exist
+  const topupOpt = document.getElementById('topup-option');
+  const proOpt = document.getElementById('pro-option');
   const btn = document.getElementById('checkout-btn');
+  if (topupOpt) topupOpt.style.opacity = '0.5';
+  if (proOpt) proOpt.style.opacity = '0.5';
   if (btn) { btn.disabled = true; btn.textContent = 'Loading...'; }
+
   try {
-    const res = await fetch('/api/checkout/pro', { method: 'POST' });
+    const res = await fetch(endpoint, { method: 'POST' });
     const data = await res.json();
     if (!res.ok) {
       if (data.error === 'Payments not configured yet') {
@@ -3657,13 +3705,17 @@ async function startCheckout() {
       } else {
         showToastError(data.error || 'Checkout failed');
       }
-      if (btn) { btn.disabled = false; btn.textContent = 'Subscribe — $2/mo'; }
+      if (topupOpt) topupOpt.style.opacity = '1';
+      if (proOpt) proOpt.style.opacity = '1';
+      if (btn) { btn.disabled = false; btn.textContent = label; }
       return;
     }
     window.location.href = data.url;
   } catch {
     showToastError('Payment service unavailable');
-    if (btn) { btn.disabled = false; btn.textContent = 'Subscribe — $2/mo'; }
+    if (topupOpt) topupOpt.style.opacity = '1';
+    if (proOpt) proOpt.style.opacity = '1';
+    if (btn) { btn.disabled = false; btn.textContent = label; }
   }
 }
 
@@ -4086,11 +4138,11 @@ async function checkAuth() {
           planLabel.classList.remove('green');
           planLabel.style.color = 'var(--success)';
           if (planSub) planSub.textContent = '1 GB per file';
-          if (planHint) { planHint.textContent = 'Go Pro — $2/mo →'; planHint.style.display = ''; }
+          if (planHint) { planHint.textContent = 'Upgrade →'; planHint.style.display = ''; }
         } else {
           planLabel.textContent = 'Free';
           if (planSub) planSub.textContent = '100 MB per file';
-          if (planHint) { planHint.textContent = 'Upgrade — $1 →'; planHint.style.display = ''; }
+          if (planHint) { planHint.textContent = 'Upgrade →'; planHint.style.display = ''; }
         }
       }
       const avatar = document.getElementById('user-avatar');
