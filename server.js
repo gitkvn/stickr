@@ -1660,168 +1660,281 @@ function getTimeRemaining(expiresAt) {
 function getBatchDownloadPage(batch, files) {
   const totalSize = files.reduce((sum, f) => sum + f.file_size, 0);
   const expiresIn = getTimeRemaining(batch.expires_at);
-  const imageFiles = files.filter(f => f.mime_type && f.mime_type.startsWith('image/'));
-  const otherFiles = files.filter(f => !f.mime_type || !f.mime_type.startsWith('image/'));
-  const hasImages = imageFiles.length > 0;
+  const RAW_EXT = /\.(arw|cr2|cr3|nef|dng|raf|orf|rw2|pef|srw|x3f)$/i;
+  const imageFiles = files.filter(f => f.mime_type && f.mime_type.startsWith('image/') && !RAW_EXT.test(f.filename));
+  const otherFiles = files.filter(f => !f.mime_type || !f.mime_type.startsWith('image/') || RAW_EXT.test(f.filename));
+  const imgCount = imageFiles.length;
 
-  const imageGridHtml = imageFiles.map((f, i) => `
-    <div class="album-item">
-      <img src="/api/preview/${f.token}" alt="${escapeHtml(f.filename)}" loading="lazy" onclick="openGallery(${i})">
-      <div class="album-info">
-        <span class="album-name">${escapeHtml(f.filename)}</span>
-        <a href="/api/download/${f.token}" class="dl-link album-dl" title="Download">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        </a>
-      </div>
-    </div>
-  `).join('');
-
-  const fileListHtml = otherFiles.map(f => `
-    <div class="file-row">
-      <div class="file-row-info">
-        <div class="file-row-name">${escapeHtml(f.filename)}</div>
-        <div class="file-row-size">${formatBytes(f.file_size)}</div>
-      </div>
-      <a href="/api/download/${f.token}" class="dl-link file-row-btn">Download</a>
-    </div>
-  `).join('');
-
-  // Build gallery data for JS
   const galleryData = imageFiles.map(f => ({
     src: '/api/preview/' + f.token,
     name: f.filename,
     dl: '/api/download/' + f.token
   }));
 
+  const dlSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
+  const dlSvg16 = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
+  const shareSvg = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>';
+  const uploadSvg = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>';
+
+  const batchUrl = '/dl/b/' + batch.token;
+
+  // Shared action buttons HTML
+  const actionsHtml = files.length > 1 ? `
+  <div class="album-actions">
+    <button class="btn-primary" onclick="downloadAll()">${dlSvg16} Download all</button>
+    <button class="btn-outline" onclick="shareBatch()">${shareSvg} Share</button>
+    ${imgCount > 0 ? `<a class="btn-outline" href="https://photos.google.com/upload" target="_blank" rel="noopener">${uploadSvg} Add to Google Photos ↗</a>` : ''}
+  </div>` : '';
+
+  // Other files list
+  const otherFilesHtml = otherFiles.length > 0 ? `
+  ${imgCount > 0 ? '<div class="other-files-label">Other files</div>' : ''}
+  ${otherFiles.map(f => `<div class="file-row"><div class="file-row-info"><div class="file-row-name">${escapeHtml(f.filename)}</div><div class="file-row-size">${formatBytes(f.file_size)}</div></div><a href="/api/download/${f.token}" class="file-row-btn album-dl">Download</a></div>`).join('')}` : '';
+
+  // Build layout based on image count
+  let bodyHtml = '';
+
+  if (imgCount === 0) {
+    // No images — file list only
+    bodyHtml = `
+    <div class="page-center">
+      <div class="card">
+        <div class="logo">St<em>i</em>ckr</div>
+        <h1>${files.length} file${files.length > 1 ? 's' : ''}</h1>
+        <p class="meta">${formatBytes(totalSize)}</p>
+        <p class="expiry">Expires in ${expiresIn}</p>
+        ${actionsHtml}
+        <div class="files-list">${otherFilesHtml}</div>
+        <div class="promo"><p>Want to share files too?</p><a href="/">Try Stickr — it's free →</a></div>
+      </div>
+    </div>`;
+  } else if (imgCount === 1) {
+    // Single image — hero card
+    const f = imageFiles[0];
+    bodyHtml = `
+    <div class="page-center single-photo">
+      <div class="card">
+        <div class="img-wrap">
+          <div class="logo-float">St<em>i</em>ckr</div>
+          <img class="hero-img" src="/api/preview/${f.token}" onclick="openGallery(0)" alt="${escapeHtml(f.filename)}">
+        </div>
+        <div class="card-body">
+          <h1>${escapeHtml(f.filename)}</h1>
+          <p class="meta">${formatBytes(f.file_size)}${otherFiles.length > 0 ? ' + ' + otherFiles.length + ' other file' + (otherFiles.length > 1 ? 's' : '') : ''} · Expires in ${expiresIn}</p>
+          <div class="album-actions" style="justify-content:center;">
+            <a class="btn-primary" href="/api/download/${f.token}" download>${dlSvg16} Download original</a>
+          </div>
+          ${otherFilesHtml}
+          <div class="promo"><p>Want to share files too?</p><a href="/">Try Stickr — it's free →</a></div>
+        </div>
+      </div>
+    </div>`;
+  } else if (imgCount <= 3) {
+    // 2-3 images — compact grid
+    const gridClass = imgCount === 3 ? 'few-grid three' : 'few-grid';
+    const gridHtml = imageFiles.map((f, i) => `
+      <div class="few-item" style="animation-delay:${0.05 + i * 0.05}s" onclick="openGallery(${i})">
+        <img src="/api/preview/${f.token}" alt="${escapeHtml(f.filename)}" loading="lazy">
+        <div class="photo-overlay">
+          <span class="photo-name">${escapeHtml(f.filename)}</span>
+          <a href="/api/download/${f.token}" class="photo-dl album-dl" onclick="event.stopPropagation()">${dlSvg}</a>
+        </div>
+      </div>`).join('');
+
+    bodyHtml = `
+    <div class="page-few">
+      <div class="few-header">
+        <div class="logo">St<em>i</em>ckr</div>
+        <h1>${files.length} file${files.length > 1 ? 's' : ''}</h1>
+        <p class="meta">${formatBytes(totalSize)} · Expires in ${expiresIn}</p>
+      </div>
+      ${actionsHtml}
+      <div class="${gridClass}">${gridHtml}</div>
+      ${otherFilesHtml}
+      <div class="expiry-footer"><span>Expires in ${expiresIn}</span></div>
+      <div class="promo"><p>Want to share files too?</p><a href="/">Try Stickr — it's free →</a></div>
+    </div>`;
+  } else {
+    // 4+ images — full album with cover
+    const coverImg = imageFiles[0];
+    const gridHtml = imageFiles.map((f, i) => `
+      <div class="grid-item" style="animation-delay:${0.05 + i * 0.05}s" onclick="openGallery(${i})">
+        <img src="/api/preview/${f.token}" alt="${escapeHtml(f.filename)}" loading="lazy">
+        <div class="photo-overlay">
+          <span class="photo-name">${escapeHtml(f.filename)}</span>
+          <a href="/api/download/${f.token}" class="photo-dl album-dl" onclick="event.stopPropagation()">${dlSvg}</a>
+        </div>
+      </div>`).join('');
+
+    bodyHtml = `
+    <div class="page-album">
+      <div class="album-cover-wrap" onclick="openGallery(0)">
+        <img class="album-cover" src="/api/preview/${coverImg.token}" alt="">
+        <div class="album-cover-overlay">
+          <div class="album-cover-logo">St<em>i</em>ckr</div>
+          <h1 class="album-cover-title">${imgCount} photos${otherFiles.length > 0 ? ' + ' + otherFiles.length + ' file' + (otherFiles.length > 1 ? 's' : '') : ''}</h1>
+          <div class="album-cover-meta"><span>${formatBytes(totalSize)}</span><span class="dot"></span><span>Expires in ${expiresIn}</span></div>
+        </div>
+      </div>
+      ${actionsHtml}
+      <div class="photo-grid">${gridHtml}</div>
+      ${otherFiles.length > 0 ? '<div class="other-section">' + otherFilesHtml + '</div>' : ''}
+      <div class="expiry-footer"><span>Expires in ${expiresIn}</span></div>
+      <div class="promo"><p>Want to share files too?</p><a href="/">Try Stickr — it's free →</a></div>
+    </div>`;
+  }
+
   return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Stickr — ${files.length} files</title>
+<title>Stickr — ${files.length} file${files.length > 1 ? 's' : ''}</title>
+${imgCount > 0 ? `<meta property="og:image" content="/api/preview/${imageFiles[0].token}">` : ''}
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'DM Sans',-apple-system,sans-serif;background:#fff;color:#1a1a1a;min-height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;padding:24px}
-.card{background:#fafaf8;border:1px solid #e0ddd4;border-radius:16px;padding:36px;max-width:520px;width:100%}
-h1{font-family:'Instrument Serif',Georgia,serif;font-size:22px;font-weight:400;margin-bottom:4px;text-align:center}
-.meta{color:#8a8a8a;font-size:13px;text-align:center;margin-bottom:4px}
-.expiry{color:#8a8a8a;font-size:11px;text-align:center;margin-bottom:20px}
-.files{display:flex;flex-direction:column;gap:8px;margin-bottom:20px}
-.album{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin-bottom:20px}
-.album-item{position:relative;border-radius:10px;overflow:hidden;background:#f5f3ee;border:1px solid #e0ddd4;transition:transform 0.2s}
-.album-item:hover{transform:translateY(-2px);box-shadow:0 4px 16px rgba(0,0,0,0.06)}
-.album-item img{width:100%;aspect-ratio:1;object-fit:cover;display:block;cursor:pointer;transition:opacity 0.2s}
-.album-item img:hover{opacity:0.85}
-.album-info{display:flex;align-items:center;justify-content:space-between;padding:8px 10px;gap:8px}
-.album-name{font-size:11px;color:#8a8a8a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
-.album-dl{flex-shrink:0;color:#5b4cdb;padding:4px;border-radius:6px;display:flex;align-items:center}
-.album-dl:hover{background:rgba(91,76,219,0.08)}
-.file-row{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;background:#fff;border:1px solid #e0ddd4;border-radius:10px}
+body{font-family:'DM Sans',-apple-system,sans-serif;background:#fff;color:#1a1a1a;min-height:100vh}
+.back-nav{padding:16px 24px}
+.back-link{display:inline-flex;align-items:center;gap:6px;color:#8a8a8a;text-decoration:none;font-size:13px;font-weight:500;transition:color .2s}
+.back-link:hover{color:#5b4cdb}
+h1{font-family:'Instrument Serif',Georgia,serif;font-weight:400}
+.logo{font-family:'Instrument Serif',Georgia,serif;font-size:28px;font-weight:400;text-align:center;margin-bottom:8px;color:#1a1a1a}
+.logo em,.logo-float em,.album-cover-logo em{font-style:italic;color:#5b4cdb}
+.meta{color:#8a8a8a;font-size:13px;text-align:center}
+.expiry{color:#8a8a8a;font-size:11px;text-align:center;margin-bottom:16px}
+
+/* Buttons */
+.album-actions{display:flex;gap:10px;margin-bottom:24px;flex-wrap:wrap}
+.btn-primary{display:flex;align-items:center;justify-content:center;gap:8px;padding:12px 28px;background:#5b4cdb;color:white;border:none;border-radius:12px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600;cursor:pointer;transition:all .2s;text-decoration:none}
+.btn-primary:hover{transform:translateY(-1px);box-shadow:0 4px 16px rgba(91,76,219,0.25)}
+.btn-outline{display:flex;align-items:center;justify-content:center;gap:8px;padding:12px 20px;background:#f5f3ee;color:#1a1a1a;border:1px solid #e0ddd4;border-radius:12px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600;cursor:pointer;transition:all .2s;text-decoration:none}
+.btn-outline:hover{border-color:#5b4cdb;color:#5b4cdb}
+
+/* ═══ No images — card ═══ */
+.page-center{display:flex;justify-content:center;padding:0 24px 48px}
+.page-center .card{background:#fafaf8;border:1px solid #e0ddd4;border-radius:16px;padding:36px;max-width:520px;width:100%}
+.page-center h1{font-size:22px;text-align:center;margin-bottom:4px}
+.page-center .album-actions{justify-content:center}
+.files-list{display:flex;flex-direction:column;gap:8px;margin-bottom:20px}
+
+/* ═══ 1 photo — hero card ═══ */
+.single-photo{max-width:520px;width:100%}
+.single-photo .card{background:#fafaf8;border:1px solid #e0ddd4;border-radius:16px;overflow:hidden}
+.img-wrap{position:relative;background:#f5f3ee;border-bottom:1px solid #e0ddd4}
+.logo-float{position:absolute;top:16px;left:20px;font-family:'Instrument Serif',Georgia,serif;font-size:20px;z-index:1;color:#1a1a1a}
+.hero-img{width:100%;max-height:70vh;object-fit:contain;display:block;background:#f5f3ee;cursor:pointer}
+.card-body{padding:20px 28px 28px;text-align:center}
+.card-body h1{font-size:18px;margin-bottom:4px;word-break:break-all}
+
+/* ═══ 2-3 photos — compact grid ═══ */
+.page-few{max-width:680px;margin:0 auto;padding:0 24px 48px}
+.few-header{text-align:center;margin-bottom:20px}
+.few-header h1{font-size:22px;margin-bottom:4px}
+.few-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:24px}
+.few-grid.three .few-item:last-child{grid-column:1/-1}
+.few-grid.three .few-item:last-child img{aspect-ratio:16/9}
+.few-item{position:relative;border-radius:12px;overflow:hidden;cursor:pointer;background:#f5f3ee;border:1px solid #e0ddd4;opacity:0;animation:fadeUp .4s ease forwards}
+.few-item img{width:100%;aspect-ratio:4/5;object-fit:cover;display:block;transition:transform .3s,opacity .2s}
+.few-item:hover img{transform:scale(1.03);opacity:.92}
+.few-item:hover .photo-overlay{opacity:1}
+
+/* ═══ 4+ photos — album ═══ */
+.page-album{max-width:900px;margin:0 auto;padding:0 24px 48px}
+.album-cover-wrap{position:relative;border-radius:20px;overflow:hidden;margin-bottom:24px;cursor:pointer}
+.album-cover{width:100%;height:360px;object-fit:cover;display:block;transition:transform .4s}
+.album-cover-wrap:hover .album-cover{transform:scale(1.02)}
+.album-cover-overlay{position:absolute;bottom:0;left:0;right:0;padding:32px 28px 24px;background:linear-gradient(transparent,rgba(0,0,0,0.65))}
+.album-cover-logo{font-family:'Instrument Serif',Georgia,serif;font-size:18px;color:rgba(255,255,255,0.7);margin-bottom:8px}
+.album-cover-title{font-size:32px;color:#fff;margin-bottom:4px;letter-spacing:-0.5px}
+.album-cover-meta{font-size:13px;color:rgba(255,255,255,0.6);display:flex;gap:12px;align-items:center}
+.album-cover-meta .dot{width:3px;height:3px;border-radius:50%;background:rgba(255,255,255,0.4)}
+
+.photo-grid{column-count:3;column-gap:10px}
+.grid-item{break-inside:avoid;margin-bottom:10px;position:relative;border-radius:12px;overflow:hidden;cursor:pointer;opacity:0;animation:fadeUp .4s ease forwards}
+.grid-item img{width:100%;display:block;transition:transform .3s,opacity .2s}
+.grid-item:hover img{transform:scale(1.03);opacity:.92}
+.grid-item:hover .photo-overlay{opacity:1}
+
+/* Shared photo overlay */
+.photo-overlay{position:absolute;bottom:0;left:0;right:0;padding:10px 12px;background:linear-gradient(transparent,rgba(0,0,0,0.5));opacity:0;transition:opacity .2s;display:flex;align-items:center;justify-content:space-between}
+.photo-name{font-size:11px;color:rgba(255,255,255,0.85);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.photo-dl{color:white;padding:4px;border-radius:6px;display:flex;text-decoration:none;transition:background .2s}
+.photo-dl:hover{background:rgba(255,255,255,0.2)}
+
+/* Other files */
+.other-section{margin-top:24px}
+.other-files-label{font-size:12px;font-weight:600;color:#8a8a8a;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px}
+.file-row{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;background:#fafaf8;border:1px solid #e0ddd4;border-radius:10px;margin-bottom:8px}
 .file-row-info{min-width:0;flex:1}
 .file-row-name{font-size:14px;font-weight:600;word-break:break-all}
 .file-row-size{font-size:12px;color:#8a8a8a;margin-top:2px}
-.file-row-btn{flex-shrink:0;margin-left:16px;padding:8px 16px;background:#5b4cdb;color:white;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600;transition:all 0.2s}
+.file-row-btn{flex-shrink:0;margin-left:16px;padding:8px 16px;background:#5b4cdb;color:white;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600;transition:all .2s}
 .file-row-btn:hover{background:#4a3bc4}
-.btn-all{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:14px;border-radius:12px;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:600;text-decoration:none;background:#5b4cdb;color:white;border:none;cursor:pointer;transition:all 0.2s;margin-bottom:20px}
-.btn-all:hover{transform:translateY(-1px);box-shadow:0 4px 20px rgba(91,76,219,0.2)}
-.logo{font-family:'Instrument Serif',Georgia,serif;font-size:28px;font-weight:400;margin-bottom:24px;text-align:center;color:#1a1a1a}
-.logo em{font-style:italic;color:#5b4cdb}
-.promo{border-top:1px solid #e0ddd4;padding-top:20px;text-align:center}
-.promo p{color:#8a8a8a;font-size:13px;margin-bottom:12px}
+
+.expiry-footer{text-align:center;padding:16px;margin-top:32px;border-top:1px solid #e0ddd4}
+.expiry-footer span{font-size:12px;color:#8a8a8a}
+.promo{text-align:center;padding-top:16px}
+.promo p{color:#8a8a8a;font-size:13px;margin-bottom:8px}
 .promo a{color:#5b4cdb;text-decoration:none;font-weight:600;font-size:14px}
 .promo a:hover{text-decoration:underline}
 
-/* Gallery overlay */
-.gallery{position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:1000;display:none;align-items:center;justify-content:center;flex-direction:column;user-select:none;-webkit-user-select:none}
+/* Gallery */
+.gallery{position:fixed;inset:0;background:rgba(0,0,0,0.95);z-index:1000;display:none;align-items:center;justify-content:center;flex-direction:column}
 .gallery.active{display:flex}
-.gallery-img{max-width:92vw;max-height:78vh;object-fit:contain;border-radius:4px;transition:opacity 0.2s}
-.gallery-info{color:rgba(255,255,255,0.6);font-size:13px;margin-top:12px;text-align:center}
-.gallery-counter{color:rgba(255,255,255,0.35);font-size:12px;margin-top:4px}
-.gallery-close{position:absolute;top:16px;right:20px;width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,0.1);border:none;color:#fff;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.2s}
-.gallery-close:hover{background:rgba(255,255,255,0.2)}
-.gallery-dl{position:absolute;top:16px;right:70px;width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,0.1);border:none;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.2s;text-decoration:none}
-.gallery-dl:hover{background:rgba(255,255,255,0.2)}
-.gallery-nav{position:absolute;top:50%;transform:translateY(-50%);width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,0.1);border:none;color:#fff;font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s;backdrop-filter:blur(4px)}
-.gallery-nav:hover{background:rgba(255,255,255,0.25)}
-.gallery-nav.prev{left:16px}
-.gallery-nav.next{right:16px}
-@media(max-width:640px){.gallery-nav{display:none}}
-.back-nav{width:100%;max-width:480px;margin-bottom:12px;}.back-link{display:inline-flex;align-items:center;gap:6px;color:#8a8a8a;text-decoration:none;font-size:13px;font-weight:500;transition:color .2s;}.back-link:hover{color:#5b4cdb}.back-link svg{flex-shrink:0}
+.gallery-img{max-width:92vw;max-height:80vh;object-fit:contain;border-radius:4px}
+.gallery-header{position:absolute;top:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:16px 20px;background:linear-gradient(rgba(0,0,0,0.5),transparent)}
+.gallery-info{color:rgba(255,255,255,0.7);font-size:13px}
+.gallery-counter{color:rgba(255,255,255,0.4);font-size:12px;margin-top:2px}
+.gallery-actions{display:flex;gap:8px}
+.gbtn{width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,0.1);border:none;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .2s;text-decoration:none}
+.gbtn:hover{background:rgba(255,255,255,0.25)}
+.gnav{position:absolute;top:50%;transform:translateY(-50%);width:48px;height:48px;border-radius:50%;background:rgba(255,255,255,0.08);border:none;color:#fff;font-size:24px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s;backdrop-filter:blur(8px)}
+.gnav:hover{background:rgba(255,255,255,0.2)}
+.gnav.prev{left:16px}
+.gnav.next{right:16px}
+
+@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+
+@media(max-width:640px){
+  .photo-grid{column-count:2;column-gap:6px}
+  .grid-item{margin-bottom:6px;border-radius:8px}
+  .grid-item .photo-overlay,.few-item .photo-overlay{opacity:1}
+  .album-cover{height:240px}
+  .album-cover-title{font-size:24px}
+  .page-album,.page-few{padding:0 16px 36px}
+  .gnav{display:none}
+  .album-actions{flex-direction:column}
+  .btn-primary,.btn-outline{width:100%;justify-content:center}
+  .few-grid{gap:6px}
+}
 </style></head><body>
 <div class="back-nav"><a class="back-link" href="/"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>Back to Stickr</a></div>
-<div class="card">
-<div class="logo">St<em>i</em>ckr</div>
-<h1>${files.length} file${files.length > 1 ? 's' : ''}</h1>
-<p class="meta">${formatBytes(totalSize)} total</p>
-<p class="expiry">Expires in ${expiresIn}</p>
-<button class="btn-all" onclick="var links=document.querySelectorAll('.album-dl, .file-row-btn');links.forEach(function(a,i){setTimeout(function(){var el=document.createElement('a');el.href=a.href;el.download='';el.style.display='none';document.body.appendChild(el);el.click();document.body.removeChild(el)},i*800)})">
-<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-Download All
-</button>
-<div class="files">${hasImages ? '<div class="album">' + imageGridHtml + '</div>' : ''}${fileListHtml}</div>
-<div class="promo">
-<p>Want to share files too?</p>
-<a href="/">Start free on Stickr</a>
-</div>
-</div>
+${bodyHtml}
 
-<!-- Gallery overlay with swipe + arrows -->
+${imgCount > 0 ? `
 <div class="gallery" id="gallery">
-<button class="gallery-close" onclick="closeGallery()">✕</button>
-<a class="gallery-dl" id="gallery-dl" href="" download title="Download"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></a>
-<button class="gallery-nav prev" onclick="galleryNav(-1)">‹</button>
-<button class="gallery-nav next" onclick="galleryNav(1)">›</button>
-<img class="gallery-img" id="gallery-img" src="" alt="">
-<div class="gallery-info" id="gallery-name"></div>
-<div class="gallery-counter" id="gallery-counter"></div>
-</div>
+  <div class="gallery-header">
+    <div><div class="gallery-info" id="gname"></div><div class="gallery-counter" id="gctr"></div></div>
+    <div class="gallery-actions">
+      <a class="gbtn" id="gdl" href="#" title="Download"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></a>
+      <button class="gbtn" onclick="closeGallery()" title="Close">✕</button>
+    </div>
+  </div>
+  <img class="gallery-img" id="gimg" src="">
+  <button class="gnav prev" onclick="gNav(-1)">‹</button>
+  <button class="gnav next" onclick="gNav(1)">›</button>
+</div>` : ''}
 
 <script>
 var images=${JSON.stringify(galleryData)};
-var gIdx=0;
-var touchX=0;
-
-function openGallery(i){
-  gIdx=i;
-  renderGallery();
-  document.getElementById('gallery').classList.add('active');
-  document.body.style.overflow='hidden';
-}
-function closeGallery(){
-  document.getElementById('gallery').classList.remove('active');
-  document.body.style.overflow='';
-}
-function galleryNav(dir){
-  gIdx=(gIdx+dir+images.length)%images.length;
-  renderGallery();
-}
-function renderGallery(){
-  var img=images[gIdx];
-  document.getElementById('gallery-img').src=img.src;
-  document.getElementById('gallery-name').textContent=img.name;
-  document.getElementById('gallery-dl').href=img.dl;
-  document.getElementById('gallery-counter').textContent=(gIdx+1)+' / '+images.length;
-}
-// Keyboard arrows
-document.addEventListener('keydown',function(e){
-  if(!document.getElementById('gallery').classList.contains('active'))return;
-  if(e.key==='ArrowLeft')galleryNav(-1);
-  else if(e.key==='ArrowRight')galleryNav(1);
-  else if(e.key==='Escape')closeGallery();
-});
-// Touch swipe
-var g=document.getElementById('gallery');
-g.addEventListener('touchstart',function(e){touchX=e.touches[0].clientX},{passive:true});
-g.addEventListener('touchend',function(e){
-  var dx=e.changedTouches[0].clientX-touchX;
-  if(Math.abs(dx)>50){
-    if(dx<0)galleryNav(1);
-    else galleryNav(-1);
-  }
-},{passive:true});
-// Click background to close (but not on img/buttons)
-g.addEventListener('click',function(e){
-  if(e.target===g)closeGallery();
-});
+var gIdx=0,tx=0;
+function openGallery(i){gIdx=i;renderG();document.getElementById('gallery').classList.add('active');document.body.style.overflow='hidden'}
+function closeGallery(){document.getElementById('gallery').classList.remove('active');document.body.style.overflow=''}
+function gNav(d){gIdx=(gIdx+d+images.length)%images.length;renderG()}
+function renderG(){var p=images[gIdx];document.getElementById('gimg').src=p.src;document.getElementById('gname').textContent=p.name;document.getElementById('gctr').textContent=(gIdx+1)+' / '+images.length;document.getElementById('gdl').href=p.dl;document.querySelectorAll('.gnav').forEach(function(n){n.style.display=images.length>1?'':'none'})}
+document.addEventListener('keydown',function(e){if(!document.getElementById('gallery'))return;if(!document.getElementById('gallery').classList.contains('active'))return;if(e.key==='ArrowLeft')gNav(-1);else if(e.key==='ArrowRight')gNav(1);else if(e.key==='Escape')closeGallery()});
+${imgCount > 0 ? `var g=document.getElementById('gallery');g.addEventListener('touchstart',function(e){tx=e.touches[0].clientX},{passive:true});g.addEventListener('touchend',function(e){var dx=e.changedTouches[0].clientX-tx;if(Math.abs(dx)>50){if(dx<0)gNav(1);else gNav(-1)}},{passive:true});g.addEventListener('click',function(e){if(e.target===g)closeGallery()});` : ''}
+function downloadAll(){var links=document.querySelectorAll('.album-dl, .file-row-btn');links.forEach(function(a,i){setTimeout(function(){var el=document.createElement('a');el.href=a.href;el.download='';el.style.display='none';document.body.appendChild(el);el.click();document.body.removeChild(el)},i*800)})}
+function shareBatch(){if(navigator.share){navigator.share({title:'Stickr album',url:location.href}).catch(function(){})}else{navigator.clipboard.writeText(location.href).then(function(){alert('Link copied!')})}}
 </script>
-</div></body></html>`;
+</body></html>`;
 }
 
 app.use(express.static(path.join(__dirname, 'public')));
