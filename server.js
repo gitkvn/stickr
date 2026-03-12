@@ -1151,9 +1151,10 @@ ${canUpload ? `<div class="drop-target" id="drop-target">
       <div class="upload-error" id="upload-error"></div>
     </div>
     <div class="upload-state" id="upload-progress">
-      <p id="progress-label">Sending to ${userName}...</p>
+      <p id="progress-label" style="font-weight:600;margin-bottom:10px;">Sending to ${userName}...</p>
       <div class="progress-bar-bg"><div class="progress-bar-fill" id="progress-fill"></div></div>
-      <p id="progress-text">0%</p>
+      <p id="progress-text" style="margin-top:6px;">0%</p>
+      <div id="recv-file-tracker" style="margin-top:12px;max-height:120px;overflow-y:auto;"></div>
     </div>
     <div class="upload-state" id="upload-success">
       <div class="success-check"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg></div>
@@ -1240,25 +1241,31 @@ async function doUploadAll(){
   var fill=document.getElementById('progress-fill');
   var txt=document.getElementById('progress-text');
   var label=document.getElementById('progress-label');
+  var tracker=document.getElementById('recv-file-tracker');
   var failed=0;
+
+  // Build file tracker list
+  tracker.innerHTML=uploadQueue.map(function(f,i){
+    return '<div id="recv-tf-'+i+'" style="display:flex;align-items:center;gap:8px;font-size:12px;padding:3px 0;color:#8a8a8a;"><span id="recv-ti-'+i+'" style="width:14px;text-align:center;flex-shrink:0;">○</span><span style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+f.name+'</span><span style="flex-shrink:0;font-size:11px;">'+fmtSize(f.size)+'</span></div>';
+  }).join('');
+
+  label.textContent='Sending '+uploadQueue.length+' file'+(uploadQueue.length>1?'s':'')+'...';
 
   for(uploadIdx=0;uploadIdx<uploadQueue.length;uploadIdx++){
     var file=uploadQueue[uploadIdx];
-    if(uploadQueue.length>1){
-      label.textContent='Sending '+(uploadIdx+1)+' of '+uploadQueue.length+'...';
-    }
-    fill.style.width='0%';
-    txt.textContent='0%';
+    var row=document.getElementById('recv-tf-'+uploadIdx);
+    var icon=document.getElementById('recv-ti-'+uploadIdx);
+    if(row)row.style.color='#1a1a1a';
+    if(icon)icon.textContent='↑';
     try{
       await new Promise(function(resolve,reject){
         var xhr=new XMLHttpRequest();
         xhr.upload.addEventListener('progress',function(e){
           if(e.lengthComputable){
             var filePct=Math.round(e.loaded/e.total*100);
-            // Show combined progress: file progress + overall position
             var overallPct=Math.round(((uploadIdx+filePct/100)/uploadQueue.length)*100);
             fill.style.width=overallPct+'%';
-            txt.textContent=uploadQueue.length>1?(uploadIdx+1)+'/'+uploadQueue.length+' · '+filePct+'%':filePct+'%';
+            txt.textContent=(uploadIdx+1)+'/'+uploadQueue.length+' · '+filePct+'%';
           }
         });
         xhr.addEventListener('load',function(){
@@ -1273,8 +1280,11 @@ async function doUploadAll(){
         if(currentBatchToken)xhr.setRequestHeader('X-Batch-Token',currentBatchToken);
         xhr.send(file);
       });
+      if(icon){icon.textContent='✓';icon.style.color='#2d9f6f';}
+      if(row)row.style.color='#8a8a8a';
     }catch(err){
       failed++;
+      if(icon){icon.textContent='✕';icon.style.color='#e8604c';}
       console.error('Upload failed for '+file.name,err);
     }
   }

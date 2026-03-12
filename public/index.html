@@ -181,6 +181,26 @@ header {
 .link-file-actions { display: flex; gap: 12px; margin-top: 4px; }
 .link-file-actions span { color: var(--accent); font-weight: 600; font-size: 13px; cursor: pointer; }
 .link-file-actions span:hover { text-decoration: underline; }
+/* Unified upload tracker */
+.upload-tracker { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 12px; }
+.upload-tracker-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.upload-tracker-label { font-weight: 600; font-size: 14px; }
+.upload-tracker-count { font-size: 12px; color: var(--text-muted); font-family: var(--font-mono); }
+.upload-tracker-bar { height: 4px; background: var(--bg-tertiary); border-radius: 2px; overflow: hidden; margin-bottom: 8px; }
+.upload-tracker-fill { height: 100%; background: var(--accent); border-radius: 2px; width: 0%; transition: width 0.3s; }
+.upload-tracker-speed { font-size: 11px; color: var(--text-muted); }
+.upload-tracker-files { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; max-height: 150px; overflow-y: auto; }
+.upload-tracker-file { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-secondary); padding: 4px 0; }
+.upload-tracker-file .utk-icon { width: 16px; text-align: center; flex-shrink: 0; }
+.upload-tracker-file .utk-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.upload-tracker-file .utk-size { color: var(--text-muted); font-size: 11px; flex-shrink: 0; }
+.upload-tracker-file.active { color: var(--text-primary); font-weight: 500; }
+.upload-tracker-file.done .utk-icon { color: var(--success); }
+.upload-tracker-file.error .utk-icon { color: var(--danger); }
+.upload-tracker-done { text-align: center; padding: 8px 0; }
+.upload-tracker-done .utk-check { font-size: 24px; color: var(--success); margin-bottom: 4px; }
+.upload-tracker-done p { font-size: 14px; font-weight: 600; margin-bottom: 2px; }
+.upload-tracker-done .utk-sub { font-size: 12px; color: var(--text-muted); font-weight: 400; }
 
 .qr-link-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); backdrop-filter: blur(8px); align-items: center; justify-content: center; z-index: 300; }
 .qr-link-overlay.active { display: flex; }
@@ -2156,11 +2176,21 @@ linkDropZone.addEventListener('drop', (e) => {
 });
 
 async function uploadLinkFiles(files) {
+  const validFiles = files.filter(f => {
+    if (f.size > getMaxFileSize()) {
+      showToastError('"' + f.name + '" is too large (max ' + formatMaxSize() + ')');
+      return false;
+    }
+    return true;
+  });
+  if (validFiles.length === 0) return;
+
   let batchToken = null;
   let batchUrl = null;
+  let singleUrl = null;
 
   // Create a batch if multiple files
-  if (files.length > 1) {
+  if (validFiles.length > 1) {
     try {
       const res = await fetch('/api/batch/create', { method: 'POST' });
       const data = await res.json();
@@ -2171,113 +2201,108 @@ async function uploadLinkFiles(files) {
     }
   }
 
-  for (const file of files) {
-    await uploadLinkFile(file, batchToken);
+  // Build the unified tracker UI
+  const list = document.getElementById('link-file-list');
+  const totalSize = validFiles.reduce((s, f) => s + f.size, 0);
+  const tracker = document.createElement('div');
+  tracker.className = 'upload-tracker';
+  tracker.id = 'link-tracker';
+  tracker.innerHTML = `
+    <div class="upload-tracker-header">
+      <span class="upload-tracker-label">Uploading ${validFiles.length} file${validFiles.length > 1 ? 's' : ''}...</span>
+      <span class="upload-tracker-count">0 / ${validFiles.length}</span>
+    </div>
+    <div class="upload-tracker-bar"><div class="upload-tracker-fill" id="link-tracker-fill"></div></div>
+    <div class="upload-tracker-speed" id="link-tracker-speed"></div>
+    <div class="upload-tracker-files">
+      ${validFiles.map((f, i) => `<div class="upload-tracker-file" id="link-tf-${i}"><span class="utk-icon">○</span><span class="utk-name">${escapeHtml(f.name)}</span><span class="utk-size">${formatSize(f.size)}</span></div>`).join('')}
+    </div>
+  `;
+  list.innerHTML = '';
+  list.appendChild(tracker);
+
+  // Hide drop zone while uploading
+  document.getElementById('link-drop-zone').style.display = 'none';
+
+  let completed = 0;
+  let failed = 0;
+  const uploadStart = Date.now();
+
+  for (let i = 0; i < validFiles.length; i++) {
+    const file = validFiles[i];
+    const fileEl = document.getElementById('link-tf-' + i);
+    fileEl.className = 'upload-tracker-file active';
+    fileEl.querySelector('.utk-icon').textContent = '↑';
+
+    try {
+      await new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.upload.addEventListener('progress', (e) => {
+          if (e.lengthComputable) {
+            const filePct = e.loaded / e.total;
+            const overallPct = Math.round(((completed + filePct) / validFiles.length) * 100);
+            document.getElementById('link-tracker-fill').style.width = overallPct + '%';
+            const elapsed = (Date.now() - uploadStart) / 1000;
+            if (elapsed > 0.5) {
+              const totalSent = validFiles.slice(0, i).reduce((s, f) => s + f.size, 0) + e.loaded;
+              document.getElementById('link-tracker-speed').textContent = overallPct + '% · ' + formatSize(totalSent / elapsed) + '/s';
+            }
+          }
+        });
+        xhr.addEventListener('load', () => {
+          if (xhr.status >= 200 && xhr.status < 300) resolve(JSON.parse(xhr.responseText));
+          else { try { reject(JSON.parse(xhr.responseText)); } catch { reject({ error: 'Upload failed' }); } }
+        });
+        xhr.addEventListener('error', () => reject({ error: 'Network error' }));
+        xhr.open('POST', '/api/upload');
+        xhr.setRequestHeader('X-Filename', encodeURIComponent(file.name));
+        xhr.setRequestHeader('X-Mime-Type', file.type || 'application/octet-stream');
+        if (batchToken) xhr.setRequestHeader('X-Batch-Token', batchToken);
+        xhr.send(file);
+      }).then((result) => {
+        if (!batchToken) singleUrl = result.url;
+      });
+      completed++;
+      fileEl.className = 'upload-tracker-file done';
+      fileEl.querySelector('.utk-icon').textContent = '✓';
+    } catch (err) {
+      failed++;
+      fileEl.className = 'upload-tracker-file error';
+      fileEl.querySelector('.utk-icon').textContent = '✕';
+      console.error('Upload failed:', file.name, err);
+    }
+    tracker.querySelector('.upload-tracker-count').textContent = (completed + failed) + ' / ' + validFiles.length;
   }
 
-  // After all uploads, show the batch link if batch was created
-  if (batchToken && batchUrl) {
-    const list = document.getElementById('link-file-list');
-    const batchItem = document.createElement('div');
-    batchItem.className = 'link-file-item';
-    batchItem.style.borderColor = 'var(--accent)';
-    batchItem.innerHTML = `
-      <div class="link-file-top">
-        <span class="link-file-name">${files.length} files — one link</span>
-      </div>
-      <div class="link-file-status done">✓ Ready to share</div>
-      <div class="link-file-actions">
-        <span onclick="navigator.clipboard.writeText('${batchUrl}');this.textContent='Copied!';setTimeout(()=>this.textContent='Copy',2000);">Copy</span>
-        <span onclick="shareAsyncLink('${batchUrl}','batch')">Share</span>
-        <span onclick="showQrCode('${batchUrl}')">QR</span>
-      </div>
-    `;
-    list.appendChild(batchItem);
-    batchItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  }
+  // Show completion
+  document.getElementById('link-tracker-fill').style.width = '100%';
+  const shareUrl = batchUrl || singleUrl;
+  const sent = completed;
+
+  tracker.innerHTML = `
+    <div class="upload-tracker-done">
+      <div class="utk-check">✓</div>
+      <p>${sent} file${sent > 1 ? 's' : ''} uploaded${failed > 0 ? ' (' + failed + ' failed)' : ''}</p>
+      <p class="utk-sub">${formatSize(totalSize)}${failed === 0 ? ' · Ready to share' : ''}</p>
+    </div>
+    ${shareUrl ? `<div class="link-file-actions" style="justify-content:center;margin-top:12px;">
+      <span onclick="navigator.clipboard.writeText('${shareUrl}');this.textContent='Copied!';setTimeout(()=>this.textContent='Copy',2000);">Copy link</span>
+      <span onclick="shareAsyncLink('${shareUrl}','link-batch')">Share</span>
+      <span onclick="showQrCode('${shareUrl}')">QR</span>
+    </div>` : ''}
+  `;
+
+  // Show drop zone again for more uploads
+  document.getElementById('link-drop-zone').style.display = '';
 }
 
 async function uploadLinkFile(file, batchToken) {
+  // Legacy single-file upload (kept for compatibility)
   if (file.size > getMaxFileSize()) {
     showToastError('Maximum file size is ' + formatMaxSize());
     return;
   }
-
-  const id = 'link-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6);
-  const list = document.getElementById('link-file-list');
-
-  const item = document.createElement('div');
-  item.className = 'link-file-item';
-  item.id = id;
-  item.innerHTML = `
-    <div class="link-file-top">
-      <span class="link-file-name">${escapeHtml(file.name)}</span>
-      <span class="link-file-size">${formatSize(file.size)}</span>
-    </div>
-    <div class="link-file-progress"><div class="link-file-progress-bar" id="bar-${id}"></div></div>
-    <div class="link-file-status" id="status-${id}">Uploading...</div>
-  `;
-  list.appendChild(item);
-  item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-
-  try {
-    const xhr = new XMLHttpRequest();
-    const uploadStart = Date.now();
-
-    const result = await new Promise((resolve, reject) => {
-      xhr.upload.addEventListener('progress', (e) => {
-        if (e.lengthComputable) {
-          const pct = Math.round((e.loaded / e.total) * 100);
-          document.getElementById('bar-' + id).style.width = pct + '%';
-          const elapsed = (Date.now() - uploadStart) / 1000;
-          const speed = e.loaded / elapsed;
-          document.getElementById('status-' + id).textContent = pct + '% · ' + formatSize(speed) + '/s';
-        }
-      });
-      xhr.addEventListener('load', () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          resolve(JSON.parse(xhr.responseText));
-        } else {
-          try { reject(JSON.parse(xhr.responseText)); } catch { reject({ error: 'Upload failed' }); }
-        }
-      });
-      xhr.addEventListener('error', () => reject({ error: 'Network error' }));
-      xhr.open('POST', '/api/upload');
-      xhr.setRequestHeader('X-Filename', encodeURIComponent(file.name));
-      xhr.setRequestHeader('X-Mime-Type', file.type || 'application/octet-stream');
-      if (batchToken) xhr.setRequestHeader('X-Batch-Token', batchToken);
-      xhr.send(file);
-    });
-
-    // Show success
-    document.getElementById('bar-' + id).style.width = '100%';
-    const statusEl = document.getElementById('status-' + id);
-    statusEl.className = 'link-file-status done';
-    statusEl.textContent = '✓ Uploaded';
-
-    // Show individual Copy/Share only for single file (no batch)
-    if (!batchToken) {
-      const actionsDiv = document.createElement('div');
-      actionsDiv.className = 'link-file-actions';
-      actionsDiv.innerHTML = `
-        <span onclick="navigator.clipboard.writeText('${result.url}');this.textContent='Copied!';setTimeout(()=>this.textContent='Copy',2000);">Copy</span>
-        <span onclick="shareAsyncLink('${result.url}','${id}')">Share</span>
-        <span onclick="showQrCode('${result.url}')">QR</span>
-      `;
-      document.getElementById(id).appendChild(actionsDiv);
-    }
-
-  } catch (err) {
-    const statusEl = document.getElementById('status-' + id);
-    statusEl.className = 'link-file-status error';
-    if (err.error === 'file_too_large') {
-      statusEl.textContent = '✕ File too large (max ' + formatMaxSize() + ')';
-    } else if (err.error === 'quota_exceeded') {
-      statusEl.textContent = '✕ Transfer limit reached — upgrade for more';
-    } else {
-      statusEl.textContent = '✕ ' + (err.error || 'Upload failed');
-    }
-  }
+  return uploadLinkFiles([file]);
 }
 
 function downloadBlob(blob, filename) {
