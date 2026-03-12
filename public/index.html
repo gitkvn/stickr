@@ -2987,6 +2987,8 @@ function resetSessionState() {
 
 function goHome() {
   clearTimeout(peerGoneTimer);
+  // Prevent attemptResume from reconnecting after we leave
+  roomId = null;
   // Clean up connections and cancel pending timers
   for (const [, peer] of peers) {
     clearTimeout(peer.connectionTimer);
