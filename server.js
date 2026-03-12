@@ -822,6 +822,10 @@ app.post('/api/receive/upload', rateLimit('receive-upload', 10, 60 * 1000), asyn
     // Push inbox notification via WebSocket
     notifyInbox(link.user_id);
 
+    // Deduct from recipient's transfer balance (they own the receive link)
+    stmts.addTransferUsed.run(bytesReceived, link.user_id);
+    stmts.deductBalance.run(bytesReceived, link.user_id, bytesReceived);
+
     res.json({ success: true });
   } catch (err) {
     console.error('Receive upload error:', err);
