@@ -1082,8 +1082,8 @@ body.in-room .nav-links { display: none; }
           <ul class="price-features">
             <li>1 GB transfer allowance</li>
             <li>100 MB per file</li>
-            <li>P2P encrypted transfers</li>
-            <li>Built-in chat</li>
+            <li>P2P rooms + chat</li>
+            <li>24-hour link expiry</li>
           </ul>
           <button class="price-btn free" onclick="signIn()">Get started</button>
         </div>
@@ -1094,9 +1094,9 @@ body.in-room .nav-links { display: none; }
           <div class="price-desc">Best value, never expires</div>
           <ul class="price-features">
             <li>10 GB added to balance</li>
-            <li>2 GB per file</li>
+            <li>1 GB per file</li>
+            <li>Personal receive link</li>
             <li>Never expires</li>
-            <li>Everything in Free</li>
           </ul>
           <button class="price-btn upgrade" onclick="showUpgradePrompt()">Buy 10 GB</button>
         </div>
@@ -1107,7 +1107,7 @@ body.in-room .nav-links { display: none; }
           <ul class="price-features">
             <li>100 GB monthly transfers</li>
             <li>2 GB per file</li>
-            <li>Resets every month</li>
+            <li>7-day link expiry</li>
             <li>No branding</li>
           </ul>
           <button class="price-btn topup" onclick="signIn()">Subscribe</button>
@@ -3483,7 +3483,7 @@ function showUpgradePrompt() {
   modal.innerHTML = `
     <div class="modal" style="text-align:center; max-width:380px;">
       <h2 style="font-size:22px;margin-bottom:6px;">Upgrade to Pro</h2>
-      <p style="color:var(--text-secondary); font-size:14px; margin-bottom:24px; line-height:1.6;">$2/month · 100 GB monthly transfers · 2 GB per file · 7-day links · 10 pinned files · No branding</p>
+      <p style="color:var(--text-secondary); font-size:14px; margin-bottom:24px; line-height:1.6;">$2/month · 100 GB monthly transfers · 2 GB per file · 7-day links · Personal receive link · No branding</p>
       <div style="display:flex;flex-direction:column;gap:10px;">
         <button class="btn btn-primary" style="width:100%;justify-content:center;" onclick="startCheckout()" id="checkout-btn">Subscribe — $2/mo</button>
         <button class="btn btn-secondary" style="width:100%;justify-content:center;" onclick="document.getElementById('upgrade-modal').remove()">Maybe later</button>
