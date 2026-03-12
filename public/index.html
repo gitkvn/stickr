@@ -2360,6 +2360,7 @@ function saveFile(id) {
     navigator.share({ files: [file] }).then(() => {
       if (btn) { btn.textContent = 'Saved'; btn.classList.add('saved'); btn.disabled = true; }
       completedFiles.delete(id);
+      setTimeout(() => collapseCompletedFiles(), 500);
     }).catch(() => {
       // User cancelled share sheet — that's fine, don't mark as saved
     });
@@ -2368,6 +2369,7 @@ function saveFile(id) {
     downloadBlob(entry.blob, entry.name);
     if (btn) { btn.textContent = 'Saved'; btn.classList.add('saved'); btn.disabled = true; }
     completedFiles.delete(id);
+    if (isMobile) setTimeout(() => collapseCompletedFiles(), 500);
   }
 }
 
@@ -2565,25 +2567,28 @@ function collapseCompletedFiles() {
   const list = document.getElementById('file-list');
   const items = list.querySelectorAll('.file-item');
   let completedCount = 0;
-  let activeItem = null;
+  let collapsedCount = 0;
   items.forEach(item => {
     const statusEl = item.querySelector('.file-status');
     if (statusEl && (statusEl.classList.contains('complete') || statusEl.classList.contains('link-ready'))) {
       completedCount++;
-      item.classList.add('compact');
-    } else {
-      activeItem = item;
+      // Don't collapse if it has an unsaved save button (mobile receiver)
+      const saveBtn = item.querySelector('.file-save-btn');
+      if (!saveBtn) {
+        item.classList.add('compact');
+        collapsedCount++;
+      }
     }
   });
   // Update or create summary badge
   let summary = list.querySelector('.file-summary');
-  if (completedCount > 0) {
+  if (collapsedCount > 0) {
     if (!summary) {
       summary = document.createElement('div');
       summary.className = 'file-summary';
       list.insertBefore(summary, list.firstChild);
     }
-    summary.innerHTML = '<span class="summary-check">✓</span> ' + completedCount + ' file' + (completedCount > 1 ? 's' : '') + ' transferred';
+    summary.innerHTML = '<span class="summary-check">✓</span> ' + collapsedCount + ' file' + (collapsedCount > 1 ? 's' : '') + ' transferred';
   } else if (summary) {
     summary.remove();
   }
