@@ -3136,8 +3136,16 @@ function showToastSuccess(msg) {
   setTimeout(() => toast.classList.remove('show'), 2000);
 }
 
-function showUsageToast() {
+async function showUsageToast() {
   if (!currentUser) return;
+  // Fetch fresh balance
+  try {
+    const res = await fetch('/auth/me');
+    if (res.ok) {
+      const data = await res.json();
+      currentUser.transferBalance = data.transferBalance;
+    }
+  } catch {}
   const balance = currentUser.transferBalance || 0;
   const plan = currentUser.plan === 'pro' ? 'Pro' : (currentUser.planLimits && currentUser.planLimits.canReceiveLink) ? 'Top-up' : 'Free';
   showToastInfo(formatSize(balance) + ' remaining · ' + plan + ' plan');
