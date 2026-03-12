@@ -2235,7 +2235,6 @@ async function uploadLinkFiles(files) {
       ${validFiles.map((f, i) => `<div class="upload-tracker-file" id="link-tf-${i}"><span class="utk-icon">○</span><span class="utk-name">${escapeHtml(f.name)}</span><span class="utk-size">${formatSize(f.size)}</span></div>`).join('')}
     </div>
   `;
-  list.innerHTML = '';
   list.appendChild(tracker);
 
   // Hide drop zone while uploading
