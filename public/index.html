@@ -2999,6 +2999,7 @@ function goHome() {
   if (ws) ws.close();
 
   document.getElementById('room-view').classList.remove('active');
+  document.getElementById('link-view').classList.remove('active');
   document.getElementById('home-view').classList.add('active', 'ready');
   document.body.classList.remove('in-room');
   history.pushState(null, '', location.pathname);
