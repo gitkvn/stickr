@@ -1357,6 +1357,14 @@ const FREE_MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB fallback for non-signed-i
 function getMaxFileSize() { return (currentUser && currentUser.planLimits) ? currentUser.planLimits.maxFileSize : FREE_MAX_FILE_SIZE; }
 function formatMaxSize() { const m = getMaxFileSize(); return m >= 1073741824 ? (m / 1073741824) + ' GB' : Math.round(m / 1048576) + ' MB'; }
 const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || window.matchMedia('(display-mode: standalone)').matches;
+let linkUploadInProgress = false;
+
+// Warn before closing tab during active upload or transfer
+window.addEventListener('beforeunload', (e) => {
+  if (linkUploadInProgress || activeSendAbort.size > 0) {
+    e.preventDefault();
+  }
+});
 const completedFiles = new Map(); // fileId -> { blob, name } for mobile save-on-tap
 
 // Session stats
@@ -2244,6 +2252,7 @@ async function uploadLinkFiles(files) {
     </div>
     <div class="upload-tracker-bar"><div class="upload-tracker-fill" id="link-tracker-fill"></div></div>
     <div class="upload-tracker-speed" id="link-tracker-speed"></div>
+    <div style="font-size:10px;color:var(--text-muted);margin-top:6px;opacity:0.7;">You can switch tabs · Don't close this page</div>
     <div class="upload-tracker-files">
       ${validFiles.map((f, i) => `<div class="upload-tracker-file" id="link-tf-${i}"><span class="utk-icon">○</span><span class="utk-name">${escapeHtml(f.name)}</span><span class="utk-size">${formatSize(f.size)}</span></div>`).join('')}
     </div>
@@ -2252,6 +2261,7 @@ async function uploadLinkFiles(files) {
 
   // Hide drop zone while uploading
   document.getElementById('link-drop-zone').style.display = 'none';
+  linkUploadInProgress = true;
 
   let completed = 0;
   let failed = 0;
@@ -2323,6 +2333,7 @@ async function uploadLinkFiles(files) {
 
   // Show drop zone again for more uploads
   document.getElementById('link-drop-zone').style.display = '';
+  linkUploadInProgress = false;
 }
 
 async function uploadLinkFile(file, batchToken) {
@@ -3154,10 +3165,11 @@ function showUsageToast() {
 function showToastInfo(msg) {
   const toast = document.getElementById('toast');
   toast.textContent = msg;
-  toast.style.background = 'rgba(108, 92, 231, 0.15)';
-  toast.style.borderColor = 'rgba(108, 92, 231, 0.3)';
+  toast.style.background = '#1a1a2e';
+  toast.style.color = '#fff';
+  toast.style.borderColor = 'var(--accent)';
   toast.classList.add('show');
-  setTimeout(() => toast.classList.remove('show'), 2000);
+  setTimeout(() => toast.classList.remove('show'), 2500);
 }
 
 // ═══════════════════════════════════════════
