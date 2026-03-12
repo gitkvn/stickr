@@ -113,6 +113,14 @@ db.exec(`
     r2_key TEXT NOT NULL,
     created_at TEXT DEFAULT (datetime('now'))
   );
+
+  CREATE TABLE IF NOT EXISTS feedback (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT,
+    email TEXT,
+    text TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now'))
+  );
 `);
 
 // Migrate: add columns if missing
@@ -2216,6 +2224,26 @@ function sanitizeFilename(name) {
   if (!name) return 'unnamed';
   return name.replace(/\.\./g, '').replace(/[\/\\]/g, '_').replace(/[\x00-\x1f]/g, '').slice(0, 255) || 'unnamed';
 }
+
+// ═══════════════════════════════════════════
+// FEEDBACK
+// ═══════════════════════════════════════════
+app.post('/api/feedback', rateLimit('feedback', 5, 60 * 1000), (req, res) => {
+  const { text, email } = req.body;
+  if (!text || typeof text !== 'string' || text.trim().length === 0) {
+    return res.status(400).json({ error: 'Feedback text required' });
+  }
+  if (text.length > 5000) {
+    return res.status(400).json({ error: 'Feedback too long' });
+  }
+  const user = getUserFromCookie(req);
+  const userId = user ? user.id : null;
+  const userEmail = email || (user ? user.email : null);
+
+  db.prepare('INSERT INTO feedback (user_id, email, text) VALUES (?, ?, ?)').run(userId, userEmail, text.trim());
+  console.log(`Feedback from ${userEmail || 'anonymous'}: ${text.trim().substring(0, 100)}`);
+  res.json({ ok: true });
+});
 
 // ═══════════════════════════════════════════
 // HEALTH CHECK + SELF-PING
