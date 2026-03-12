@@ -255,6 +255,8 @@ header {
 .quick-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 16px; }
 .quick-stat { padding: 14px 12px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; cursor: pointer; transition: all 0.2s; text-align: center; }
 .quick-stat:hover { border-color: var(--accent); }
+.plan-upgrade-hint { font-size: 10px; font-weight: 600; color: var(--accent); margin-top: 4px; opacity: 0.8; transition: opacity 0.2s; }
+.quick-stat:hover .plan-upgrade-hint { opacity: 1; }
 .stat-value { font-family: var(--font-mono); font-size: 20px; font-weight: 700; margin-bottom: 2px; }
 .stat-value.purple { color: var(--accent); }
 .stat-value.green { color: var(--success); }
@@ -932,9 +934,10 @@ body.in-room .nav-links { display: none; }
           <div class="stat-value" id="home-pin-count">0</div>
           <div class="stat-label">Pinned</div>
         </div>
-        <div class="quick-stat" onclick="showUpgradePrompt()">
+        <div class="quick-stat" id="plan-card" onclick="showUpgradePrompt()">
           <div class="stat-value green" id="home-plan-label">Free</div>
-          <div class="stat-label">Plan</div>
+          <div class="stat-label" id="home-plan-sub">Plan</div>
+          <div class="plan-upgrade-hint" id="plan-upgrade-hint">Upgrade — $1 →</div>
         </div>
       </div>
 
@@ -4066,15 +4069,28 @@ async function checkAuth() {
       if (currentUser.username) {
         document.getElementById('home-profile-url').textContent = 'getstickr.in/' + currentUser.username;
       }
-      // Update plan label
+      // Update plan label and upgrade hint
       const planLabel = document.getElementById('home-plan-label');
+      const planSub = document.getElementById('home-plan-sub');
+      const planHint = document.getElementById('plan-upgrade-hint');
       if (planLabel) {
+        const hasPurchased = currentUser.planLimits && currentUser.planLimits.canReceiveLink;
         if (currentUser.plan === 'pro') {
           planLabel.textContent = 'Pro';
           planLabel.classList.remove('green');
           planLabel.style.color = 'var(--accent-bright)';
+          if (planSub) planSub.textContent = '100 GB/mo';
+          if (planHint) planHint.style.display = 'none';
+        } else if (hasPurchased) {
+          planLabel.textContent = 'Top-up';
+          planLabel.classList.remove('green');
+          planLabel.style.color = 'var(--success)';
+          if (planSub) planSub.textContent = '1 GB per file';
+          if (planHint) { planHint.textContent = 'Go Pro — $2/mo →'; planHint.style.display = ''; }
         } else {
           planLabel.textContent = 'Free';
+          if (planSub) planSub.textContent = '100 MB per file';
+          if (planHint) { planHint.textContent = 'Upgrade — $1 →'; planHint.style.display = ''; }
         }
       }
       const avatar = document.getElementById('user-avatar');
