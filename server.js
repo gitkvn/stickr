@@ -1515,8 +1515,9 @@ app.get('/api/preview/:token', async (req, res) => {
   if (!file) return res.status(404).send('File not found');
   if (new Date(file.expires_at) < new Date()) return res.status(410).send('Expired');
 
-  // Only allow image previews
-  if (!file.mime_type || !file.mime_type.startsWith('image/')) {
+  // Only allow browser-renderable image previews
+  const RAW_EXT = /\.(arw|cr2|cr3|nef|dng|raf|orf|rw2|pef|srw|x3f)$/i;
+  if (!file.mime_type || !file.mime_type.startsWith('image/') || RAW_EXT.test(file.filename)) {
     return res.status(400).send('Preview not available');
   }
 
@@ -1570,7 +1571,8 @@ p{color:#5a5a5a;font-size:14px;line-height:1.6;margin-bottom:24px}
 </div></body></html>`;
   }
 
-  const isImage = file.mime_type && file.mime_type.startsWith('image/');
+  const RAW_EXTENSIONS = /\.(arw|cr2|cr3|nef|dng|raf|orf|rw2|pef|srw|x3f)$/i;
+  const isImage = file.mime_type && file.mime_type.startsWith('image/') && !RAW_EXTENSIONS.test(file.filename);
 
   return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Stickr — ${isImage ? '' : 'Download '}${escapeHtml(file.filename)}</title>
