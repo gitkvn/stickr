@@ -2987,8 +2987,6 @@ function resetSessionState() {
 
 function goHome() {
   clearTimeout(peerGoneTimer);
-  // Prevent attemptResume from reconnecting after we leave
-  roomId = null;
   // Clean up connections and cancel pending timers
   for (const [, peer] of peers) {
     clearTimeout(peer.connectionTimer);
@@ -2998,11 +2996,14 @@ function goHome() {
   peers.clear();
   if (ws) ws.close();
 
+  // Close ALL views
   document.getElementById('room-view').classList.remove('active');
   document.getElementById('link-view').classList.remove('active');
+  document.getElementById('inbox-view').classList.remove('active');
   document.getElementById('home-view').classList.add('active', 'ready');
   document.body.classList.remove('in-room');
   history.pushState(null, '', location.pathname);
+  window.scrollTo(0, 0);
 
   resetSessionState();
 }
