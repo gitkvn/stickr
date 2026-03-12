@@ -459,6 +459,18 @@ header {
 .toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(100px); background: var(--text-primary); color: #fff; padding: 12px 24px; border-radius: var(--radius); border: none; font-size: 14px; font-weight: 500; z-index: 999; transition: transform 0.3s ease; box-shadow: 0 8px 30px rgba(0,0,0,0.15); }
 .toast.show { transform: translateX(-50%) translateY(0); }
 
+/* ─── Upgrade Nudge ─── */
+.upgrade-nudge { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(120px); z-index: 999; transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s; opacity: 0; pointer-events: none; width: 92%; max-width: 400px; }
+.upgrade-nudge.show { transform: translateX(-50%) translateY(0); opacity: 1; pointer-events: auto; }
+.upgrade-nudge-inner { background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px; padding: 16px 18px; box-shadow: 0 12px 40px rgba(0,0,0,0.12); display: flex; flex-direction: column; gap: 10px; }
+.upgrade-nudge-msg { font-size: 13px; color: var(--text-primary); line-height: 1.5; }
+.upgrade-nudge-actions { display: flex; gap: 8px; align-items: center; }
+.upgrade-nudge-btn { padding: 8px 18px; border-radius: 10px; font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600; border: none; cursor: pointer; transition: all 0.2s; }
+.upgrade-nudge-btn.primary { background: var(--accent); color: white; }
+.upgrade-nudge-btn.primary:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(91,76,219,0.25); }
+.upgrade-nudge-btn.secondary { background: transparent; color: var(--text-muted); padding: 8px 12px; }
+.upgrade-nudge-btn.secondary:hover { color: var(--text-primary); }
+
 /* ─── Notification Banner ─── */
 #notif-banner { position: fixed; top: 80px; left: 50%; transform: translateX(-50%) translateY(-20px); opacity: 0; z-index: 300; transition: opacity 0.3s ease, transform 0.3s ease; pointer-events: none; width: 90%; max-width: 440px; }
 #notif-banner.show { opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: auto; }
@@ -1182,6 +1194,7 @@ body.in-room .nav-links { display: none; }
             <div class="drop-zone-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 16l-4-4-4 4"/><path d="M12 12v9"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/><polyline points="16 16 12 12 8 16"/></svg></div>
             <h3>Drop files here</h3>
             <p>or click to browse</p>
+            <p style="font-size:11px;color:var(--text-muted);margin-top:8px;opacity:0.7;">Up to 50 MB per file · Larger files auto-shared as a link</p>
           </div>
           <button class="mobile-file-btn" onclick="document.getElementById('file-input').click()">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
@@ -1259,6 +1272,15 @@ body.in-room .nav-links { display: none; }
 
 <!-- Toast -->
 <div class="toast" id="toast"></div>
+<div class="upgrade-nudge" id="upgrade-nudge">
+  <div class="upgrade-nudge-inner">
+    <div class="upgrade-nudge-msg" id="upgrade-nudge-msg"></div>
+    <div class="upgrade-nudge-actions">
+      <button class="upgrade-nudge-btn primary" id="upgrade-nudge-cta" onclick="handleNudgeCta()"></button>
+      <button class="upgrade-nudge-btn secondary" onclick="dismissNudge()">Dismiss</button>
+    </div>
+  </div>
+</div>
 
 <!-- QR Link Modal -->
 <div class="qr-link-overlay" id="qr-link-overlay" onclick="if(event.target===this)closeQrLinkModal()">
@@ -1848,11 +1870,21 @@ function setupFileChannel(channel, remotePeerId) {
 }
 
 async function sendFile(file) {
-  const ROOM_FILE_LIMIT = 50 * 1024 * 1024; // 50 MB for all users in rooms
+  const ROOM_FILE_LIMIT = 50 * 1024 * 1024; // 50 MB P2P limit
 
   if (file.size > ROOM_FILE_LIMIT) {
-    showToast('Room transfers are limited to 50 MB per file. Use "Get a Link" for larger files.');
-    return;
+    if (!currentUser) {
+      showToast('Sign in to share files over 50 MB.');
+      showSigninModal();
+      return;
+    }
+    // Check against plan's max file size for Get a Link
+    if (file.size > getMaxFileSize()) {
+      nudgeForFileSize(file.size);
+      return;
+    }
+    // Auto-generate a link and share in chat
+    return sendFileAsLink(file);
   }
 
   // P2P WebRTC transfer
@@ -1992,6 +2024,60 @@ function cancelSend(fileId) {
   if (ctrl) ctrl.abort();
 }
 
+// Auto-upload to R2 and share download link in room chat
+async function sendFileAsLink(file) {
+  const fileId = 'al-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6);
+  addFileItem(fileId, file.name, file.size, 'sending');
+  updateFileStatus(fileId, 'uploading');
+
+  try {
+    const xhr = new XMLHttpRequest();
+    const uploadStart = Date.now();
+
+    const result = await new Promise((resolve, reject) => {
+      xhr.upload.addEventListener('progress', (e) => {
+        if (e.lengthComputable) {
+          const pct = Math.round((e.loaded / e.total) * 100);
+          const speed = e.loaded / ((Date.now() - uploadStart) / 1000);
+          updateFileProgress(fileId, pct, speed);
+        }
+      });
+      xhr.addEventListener('load', () => {
+        if (xhr.status >= 200 && xhr.status < 300) resolve(JSON.parse(xhr.responseText));
+        else { try { reject(JSON.parse(xhr.responseText)); } catch { reject({ error: 'Upload failed' }); } }
+      });
+      xhr.addEventListener('error', () => reject({ error: 'Network error' }));
+      xhr.open('POST', '/api/upload');
+      xhr.setRequestHeader('X-Filename', encodeURIComponent(file.name));
+      xhr.setRequestHeader('X-Mime-Type', file.type || 'application/octet-stream');
+      xhr.send(file);
+    });
+
+    updateFileStatus(fileId, 'complete');
+    sessionStats.filesSent++;
+    sessionStats.bytesSent += file.size;
+
+    // Share the download link in room chat
+    const linkText = '📎 ' + file.name + ' (' + formatSize(file.size) + ')\n' + result.url;
+    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    for (const [, peer] of peers) {
+      if (peer.chatChannel && peer.chatChannel.readyState === 'open') {
+        peer.chatChannel.send(JSON.stringify({ type: 'chat', text: linkText, time }));
+      }
+    }
+    addChatMessage(linkText, 'sent', time);
+
+  } catch (err) {
+    console.error('Auto-link upload error:', err);
+    if (err.error === 'quota_exceeded') {
+      nudgeForQuota();
+    } else {
+      showToast(err.error || 'Upload failed');
+    }
+    updateFileStatus(fileId, 'cancelled');
+  }
+}
+
 function removeFileItem(fileId) {
   const el = document.getElementById(fileId);
   if (el) el.remove();
@@ -2068,13 +2154,16 @@ linkDropZone.addEventListener('drop', (e) => {
 });
 
 async function uploadLinkFiles(files) {
+  const maxSize = getMaxFileSize();
+  let oversized = false;
   const validFiles = files.filter(f => {
-    if (f.size > getMaxFileSize()) {
-      showToastError('"' + f.name + '" is too large (max ' + formatMaxSize() + ')');
+    if (f.size > maxSize) {
+      oversized = true;
       return false;
     }
     return true;
   });
+  if (oversized) nudgeForFileSize(files.find(f => f.size > maxSize).size);
   if (validFiles.length === 0) return;
 
   let batchToken = null;
@@ -2191,7 +2280,7 @@ async function uploadLinkFiles(files) {
 async function uploadLinkFile(file, batchToken) {
   // Legacy single-file upload (kept for compatibility)
   if (file.size > getMaxFileSize()) {
-    showToastError('Maximum file size is ' + formatMaxSize());
+    nudgeForFileSize(file.size);
     return;
   }
   return uploadLinkFiles([file]);
@@ -2963,6 +3052,80 @@ function showToastInfo(msg) {
   setTimeout(() => toast.classList.remove('show'), 2000);
 }
 
+// ═══════════════════════════════════════════
+// UPGRADE NUDGE
+// ═══════════════════════════════════════════
+let nudgeAction = null;
+let nudgeTimer = null;
+
+function showUpgradeNudge(msg, ctaText, action) {
+  dismissNudge();
+  const nudge = document.getElementById('upgrade-nudge');
+  document.getElementById('upgrade-nudge-msg').textContent = msg;
+  document.getElementById('upgrade-nudge-cta').textContent = ctaText;
+  nudgeAction = action;
+  nudge.classList.add('show');
+  // Auto-dismiss after 15 seconds
+  nudgeTimer = setTimeout(() => dismissNudge(), 15000);
+}
+
+function dismissNudge() {
+  document.getElementById('upgrade-nudge').classList.remove('show');
+  if (nudgeTimer) { clearTimeout(nudgeTimer); nudgeTimer = null; }
+  nudgeAction = null;
+}
+
+function handleNudgeCta() {
+  dismissNudge();
+  if (nudgeAction === 'topup') {
+    showUpgradePrompt();
+  } else if (nudgeAction === 'pro') {
+    showUpgradePrompt();
+  }
+}
+
+function nudgeForFileSize(fileSize) {
+  if (!currentUser) return;
+  const limits = currentUser.planLimits;
+  const hasPurchased = limits && limits.canReceiveLink; // topup or pro
+
+  if (!hasPurchased) {
+    // Free user — nudge to $1 top-up
+    showUpgradeNudge(
+      'This file is ' + formatSize(fileSize) + '. Top up to send files up to 1 GB — just $1, one-time.',
+      'Get 10 GB for $1',
+      'topup'
+    );
+  } else {
+    // Top-up user — nudge to Pro
+    showUpgradeNudge(
+      'This file is ' + formatSize(fileSize) + '. Go Pro to send files up to 2 GB — $2/month.',
+      'Go Pro — $2/mo',
+      'pro'
+    );
+  }
+}
+
+function nudgeForQuota() {
+  if (!currentUser) return;
+  const limits = currentUser.planLimits;
+  const hasPurchased = limits && limits.canReceiveLink;
+
+  if (!hasPurchased) {
+    showUpgradeNudge(
+      'You\'ve used your 1 GB free allowance. Top up 10 GB for $1 — never expires.',
+      'Get 10 GB for $1',
+      'topup'
+    );
+  } else {
+    showUpgradeNudge(
+      'Your transfer balance is used up. Go Pro for 100 GB every month — $2/month.',
+      'Go Pro — $2/mo',
+      'pro'
+    );
+  }
+}
+
 function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text;
@@ -3004,16 +3167,8 @@ function handleFiles(files) {
     showToast('No peers connected yet — wait for someone to join!');
     return;
   }
-  const validFiles = [];
-  for (const file of files) {
-    if (file.size > getMaxFileSize()) {
-      showToast(`"${file.name}" is too large (${formatSize(file.size)}). Max file size is ${formatMaxSize()}.`);
-      continue;
-    }
-    validFiles.push(file);
-  }
-  if (validFiles.length > 0) {
-    sendFilesSerially(validFiles);
+  if (files.length > 0) {
+    sendFilesSerially(Array.from(files));
   }
 }
 
