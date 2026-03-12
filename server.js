@@ -128,6 +128,7 @@ try { db.exec('ALTER TABLE users ADD COLUMN dodo_subscription_id TEXT'); } catch
 try { db.exec('ALTER TABLE users ADD COLUMN transfer_used INTEGER DEFAULT 0'); } catch (e) { /* already exists */ }
 try { db.exec('ALTER TABLE users ADD COLUMN transfer_used_reset TEXT'); } catch (e) { /* already exists */ }
 try { db.exec('ALTER TABLE pinned_files ADD COLUMN display_name TEXT'); } catch (e) { /* already exists */ }
+try { db.exec('ALTER TABLE users ADD COLUMN has_purchased INTEGER DEFAULT 0'); } catch (e) { /* already exists */ }
 try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username)'); } catch (e) { /* already exists */ }
 
 // Verify username column exists
@@ -180,10 +181,11 @@ const stmts = {
   getLastInboxSeen: db.prepare('SELECT last_inbox_seen FROM users WHERE id = ?'),
   // Plan management
   updateUserPlan: db.prepare('UPDATE users SET plan = ?, plan_expires_at = ?, dodo_customer_id = ?, dodo_subscription_id = ? WHERE id = ?'),
+  markPurchased: db.prepare('UPDATE users SET has_purchased = 1 WHERE id = ?'),
   updateUserPlanByDodoCustomer: db.prepare('UPDATE users SET plan = ?, plan_expires_at = ? WHERE dodo_customer_id = ?'),
   findUserByDodoCustomer: db.prepare('SELECT * FROM users WHERE dodo_customer_id = ?'),
   findUserByEmail: db.prepare('SELECT * FROM users WHERE email = ?'),
-  getUserPlan: db.prepare('SELECT plan, plan_expires_at, transfer_used, transfer_used_reset FROM users WHERE id = ?'),
+  getUserPlan: db.prepare('SELECT plan, plan_expires_at, transfer_used, transfer_used_reset, has_purchased FROM users WHERE id = ?'),
   addTransferUsed: db.prepare('UPDATE users SET transfer_used = transfer_used + ? WHERE id = ?'),
   resetTransferUsed: db.prepare("UPDATE users SET transfer_used = 0, transfer_used_reset = datetime('now') WHERE id = ?"),
   // Receive link queries
@@ -414,12 +416,14 @@ app.post('/api/webhook/dodo', express.raw({ type: 'application/json' }), (req, r
       if (userId) {
         const expiresAt = sub.current_period_end || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
         stmts.updateUserPlan.run('pro', expiresAt, customerId || null, subscriptionId || null, userId);
+        stmts.markPurchased.run(userId);
         console.log(`Pro activated for user ${userId}`);
       } else if (customerId) {
         const user = stmts.findUserByDodoCustomer.get(customerId);
         if (user) {
           const expiresAt = sub.current_period_end || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
           stmts.updateUserPlan.run('pro', expiresAt, customerId, subscriptionId || null, user.id);
+          stmts.markPurchased.run(user.id);
           console.log(`Pro activated for user ${user.id} via customer ${customerId}`);
         }
       }
@@ -439,6 +443,19 @@ app.post('/api/webhook/dodo', express.raw({ type: 'application/json' }), (req, r
       } else if (customerId) {
         stmts.updateUserPlanByDodoCustomer.run('free', null, customerId);
         console.log(`Pro deactivated for customer ${customerId}`);
+      }
+      break;
+    }
+
+    case 'payment.succeeded':
+    case 'payment.completed': {
+      // One-time top-up payment
+      const payment = payload.data || payload;
+      const userId = payment.metadata && payment.metadata.user_id;
+      if (userId) {
+        const topupBytes = 10 * 1024 * 1024 * 1024; // 10GB
+        db.prepare('UPDATE users SET transfer_balance = transfer_balance + ?, has_purchased = 1 WHERE id = ?').run(topupBytes, userId);
+        console.log(`Top-up: added 10GB to user ${userId}`);
       }
       break;
     }
@@ -680,6 +697,10 @@ app.post('/api/receive-link/create', (req, res) => {
   const user = getUserFromCookie(req);
   if (!user) return res.status(401).json({ error: 'Not authenticated' });
   if (!user.username) return res.status(400).json({ error: 'No username set' });
+
+  // Only paid users (top-up or pro) can create receive links
+  const limits = getUserPlanLimits(user.id);
+  if (!limits.canReceiveLink) return res.status(403).json({ error: 'Upgrade to unlock receive links' });
 
   stmts.deactivateUserReceiveLinks.run(user.id);
 
@@ -2111,25 +2132,42 @@ const PLAN_LIMITS = {
     maxPins: 3,
     maxPinSize: 25 * 1024 * 1024,          // 25MB
     branding: true,
+    canReceiveLink: false,
+  },
+  topup: {
+    maxFileSize: 1 * 1024 * 1024 * 1024,   // 1GB
+    maxTransfer: 10 * 1024 * 1024 * 1024,   // 10GB (from top-up purchase)
+    linkExpiry: 24 * 60 * 60 * 1000,       // 24 hours
+    maxPins: 3,
+    maxPinSize: 25 * 1024 * 1024,          // 25MB
+    branding: true,
+    canReceiveLink: true,
   },
   pro: {
     maxFileSize: 2 * 1024 * 1024 * 1024,   // 2GB
     maxTransfer: 100 * 1024 * 1024 * 1024, // 100GB/month
     linkExpiry: 7 * 24 * 60 * 60 * 1000,   // 7 days
-    maxPins: 10,
-    maxPinSize: 100 * 1024 * 1024,         // 100MB
+    maxPins: 3,
+    maxPinSize: 25 * 1024 * 1024,          // 25MB
     branding: false,
+    canReceiveLink: true,
   },
 };
 
 function getUserPlanLimits(userId) {
   const row = stmts.getUserPlan.get(userId);
-  if (!row || row.plan !== 'pro') return PLAN_LIMITS.free;
-  // Check if Pro has expired
-  if (row.plan_expires_at && new Date(row.plan_expires_at) < new Date()) {
-    return PLAN_LIMITS.free;
+  if (!row) return PLAN_LIMITS.free;
+  // Pro (active subscription)
+  if (row.plan === 'pro') {
+    if (row.plan_expires_at && new Date(row.plan_expires_at) < new Date()) {
+      // Pro expired — fall through to topup/free check
+    } else {
+      return PLAN_LIMITS.pro;
+    }
   }
-  return PLAN_LIMITS.pro;
+  // Top-up (has made any purchase)
+  if (row.has_purchased) return PLAN_LIMITS.topup;
+  return PLAN_LIMITS.free;
 }
 
 function isProUser(userId) {
