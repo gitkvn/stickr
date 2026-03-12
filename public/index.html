@@ -3649,7 +3649,7 @@ async function startCheckout(type) {
     const data = await res.json();
     if (!res.ok) {
       if (data.error === 'Payments not configured yet') {
-        showToast('Payments coming soon!');
+        showToast('Payments coming soon — stay tuned!');
       } else {
         showToastError(data.error || 'Checkout failed');
       }
@@ -3660,7 +3660,7 @@ async function startCheckout(type) {
     }
     window.location.href = data.url;
   } catch {
-    showToastError('Payment service unavailable');
+    showToast('Payments coming soon — stay tuned!');
     if (topupOpt) topupOpt.style.opacity = '1';
     if (proOpt) proOpt.style.opacity = '1';
     if (btn) { btn.disabled = false; btn.textContent = label; }
