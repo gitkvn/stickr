@@ -468,16 +468,6 @@ header {
 .toast.show { transform: translateX(-50%) translateY(0); }
 
 /* ─── Upgrade Nudge ─── */
-.upgrade-nudge { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(120px); z-index: 999; transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s; opacity: 0; pointer-events: none; width: 92%; max-width: 400px; }
-.upgrade-nudge.show { transform: translateX(-50%) translateY(0); opacity: 1; pointer-events: auto; }
-.upgrade-nudge-inner { background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px; padding: 16px 18px; box-shadow: 0 12px 40px rgba(0,0,0,0.12); display: flex; flex-direction: column; gap: 10px; }
-.upgrade-nudge-msg { font-size: 13px; color: var(--text-primary); line-height: 1.5; }
-.upgrade-nudge-actions { display: flex; gap: 8px; align-items: center; }
-.upgrade-nudge-btn { padding: 8px 18px; border-radius: 10px; font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600; border: none; cursor: pointer; transition: all 0.2s; }
-.upgrade-nudge-btn.primary { background: var(--accent); color: white; }
-.upgrade-nudge-btn.primary:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(91,76,219,0.25); }
-.upgrade-nudge-btn.secondary { background: transparent; color: var(--text-muted); padding: 8px 12px; }
-.upgrade-nudge-btn.secondary:hover { color: var(--text-primary); }
 
 /* ─── Feedback Card ─── */
 .feedback-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.3); backdrop-filter: blur(4px); z-index: 998; display: none; }
@@ -1311,15 +1301,6 @@ body.in-room .nav-links { display: none; }
 
 <!-- Toast -->
 <div class="toast" id="toast"></div>
-<div class="upgrade-nudge" id="upgrade-nudge">
-  <div class="upgrade-nudge-inner">
-    <div class="upgrade-nudge-msg" id="upgrade-nudge-msg"></div>
-    <div class="upgrade-nudge-actions">
-      <button class="upgrade-nudge-btn primary" id="upgrade-nudge-cta" onclick="handleNudgeCta()"></button>
-      <button class="upgrade-nudge-btn secondary" onclick="dismissNudge()">Dismiss</button>
-    </div>
-  </div>
-</div>
 <div class="feedback-overlay" id="feedback-overlay" onclick="closeFeedback()"></div>
 <div class="feedback-card" id="feedback-card">
   <div class="feedback-header">
@@ -3173,77 +3154,23 @@ function showToastInfo(msg) {
 }
 
 // ═══════════════════════════════════════════
-// UPGRADE NUDGE
+// UPGRADE PROMPTS
 // ═══════════════════════════════════════════
-let nudgeAction = null;
-let nudgeTimer = null;
-
-function showUpgradeNudge(msg, ctaText, action) {
-  dismissNudge();
-  const nudge = document.getElementById('upgrade-nudge');
-  document.getElementById('upgrade-nudge-msg').textContent = msg;
-  document.getElementById('upgrade-nudge-cta').textContent = ctaText;
-  nudgeAction = action;
-  nudge.classList.add('show');
-  // Auto-dismiss after 15 seconds
-  nudgeTimer = setTimeout(() => dismissNudge(), 15000);
-}
-
-function dismissNudge() {
-  document.getElementById('upgrade-nudge').classList.remove('show');
-  if (nudgeTimer) { clearTimeout(nudgeTimer); nudgeTimer = null; }
-  nudgeAction = null;
-}
-
-function handleNudgeCta() {
-  dismissNudge();
-  if (nudgeAction === 'topup') {
-    showUpgradePrompt();
-  } else if (nudgeAction === 'pro') {
-    showUpgradePrompt();
-  }
-}
-
 function nudgeForFileSize(fileSize) {
   if (!currentUser) return;
-  const limits = currentUser.planLimits;
-  const hasPurchased = limits && limits.canReceiveLink; // topup or pro
-
-  if (!hasPurchased) {
-    // Free user — nudge to $1 top-up
-    showUpgradeNudge(
-      'This file is ' + formatSize(fileSize) + '. Top up to send files up to 1 GB — just $1, one-time.',
-      'Get 10 GB for $1',
-      'topup'
-    );
-  } else {
-    // Top-up user — nudge to Pro
-    showUpgradeNudge(
-      'This file is ' + formatSize(fileSize) + '. Go Pro to send files up to 2 GB — $2/month.',
-      'Go Pro — $2/mo',
-      'pro'
-    );
-  }
+  showToast('This file is ' + formatSize(fileSize) + ' — upgrade for higher limits.');
+  showUpgradePrompt();
 }
 
 function nudgeForQuota() {
   if (!currentUser) return;
-  const limits = currentUser.planLimits;
-  const hasPurchased = limits && limits.canReceiveLink;
-
+  const hasPurchased = currentUser.planLimits && currentUser.planLimits.canReceiveLink;
   if (!hasPurchased) {
-    showUpgradeNudge(
-      'You\'ve used your 1 GB free allowance. Top up 10 GB for $1 — never expires.',
-      'Get 10 GB for $1',
-      'topup'
-    );
+    showToast('You\'ve used your 1 GB free allowance.');
   } else {
-    showUpgradeNudge(
-      'Your transfer balance is used up. Go Pro for 100 GB every month — $2/month.',
-      'Go Pro — $2/mo',
-      'pro'
-    );
+    showToast('Your transfer balance is used up.');
   }
+  showUpgradePrompt();
 }
 
 function escapeHtml(text) {
