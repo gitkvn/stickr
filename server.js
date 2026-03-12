@@ -1463,6 +1463,9 @@ app.post('/api/upload', rateLimit('upload', 20, 60 * 1000), async (req, res) => 
     // Track transfer usage against plan limits
     stmts.addTransferUsed.run(fileSize, user.id);
 
+    // Deduct from transfer balance
+    stmts.deductBalance.run(fileSize, user.id, fileSize);
+
     const host = req.headers.host;
     const protocol = req.headers['x-forwarded-proto'] || 'https';
     const downloadUrl = `${protocol}://${host}/dl/${token}`;
