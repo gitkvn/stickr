@@ -364,6 +364,10 @@ header {
 
 /* ─── Drop Zone ─── */
 .drop-zone-container { flex: 1; display: flex; flex-direction: column; padding: 24px; overflow-y: auto; }
+.room-hint { font-size: 13px; color: var(--text-muted); text-align: center; padding: 12px 16px; line-height: 1.5; display: none; }
+.room-hint.show { display: block; }
+.room-hint strong { color: var(--text-secondary); font-weight: 600; }
+.room-hint .hint-step { display: inline-flex; align-items: center; gap: 4px; }
 .drop-zone { border: 2px dashed var(--border); border-radius: var(--radius-lg); padding: 48px 24px; text-align: center; cursor: pointer; transition: all 0.3s; background: var(--bg-card); position: relative; min-height: 200px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
 .drop-zone.collapsed { min-height: 0; padding: 16px 24px; }
 .drop-zone.collapsed .drop-zone-icon { display: none; }
@@ -1189,6 +1193,7 @@ body.in-room .nav-links { display: none; }
           </div>
         </div>
         <div class="drop-zone-container">
+          <div class="room-hint" id="room-hint"></div>
           <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
             <input type="file" id="file-input" class="file-input" multiple>
             <div class="drop-zone-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 16l-4-4-4 4"/><path d="M12 12v9"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/><polyline points="16 16 12 12 8 16"/></svg></div>
@@ -2483,6 +2488,8 @@ function addFileItem(id, name, size, status) {
   const list = document.getElementById('file-list');
   // Collapse drop zone to make room for file list
   document.getElementById('drop-zone').classList.add('collapsed');
+  // Dismiss room hint on first file activity
+  if (!roomHintDismissed) dismissRoomHint();
   const div = document.createElement('div');
   div.className = 'file-item';
   div.id = `file-${id}`;
@@ -2607,6 +2614,47 @@ function updateStatus(state) {
     if (mobileDot) mobileDot.classList.add(s.dot);
   }
   text.textContent = s.text;
+
+  // Update contextual room hint
+  updateRoomHint(state);
+}
+
+let roomHintDismissed = false;
+
+function updateRoomHint(state) {
+  const hint = document.getElementById('room-hint');
+  if (!hint || roomHintDismissed) { if (hint) hint.classList.remove('show'); return; }
+
+  if (state === 'waiting' || state === 'connecting') {
+    if (isHost) {
+      hint.innerHTML = '<strong>Share the link or QR code</strong> below so someone can join. Once connected, drop files here to send.';
+    } else {
+      hint.innerHTML = 'Connecting to the room...';
+    }
+    hint.classList.add('show');
+  } else if (state === 'peer-found' || state === 'negotiating') {
+    hint.innerHTML = 'Almost there — setting up a secure connection...';
+    hint.classList.add('show');
+  } else if (state === 'connected') {
+    if (isHost) {
+      hint.innerHTML = 'Connected! <strong>Drop files here</strong> to send, or wait to receive files.';
+    } else {
+      hint.innerHTML = 'Connected! <strong>Drop files here</strong> to send, or wait to receive files.';
+    }
+    hint.classList.add('show');
+    // Auto-dismiss hint after 8 seconds once connected
+    setTimeout(() => {
+      if (!roomHintDismissed) dismissRoomHint();
+    }, 8000);
+  } else {
+    hint.classList.remove('show');
+  }
+}
+
+function dismissRoomHint() {
+  roomHintDismissed = true;
+  const hint = document.getElementById('room-hint');
+  if (hint) hint.classList.remove('show');
 }
 
 function updatePeerCount() {
@@ -2903,6 +2951,7 @@ function resetSessionState() {
   document.getElementById('share-bar').style.display = 'none';
   document.getElementById('qr-inline').style.display = 'none';
   document.getElementById('room-code-display').style.display = 'none';
+  roomHintDismissed = false;
 }
 
 function goHome() {
