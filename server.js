@@ -922,9 +922,11 @@ app.post('/api/receive/upload', rateLimit('receive-upload', 10, 60 * 1000), asyn
     // Push inbox notification via WebSocket
     notifyInbox(link.user_id);
 
-    // Deduct from recipient's transfer balance (they own the receive link)
+    // Deduct from recipient's transfer balance (skip for Pro — they use monthly quota)
     stmts.addTransferUsed.run(bytesReceived, link.user_id);
-    stmts.deductBalance.run(bytesReceived, link.user_id, bytesReceived);
+    if (!isProUser(link.user_id)) {
+      stmts.deductBalance.run(bytesReceived, link.user_id, bytesReceived);
+    }
 
     res.json({ success: true });
   } catch (err) {
@@ -1568,8 +1570,10 @@ app.post('/api/upload', rateLimit('upload', 20, 60 * 1000), async (req, res) => 
     // Track transfer usage against plan limits
     stmts.addTransferUsed.run(fileSize, user.id);
 
-    // Deduct from transfer balance
-    stmts.deductBalance.run(fileSize, user.id, fileSize);
+    // Deduct from transfer balance (skip for Pro — they use monthly quota)
+    if (!isProUser(user.id)) {
+      stmts.deductBalance.run(fileSize, user.id, fileSize);
+    }
 
     const host = req.headers.host;
     const protocol = req.headers['x-forwarded-proto'] || 'https';
