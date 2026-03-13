@@ -632,6 +632,7 @@ app.get('/auth/me', (req, res) => {
     profile_data: user.profile_data,
     plan: isProUser(user.id) ? 'pro' : 'free',
     transferBalance: user.transfer_balance,
+    transferUsed: user.transfer_used || 0,
     planLimits: getUserPlanLimits(user.id),
     receiveLink: (() => {
       const rl = stmts.findActiveReceiveLink.get(user.id);

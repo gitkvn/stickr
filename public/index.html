@@ -3186,15 +3186,17 @@ async function showUsageToast() {
     if (res.ok) {
       const data = await res.json();
       currentUser.transferBalance = data.transferBalance;
+      currentUser.transferUsed = data.transferUsed;
       currentUser.plan = data.plan;
       currentUser.planLimits = data.planLimits;
     }
   } catch {}
   const plan = currentUser.plan === 'pro' ? 'Pro' : (currentUser.planLimits && currentUser.planLimits.canReceiveLink) ? 'Top-up' : 'Free';
   if (currentUser.plan === 'pro') {
+    const used = currentUser.transferUsed || 0;
     const balance = currentUser.transferBalance || 0;
-    let msg = '2 GB per file · 100 GB/mo · Pro plan';
-    if (balance > 0) msg += ' · ' + formatSize(balance) + ' topup balance saved';
+    let msg = formatSize(used) + ' used of 100 GB · Pro plan';
+    if (balance > 0) msg += ' · ' + formatSize(balance) + ' topup saved';
     showToastInfo(msg);
   } else {
     const balance = currentUser.transferBalance || 0;
