@@ -633,20 +633,22 @@ app.get('/auth/me', (req, res) => {
     plan: isProUser(user.id) ? 'pro' : 'free',
     transferBalance: user.transfer_balance,
     transferUsed: (() => {
+      const row = stmts.getUserPlan.get(user.id);
+      console.log('transferUsed debug — user.transfer_used:', user.transfer_used, 'row.transfer_used:', row ? row.transfer_used : 'no row', 'reset:', row ? row.transfer_used_reset : 'n/a', 'isPro:', isProUser(user.id));
       if (isProUser(user.id)) {
-        const row = stmts.getUserPlan.get(user.id);
         if (row && row.transfer_used_reset) {
           const resetDate = new Date(row.transfer_used_reset);
           if (new Date() - resetDate > 30 * 24 * 60 * 60 * 1000) {
             stmts.resetTransferUsed.run(user.id);
             return 0;
           }
+          return row.transfer_used || 0;
         } else if (row) {
           stmts.resetTransferUsed.run(user.id);
           return 0;
         }
       }
-      return user.transfer_used || 0;
+      return row ? (row.transfer_used || 0) : (user.transfer_used || 0);
     })(),
     planLimits: getUserPlanLimits(user.id),
     receiveLink: (() => {
