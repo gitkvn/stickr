@@ -3478,6 +3478,14 @@ function closeInbox() {
   document.getElementById('home-view').classList.add('active');
 }
 
+function getEmptyInboxMessage() {
+  const canReceive = currentUser && currentUser.planLimits && currentUser.planLimits.canReceiveLink;
+  if (canReceive) {
+    return '<div class="inbox-empty">No files received yet. Share your profile link and passkey to receive files.</div>';
+  }
+  return '<div class="inbox-empty">No files received yet.<br><br>Upgrade to generate a passkey and receive files from anyone.<br><br><button class="btn btn-primary" style="margin-top:8px;font-size:13px;padding:8px 20px;" onclick="closeInbox();showUpgradePrompt();">Upgrade →</button></div>';
+}
+
 async function loadInbox() {
   const list = document.getElementById('inbox-list');
   try {
@@ -3486,7 +3494,7 @@ async function loadInbox() {
     const files = await res.json();
     document.getElementById('inbox-count-label').textContent = files.length + ' file' + (files.length !== 1 ? 's' : '');
     if (files.length === 0) {
-      list.innerHTML = '<div class="inbox-empty">No files received yet. Share your profile link and passkey to receive files.</div>';
+      list.innerHTML = getEmptyInboxMessage();
       return;
     }
     list.innerHTML = files.map(f => {
@@ -3531,7 +3539,7 @@ async function deleteInboxFile(token) {
       const list = document.getElementById('inbox-list');
       setTimeout(() => {
         if (!list.querySelector('.inbox-file-item')) {
-          list.innerHTML = '<div class="inbox-empty">No files received yet. Share your profile link and passkey to receive files.</div>';
+          list.innerHTML = getEmptyInboxMessage();
           document.getElementById('inbox-count-label').textContent = '0 files';
         } else {
           const count = list.querySelectorAll('.inbox-file-item').length;
@@ -3551,7 +3559,7 @@ async function deleteBatchInbox(batchToken) {
       const list = document.getElementById('inbox-list');
       setTimeout(() => {
         if (!list.querySelector('.inbox-file-item')) {
-          list.innerHTML = '<div class="inbox-empty">No files received yet. Share your profile link and passkey to receive files.</div>';
+          list.innerHTML = getEmptyInboxMessage();
           document.getElementById('inbox-count-label').textContent = '0 files';
         } else {
           const count = list.querySelectorAll('.inbox-file-item').length;
