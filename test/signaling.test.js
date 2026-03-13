@@ -7,9 +7,9 @@ const assert = require('assert');
 
 let server, wss, port;
 const rooms = new Map();
-const sessionTokens = new Map();
+const turnSessionTokens = new Map();
 
-function generateSessionToken() { return crypto.randomBytes(24).toString('hex'); }
+function generateTurnSessionToken() { return crypto.randomBytes(24).toString('hex'); }
 
 function generateRoomId() {
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
@@ -20,13 +20,30 @@ function generateRoomId() {
 
 function cleanupExistingRoom(ws) {
   if (!ws.roomId) return;
-  const room = rooms.get(ws.roomId);
+  const roomId = ws.roomId;
+  const room = rooms.get(roomId);
+
+  // Revoke TURN session token from prior room
+  if (ws.turnSessionToken) {
+    turnSessionTokens.delete(ws.turnSessionToken);
+    ws.turnSessionToken = null;
+  }
+
   if (!room) { ws.roomId = null; ws.role = null; return; }
   if (ws.role === 'host') {
+    room.host = null;
     for (const [, peer] of room.peers) {
       if (peer.readyState === WebSocket.OPEN) peer.send(JSON.stringify({ type: 'host-disconnected' }));
     }
-    rooms.delete(ws.roomId);
+    room.hostGraceTimer = setTimeout(() => {
+      const r = rooms.get(roomId);
+      if (r && !r.host) {
+        for (const [, peer] of r.peers) {
+          if (peer.readyState === WebSocket.OPEN) peer.send(JSON.stringify({ type: 'error', message: 'Room not found' }));
+        }
+        rooms.delete(roomId);
+      }
+    }, 30000);
   } else {
     room.peers.delete(ws.id);
     if (room.host && room.host.readyState === WebSocket.OPEN)
@@ -42,18 +59,25 @@ function setup() {
     wss = new WebSocket.Server({ server });
     wss.on('connection', (ws) => {
       ws.id = uuidv4(); ws.isAlive = true;
-      const token = generateSessionToken();
-      sessionTokens.set(token, { peerId: ws.id, createdAt: Date.now() });
-      ws.sessionToken = token;
-      ws.send(JSON.stringify({ type: 'session-token', token }));
+      // NO session-token on connect — matches production behavior
+      // Tokens are only issued on create-room, join-room, rejoin-host
+      ws.user = { id: 'test-user-' + ws.id, email: 'test@test.com' };
       ws.on('message', (data) => {
         let msg; try { msg = JSON.parse(data); } catch { return; }
         switch (msg.type) {
           case 'create-room': {
+            if (!ws.user) {
+              ws.send(JSON.stringify({ type: 'error', message: 'auth-required' }));
+              return;
+            }
             cleanupExistingRoom(ws);
             const roomId = generateRoomId();
-            rooms.set(roomId, { host: ws, hostId: ws.id, peers: new Map() });
+            rooms.set(roomId, { host: ws, hostId: ws.id, hostUserId: ws.user.id, peers: new Map(), hostGraceTimer: null });
             ws.roomId = roomId; ws.role = 'host';
+            const token = generateTurnSessionToken();
+            turnSessionTokens.set(token, { peerId: ws.id, createdAt: Date.now() });
+            ws.turnSessionToken = token;
+            ws.send(JSON.stringify({ type: 'session-token', token }));
             ws.send(JSON.stringify({ type: 'room-created', roomId, peerId: ws.id }));
             break;
           }
@@ -61,11 +85,46 @@ function setup() {
             cleanupExistingRoom(ws);
             const room = rooms.get(msg.roomId);
             if (!room) { ws.send(JSON.stringify({ type: 'error', message: 'Room not found' })); return; }
-            if (!room.host || room.host.readyState !== WebSocket.OPEN) { ws.send(JSON.stringify({ type: 'error', message: 'Host is offline' })); return; }
             ws.roomId = msg.roomId; ws.role = 'peer';
             room.peers.set(ws.id, ws);
-            ws.send(JSON.stringify({ type: 'room-joined', roomId: msg.roomId, peerId: ws.id, hostId: room.hostId }));
-            room.host.send(JSON.stringify({ type: 'peer-joined', peerId: ws.id }));
+            const joinToken = generateTurnSessionToken();
+            turnSessionTokens.set(joinToken, { peerId: ws.id, createdAt: Date.now() });
+            ws.turnSessionToken = joinToken;
+            ws.send(JSON.stringify({ type: 'session-token', token: joinToken }));
+            if (room.host && room.host.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: 'room-joined', roomId: msg.roomId, peerId: ws.id, hostId: room.hostId }));
+              room.host.send(JSON.stringify({ type: 'peer-joined', peerId: ws.id }));
+            } else {
+              ws.send(JSON.stringify({ type: 'room-joined', roomId: msg.roomId, peerId: ws.id, hostId: room.hostId }));
+            }
+            break;
+          }
+          case 'rejoin-host': {
+            if (!ws.user) {
+              ws.send(JSON.stringify({ type: 'error', message: 'auth-required' }));
+              return;
+            }
+            const rRoom = rooms.get(msg.roomId);
+            if (!rRoom) { ws.send(JSON.stringify({ type: 'error', message: 'Room not found' })); return; }
+            if (rRoom.hostUserId !== ws.user.id) {
+              ws.send(JSON.stringify({ type: 'error', message: 'Not authorized to rejoin as host' }));
+              return;
+            }
+            if (rRoom.hostGraceTimer) { clearTimeout(rRoom.hostGraceTimer); rRoom.hostGraceTimer = null; }
+            rRoom.host = ws;
+            rRoom.hostId = ws.id;
+            ws.roomId = msg.roomId; ws.role = 'host';
+            const rejoinToken = generateTurnSessionToken();
+            turnSessionTokens.set(rejoinToken, { peerId: ws.id, createdAt: Date.now() });
+            ws.turnSessionToken = rejoinToken;
+            ws.send(JSON.stringify({ type: 'session-token', token: rejoinToken }));
+            ws.send(JSON.stringify({ type: 'rejoin-confirmed', roomId: msg.roomId, peerId: ws.id }));
+            for (const [peerId, peer] of rRoom.peers) {
+              if (peer.readyState === WebSocket.OPEN) {
+                peer.send(JSON.stringify({ type: 'host-reconnected', hostId: ws.id }));
+                ws.send(JSON.stringify({ type: 'peer-joined', peerId }));
+              }
+            }
             break;
           }
           case 'signal': {
@@ -79,7 +138,7 @@ function setup() {
         }
       });
       ws.on('close', () => {
-        if (ws.sessionToken) sessionTokens.delete(ws.sessionToken);
+        if (ws.turnSessionToken) turnSessionTokens.delete(ws.turnSessionToken);
         cleanupExistingRoom(ws);
       });
     });
@@ -89,7 +148,7 @@ function setup() {
 
 function teardown() {
   return new Promise((resolve) => {
-    rooms.clear(); sessionTokens.clear();
+    rooms.clear(); turnSessionTokens.clear();
     wss.close(() => { server.close(resolve); });
   });
 }
@@ -128,21 +187,35 @@ async function run() {
   console.log('\nStickr Signaling Tests\n');
   await setup();
 
-  await test('sends session token on connect', async () => {
+  await test('no session token on bare connect', async () => {
     const c = await connect();
     const t = c.messages.find(function(m) { return m.type === 'session-token'; });
-    assert(t, 'No session-token received');
-    assert.strictEqual(t.token.length, 48, 'Token should be 48 hex chars');
+    assert(!t, 'Should NOT receive session-token on bare connect');
     c.ws.close();
   });
 
-  await test('creates a room with 6-char ID', async () => {
+  await test('session token issued on create-room', async () => {
     const h = await connect();
     send(h.ws, { type: 'create-room' });
     const msg = await waitFor(h, 'room-created');
     assert.strictEqual(msg.roomId.length, 6);
     assert(msg.peerId);
+    const t = h.messages.find(function(m) { return m.type === 'session-token'; });
+    assert(t, 'Should receive session-token on create-room');
+    assert.strictEqual(t.token.length, 48);
     h.ws.close();
+  });
+
+  await test('session token issued on join-room', async () => {
+    const h = await connect();
+    send(h.ws, { type: 'create-room' });
+    const created = await waitFor(h, 'room-created');
+    const p = await connect();
+    send(p.ws, { type: 'join-room', roomId: created.roomId });
+    await waitFor(p, 'room-joined');
+    const t = p.messages.find(function(m) { return m.type === 'session-token'; });
+    assert(t, 'Peer should receive session-token on join');
+    h.ws.close(); p.ws.close();
   });
 
   await test('peer joins existing room, both sides notified', async () => {
@@ -178,7 +251,6 @@ async function run() {
     const sig = await waitFor(h, 'signal');
     assert.strictEqual(sig.signal.sdp, 'test-sdp');
     assert(sig.from);
-    // Also test host -> peer direction
     h.messages.length = 0;
     send(h.ws, { type: 'signal', to: joined.peerId, signal: { type: 'answer', sdp: 'reply-sdp' } });
     const sig2 = await waitFor(p, 'signal');
@@ -211,17 +283,7 @@ async function run() {
     h.ws.close();
   });
 
-  await test('room deleted when host disconnects', async () => {
-    const h = await connect();
-    send(h.ws, { type: 'create-room' });
-    const created = await waitFor(h, 'room-created');
-    assert(rooms.has(created.roomId));
-    h.ws.close();
-    await new Promise(function(r) { setTimeout(r, 150); });
-    assert(!rooms.has(created.roomId), 'Room should be deleted');
-  });
-
-  await test('creating second room cleans up first (repeated create fix)', async () => {
+  await test('creating second room cleans up first', async () => {
     const h = await connect();
     send(h.ws, { type: 'create-room' });
     const first = await waitFor(h, 'room-created');
@@ -229,7 +291,6 @@ async function run() {
     h.messages.length = 0;
     send(h.ws, { type: 'create-room' });
     const second = await waitFor(h, 'room-created');
-    assert(!rooms.has(first.roomId), 'First room should be cleaned up');
     assert(rooms.has(second.roomId), 'Second room should exist');
     h.ws.close();
   });
@@ -241,7 +302,6 @@ async function run() {
     const p = await connect();
     send(p.ws, { type: 'join-room', roomId: first.roomId });
     await waitFor(p, 'room-joined');
-    // Host creates a new room - peer should get host-disconnected
     h.messages.length = 0;
     send(h.ws, { type: 'create-room' });
     await waitFor(h, 'room-created');
@@ -261,7 +321,6 @@ async function run() {
     send(p.ws, { type: 'join-room', roomId: room1.roomId });
     await waitFor(p, 'room-joined');
     assert.strictEqual(rooms.get(room1.roomId).peers.size, 1);
-    // Now join room2 - should auto-leave room1
     p.messages.length = 0;
     send(p.ws, { type: 'join-room', roomId: room2.roomId });
     await waitFor(p, 'room-joined');
@@ -271,21 +330,36 @@ async function run() {
     h1.ws.close(); h2.ws.close(); p.ws.close();
   });
 
-  await test('session token deleted on disconnect', async () => {
+  await test('TURN token revoked when switching rooms', async () => {
+    const h = await connect();
+    send(h.ws, { type: 'create-room' });
+    await waitFor(h, 'room-created');
+    const t1 = h.messages.find(function(m) { return m.type === 'session-token'; });
+    assert(turnSessionTokens.has(t1.token), 'Token should exist after create');
+    h.messages.length = 0;
+    send(h.ws, { type: 'create-room' });
+    await waitFor(h, 'room-created');
+    assert(!turnSessionTokens.has(t1.token), 'Old TURN token should be revoked on room switch');
+    const t2 = h.messages.find(function(m) { return m.type === 'session-token'; });
+    assert(turnSessionTokens.has(t2.token), 'New token should exist');
+    h.ws.close();
+  });
+
+  await test('TURN token deleted on disconnect', async () => {
     const c = await connect();
+    send(c.ws, { type: 'create-room' });
+    await waitFor(c, 'room-created');
     const t = c.messages.find(function(m) { return m.type === 'session-token'; });
-    assert(sessionTokens.has(t.token));
+    assert(turnSessionTokens.has(t.token));
     c.ws.close();
     await new Promise(function(r) { setTimeout(r, 150); });
-    assert(!sessionTokens.has(t.token), 'Token should be deleted');
+    assert(!turnSessionTokens.has(t.token), 'Token should be deleted on disconnect');
   });
 
   await test('signal to non-existent room is silently dropped', async () => {
     const c = await connect();
-    // Send signal without being in a room - should not crash
     send(c.ws, { type: 'signal', to: 'fake-id', signal: { sdp: 'x' } });
     await new Promise(function(r) { setTimeout(r, 100); });
-    // If we get here without error, the server handled it gracefully
     c.ws.close();
   });
 

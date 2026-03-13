@@ -2287,6 +2287,13 @@ function cleanupExistingRoom(ws) {
   if (!ws.roomId) return;
   const roomId = ws.roomId;
   const room = rooms.get(roomId);
+
+  // Revoke TURN session token from prior room
+  if (ws.turnSessionToken) {
+    turnSessionTokens.delete(ws.turnSessionToken);
+    ws.turnSessionToken = null;
+  }
+
   if (!room) { ws.roomId = null; ws.role = null; return; }
 
   if (ws.role === 'host') {
