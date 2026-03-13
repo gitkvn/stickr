@@ -3177,17 +3177,23 @@ function showToastSuccess(msg) {
 
 async function showUsageToast() {
   if (!currentUser) return;
-  // Fetch fresh balance
+  // Fetch fresh balance and plan
   try {
     const res = await fetch('/auth/me');
     if (res.ok) {
       const data = await res.json();
       currentUser.transferBalance = data.transferBalance;
+      currentUser.plan = data.plan;
+      currentUser.planLimits = data.planLimits;
     }
   } catch {}
-  const balance = currentUser.transferBalance || 0;
   const plan = currentUser.plan === 'pro' ? 'Pro' : (currentUser.planLimits && currentUser.planLimits.canReceiveLink) ? 'Top-up' : 'Free';
-  showToastInfo(formatSize(balance) + ' remaining · ' + plan + ' plan');
+  if (currentUser.plan === 'pro') {
+    showToastInfo('2 GB per file · 100 GB/mo · Pro plan');
+  } else {
+    const balance = currentUser.transferBalance || 0;
+    showToastInfo(formatSize(balance) + ' remaining · ' + plan + ' plan');
+  }
 }
 
 function showToastInfo(msg) {
