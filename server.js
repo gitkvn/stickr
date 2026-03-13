@@ -938,9 +938,10 @@ app.post('/api/receive/upload', rateLimit('receive-upload', 10, 60 * 1000), asyn
     // Push inbox notification via WebSocket
     notifyInbox(link.user_id);
 
-    // Deduct from recipient's transfer balance (skip for Pro — they use monthly quota)
+    // Deduct from recipient — check if Pro quota covers it or needs topup overflow
+    const recvQuota = checkTransferQuota(link.user_id, bytesReceived);
     stmts.addTransferUsed.run(bytesReceived, link.user_id);
-    if (!isProUser(link.user_id)) {
+    if (recvQuota.source !== 'pro') {
       stmts.deductBalance.run(bytesReceived, link.user_id, bytesReceived);
     }
 
@@ -1511,7 +1512,9 @@ app.post('/api/upload', rateLimit('upload', 20, 60 * 1000), async (req, res) => 
     return res.status(413).json({
       error: 'quota_exceeded',
       remaining: quota.remaining,
+      topupBalance: quota.topupBalance || 0,
       limit: quota.limit,
+      source: quota.source,
       plan: isProUser(user.id) ? 'pro' : 'free',
     });
   }
@@ -1586,8 +1589,11 @@ app.post('/api/upload', rateLimit('upload', 20, 60 * 1000), async (req, res) => 
     // Track transfer usage against plan limits
     stmts.addTransferUsed.run(fileSize, user.id);
 
-    // Deduct from transfer balance (skip for Pro — they use monthly quota)
-    if (!isProUser(user.id)) {
+    // Deduct from appropriate balance based on quota source determined before upload
+    // 'pro' = Pro monthly quota covers it, no balance deduction
+    // 'topup_overflow' = Pro exhausted, using topup balance
+    // 'balance' = free/topup user, deduct from balance
+    if (quota.source !== 'pro') {
       stmts.deductBalance.run(fileSize, user.id, fileSize);
     }
 
@@ -2247,7 +2253,7 @@ function isProUser(userId) {
   return true;
 }
 
-// Check transfer quota — returns { allowed, remaining, used, limit }
+// Check transfer quota — returns { allowed, remaining, used, limit, source }
 function checkTransferQuota(userId, fileSize) {
   const limits = getUserPlanLimits(userId);
   const row = stmts.getUserPlan.get(userId);
@@ -2257,7 +2263,6 @@ function checkTransferQuota(userId, fileSize) {
   if (row && row.plan === 'pro' && row.transfer_used_reset) {
     const resetDate = new Date(row.transfer_used_reset);
     const now = new Date();
-    // Reset if last reset was more than 30 days ago
     if (now - resetDate > 30 * 24 * 60 * 60 * 1000) {
       stmts.resetTransferUsed.run(userId);
       used = 0;
@@ -2269,12 +2274,27 @@ function checkTransferQuota(userId, fileSize) {
     used = 0;
   }
 
-  // For free users, maxTransfer is lifetime (balance-based)
-  // For pro users, maxTransfer is monthly
+  const proRemaining = Math.max(0, limits.maxTransfer - used);
+
+  // Pro user with quota remaining — use monthly allowance
+  if (isProUser(userId) && fileSize <= proRemaining) {
+    return { allowed: true, remaining: proRemaining, used, limit: limits.maxTransfer, source: 'pro' };
+  }
+
+  // Pro user with quota exhausted — fall through to topup balance
+  if (isProUser(userId) && proRemaining < fileSize) {
+    const topupBalance = row ? (row.transfer_balance || 0) : 0;
+    if (fileSize <= topupBalance) {
+      return { allowed: true, remaining: topupBalance, used, limit: limits.maxTransfer, source: 'topup_overflow' };
+    }
+    // Neither Pro quota nor topup covers it
+    return { allowed: false, remaining: proRemaining, topupBalance, used, limit: limits.maxTransfer, source: 'exhausted' };
+  }
+
+  // Free/topup users — balance-based
   const remaining = Math.max(0, limits.maxTransfer - used);
   const allowed = fileSize <= remaining;
-
-  return { allowed, remaining, used, limit: limits.maxTransfer };
+  return { allowed, remaining, used, limit: limits.maxTransfer, source: 'balance' };
 }
 
 function escapeHtml(str) {

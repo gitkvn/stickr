@@ -3225,11 +3225,15 @@ function nudgeForFileSize(fileSize) {
 
 function nudgeForQuota() {
   if (!currentUser) return;
-  const hasPurchased = currentUser.planLimits && currentUser.planLimits.canReceiveLink;
-  if (!hasPurchased) {
-    showToast('You\'ve used your 1 GB free allowance.');
+  if (currentUser.plan === 'pro') {
+    showToast('Your 100 GB monthly quota is used up. Top up to keep going.');
   } else {
-    showToast('Your transfer balance is used up.');
+    const hasPurchased = currentUser.planLimits && currentUser.planLimits.canReceiveLink;
+    if (!hasPurchased) {
+      showToast('You\'ve used your 1 GB free allowance.');
+    } else {
+      showToast('Your transfer balance is used up.');
+    }
   }
   showUpgradePrompt();
 }
