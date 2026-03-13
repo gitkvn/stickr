@@ -139,6 +139,14 @@ try { db.exec('ALTER TABLE pinned_files ADD COLUMN display_name TEXT'); } catch 
 try { db.exec('ALTER TABLE users ADD COLUMN has_purchased INTEGER DEFAULT 0'); } catch (e) { /* already exists */ }
 try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username)'); } catch (e) { /* already exists */ }
 
+// Checkout sessions tracking (maps Dodo session to user + type)
+db.exec(`CREATE TABLE IF NOT EXISTS checkout_sessions (
+  session_id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  type TEXT NOT NULL,
+  created_at TEXT DEFAULT (datetime('now'))
+)`);
+
 // Verify username column exists
 const testRow = db.prepare('PRAGMA table_info(users)').all();
 const hasUsername = testRow.some(col => col.name === 'username');
@@ -458,31 +466,43 @@ app.post('/api/webhook/dodo', express.raw({ type: 'application/json' }), (req, r
     case 'payment.succeeded':
     case 'payment.completed': {
       const payment = payload.data || payload;
-      const userId = payment.metadata && payment.metadata.user_id;
-      const paymentType = payment.metadata && payment.metadata.type;
-      const productId = payment.product_id || (payment.product_cart && payment.product_cart[0] && payment.product_cart[0].product_id);
+      const checkoutSessionId = payment.checkout_session_id || null;
+      const productId = payment.product_id || (payment.product_cart && payment.product_cart[0] && payment.product_cart[0].product_id) || null;
 
-      console.log('Payment webhook detail — userId:', userId, 'type:', paymentType, 'productId:', productId);
+      // Try to find user from checkout session tracking
+      let userId = payment.metadata && payment.metadata.user_id;
+      let paymentType = payment.metadata && payment.metadata.type;
+
+      if (checkoutSessionId) {
+        const session = db.prepare('SELECT user_id, type FROM checkout_sessions WHERE session_id = ?').get(checkoutSessionId);
+        if (session) {
+          userId = session.user_id;
+          paymentType = session.type;
+          // Clean up used session
+          db.prepare('DELETE FROM checkout_sessions WHERE session_id = ?').run(checkoutSessionId);
+          console.log('Matched checkout session:', checkoutSessionId, '→ user:', userId, 'type:', paymentType);
+        }
+      }
+
+      console.log('Payment webhook detail — userId:', userId, 'type:', paymentType, 'productId:', productId, 'sessionId:', checkoutSessionId);
 
       if (!userId) {
-        console.log('Payment webhook: no user_id in metadata, skipping');
+        console.log('Payment webhook: no user_id found, skipping');
         break;
       }
 
-      // Check if this is a topup payment (by metadata type or product ID)
-      if (paymentType === 'topup' || productId === DODO_TOPUP_PRODUCT_ID) {
+      if (paymentType === 'topup') {
         const topupBytes = 10 * 1024 * 1024 * 1024; // 10GB
         db.prepare('UPDATE users SET transfer_balance = transfer_balance + ?, has_purchased = 1 WHERE id = ?').run(topupBytes, userId);
         console.log(`Top-up: added 10GB to user ${userId}`);
-      } else if (productId === DODO_PRO_PRODUCT_ID) {
-        // Pro subscription initial payment
+      } else if (paymentType === 'pro') {
         const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
         const customerId = payment.customer_id || (payment.customer && payment.customer.customer_id) || null;
         stmts.updateUserPlan.run('pro', expiresAt, customerId, null, userId);
         stmts.markPurchased.run(userId);
         console.log(`Pro activated for user ${userId} via payment.succeeded`);
       } else {
-        console.log('Payment webhook: unknown product, logging only — productId:', productId);
+        console.log('Payment webhook: unknown type, logging only');
       }
       break;
     }
@@ -694,6 +714,12 @@ app.post('/api/checkout/pro', async (req, res) => {
       stmts.updateUserPlan.run(user.plan || 'free', null, data.customer_id, null, user.id);
     }
 
+    // Track checkout session for webhook matching
+    if (data.session_id) {
+      db.prepare('INSERT OR REPLACE INTO checkout_sessions (session_id, user_id, type) VALUES (?, ?, ?)').run(data.session_id, user.id, 'pro');
+      console.log('Stored checkout session:', data.session_id, 'type: pro, user:', user.id);
+    }
+
     res.json({ url: data.checkout_url });
   } catch (err) {
     console.error('Dodo checkout error:', err);
@@ -738,6 +764,12 @@ app.post('/api/checkout/topup', async (req, res) => {
     if (!response.ok) {
       console.error('Dodo topup checkout error:', data);
       return res.status(500).json({ error: 'Failed to create checkout' });
+    }
+
+    // Track checkout session for webhook matching
+    if (data.session_id) {
+      db.prepare('INSERT OR REPLACE INTO checkout_sessions (session_id, user_id, type) VALUES (?, ?, ?)').run(data.session_id, user.id, 'topup');
+      console.log('Stored checkout session:', data.session_id, 'type: topup, user:', user.id);
     }
 
     res.json({ url: data.checkout_url });
