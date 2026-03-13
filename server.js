@@ -1901,8 +1901,7 @@ function getBatchDownloadPage(batch, files) {
       <div class="promo"><p>Want to share files too?</p><a href="/">Try Stickr — it's free →</a></div>
     </div>`;
   } else {
-    // 4+ images — full album with cover
-    const coverImg = imageFiles[0];
+    // 4+ images — carousel hero + grid
     const gridHtml = imageFiles.map((f, i) => `
       <div class="grid-item" style="animation-delay:${0.05 + i * 0.05}s" onclick="openGallery(${i})">
         <img src="/api/preview/${f.token}" alt="${escapeHtml(f.filename)}" loading="lazy">
@@ -1912,15 +1911,24 @@ function getBatchDownloadPage(batch, files) {
         </div>
       </div>`).join('');
 
+    const carouselSlides = imageFiles.map((f, i) => `
+      <div class="car-slide" onclick="openGallery(${i})">
+        <img src="/api/preview/${f.token}" alt="${escapeHtml(f.filename)}" loading="${i < 2 ? 'eager' : 'lazy'}">
+      </div>`).join('');
+
+    const carouselDots = imageFiles.map((_, i) => `<div class="car-dot${i === 0 ? ' on' : ''}" onclick="carGo(${i})"></div>`).join('');
+
     bodyHtml = `
     <div class="page-album">
-      <div class="album-cover-wrap" onclick="openGallery(0)">
-        <img class="album-cover" src="/api/preview/${coverImg.token}" alt="">
-        <div class="album-cover-overlay">
-          <div class="album-cover-logo">St<em>i</em>ckr</div>
-          <h1 class="album-cover-title">${imgCount} photos${otherFiles.length > 0 ? ' + ' + otherFiles.length + ' file' + (otherFiles.length > 1 ? 's' : '') : ''}</h1>
-          <div class="album-cover-meta"><span>${formatBytes(totalSize)}</span><span class="dot"></span><span>Expires in ${expiresIn}</span></div>
-        </div>
+      <div class="car-wrap">
+        <div class="car-track" id="car-track">${carouselSlides}</div>
+        ${imgCount > 1 ? `<button class="car-btn car-prev" onclick="event.stopPropagation();carSlide(-1)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg></button>
+        <button class="car-btn car-next" onclick="event.stopPropagation();carSlide(1)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 6 15 12 9 18"/></svg></button>` : ''}
+      </div>
+      ${imgCount > 1 ? `<div class="car-dots">${carouselDots}</div>` : ''}
+      <div class="album-info-bar">
+        <div><span class="album-count">${imgCount} photos${otherFiles.length > 0 ? ' + ' + otherFiles.length + ' file' + (otherFiles.length > 1 ? 's' : '') : ''}</span><span class="album-size">${formatBytes(totalSize)}</span></div>
+        <span class="album-expiry">Expires in ${expiresIn}</span>
       </div>
       ${actionsHtml}
       <div class="photo-grid">${gridHtml}</div>
@@ -1981,16 +1989,23 @@ h1{font-family:'Instrument Serif',Georgia,serif;font-weight:400}
 .few-item:hover img{transform:scale(1.03);opacity:.92}
 .few-item:hover .photo-overlay{opacity:1}
 
-/* ═══ 4+ photos — album ═══ */
+/* ═══ 4+ photos — carousel album ═══ */
 .page-album{max-width:900px;margin:0 auto;padding:0 24px 48px}
-.album-cover-wrap{position:relative;border-radius:20px;overflow:hidden;margin-bottom:24px;cursor:pointer}
-.album-cover{width:100%;height:360px;object-fit:cover;display:block;transition:transform .4s}
-.album-cover-wrap:hover .album-cover{transform:scale(1.02)}
-.album-cover-overlay{position:absolute;bottom:0;left:0;right:0;padding:32px 28px 24px;background:linear-gradient(transparent,rgba(0,0,0,0.65))}
-.album-cover-logo{font-family:'Instrument Serif',Georgia,serif;font-size:18px;color:rgba(255,255,255,0.7);margin-bottom:8px}
-.album-cover-title{font-size:32px;color:#fff;margin-bottom:4px;letter-spacing:-0.5px}
-.album-cover-meta{font-size:13px;color:rgba(255,255,255,0.6);display:flex;gap:12px;align-items:center}
-.album-cover-meta .dot{width:3px;height:3px;border-radius:50%;background:rgba(255,255,255,0.4)}
+.car-wrap{position:relative;overflow:hidden;border-radius:20px;margin-bottom:4px;background:#0a0a0f}
+.car-track{display:flex;transition:transform .35s ease;height:400px}
+.car-slide{min-width:100%;height:100%;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.car-slide img{max-width:100%;max-height:100%;object-fit:contain}
+.car-btn{position:absolute;top:50%;transform:translateY(-50%);background:rgba(255,255,255,0.85);border:none;width:36px;height:36px;border-radius:50%;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;z-index:2;color:#333;transition:all .2s}
+.car-btn:hover{background:#fff;transform:translateY(-50%) scale(1.05)}
+.car-prev{left:12px}
+.car-next{right:12px}
+.car-dots{display:flex;justify-content:center;gap:6px;padding:10px 0}
+.car-dot{width:6px;height:6px;border-radius:50%;background:#d0d0d0;cursor:pointer;transition:all .2s}
+.car-dot.on{background:#5b4cdb;width:20px;border-radius:3px}
+.album-info-bar{display:flex;align-items:center;justify-content:space-between;padding:12px 0 16px}
+.album-count{font-family:'Instrument Serif',Georgia,serif;font-size:22px;margin-right:12px}
+.album-size{font-size:13px;color:#8a8a8a}
+.album-expiry{font-size:12px;color:#8a8a8a}
 
 .photo-grid{column-count:3;column-gap:10px}
 .grid-item{break-inside:avoid;margin-bottom:10px;position:relative;border-radius:12px;overflow:hidden;cursor:pointer;opacity:0;animation:fadeUp .4s ease forwards}
@@ -2042,8 +2057,10 @@ h1{font-family:'Instrument Serif',Georgia,serif;font-weight:400}
   .photo-grid{column-count:2;column-gap:6px}
   .grid-item{margin-bottom:6px;border-radius:8px}
   .grid-item .photo-overlay,.few-item .photo-overlay{opacity:1}
-  .album-cover{height:240px}
-  .album-cover-title{font-size:24px}
+  .car-track{height:280px}
+  .car-wrap{border-radius:14px}
+  .car-btn{width:30px;height:30px}
+  .album-count{font-size:20px}
   .page-album,.page-few{padding:0 16px 36px}
   .gnav{display:none}
   .album-actions{flex-direction:column}
@@ -2079,6 +2096,10 @@ document.addEventListener('keydown',function(e){if(!document.getElementById('gal
 ${imgCount > 0 ? `var g=document.getElementById('gallery');g.addEventListener('touchstart',function(e){tx=e.touches[0].clientX},{passive:true});g.addEventListener('touchend',function(e){var dx=e.changedTouches[0].clientX-tx;if(Math.abs(dx)>50){if(dx<0)gNav(1);else gNav(-1)}},{passive:true});g.addEventListener('click',function(e){if(e.target===g)closeGallery()});` : ''}
 function downloadAll(){var links=document.querySelectorAll('.album-dl, .file-row-btn');links.forEach(function(a,i){setTimeout(function(){var el=document.createElement('a');el.href=a.href;el.download='';el.style.display='none';document.body.appendChild(el);el.click();document.body.removeChild(el)},i*800)})}
 function shareBatch(){if(navigator.share){navigator.share({title:'Stickr album',url:location.href}).catch(function(){})}else{navigator.clipboard.writeText(location.href).then(function(){alert('Link copied!')})}}
+var carIdx=0,carTotal=${imgCount};
+function carSlide(d){carGo((carIdx+d+carTotal)%carTotal)}
+function carGo(i){carIdx=i;var t=document.getElementById('car-track');if(t)t.style.transform='translateX(-'+carIdx*100+'%)';var dots=document.querySelectorAll('.car-dot');dots.forEach(function(d,j){d.className='car-dot'+(j===carIdx?' on':'')})}
+${imgCount > 1 ? `(function(){var cw=document.querySelector('.car-wrap');if(!cw)return;var sx=0;cw.addEventListener('touchstart',function(e){sx=e.touches[0].clientX},{passive:true});cw.addEventListener('touchend',function(e){var dx=e.changedTouches[0].clientX-sx;if(Math.abs(dx)>40){dx<0?carSlide(1):carSlide(-1)}},{passive:true})})();` : ''}
 </script>
 </body></html>`;
 }
