@@ -1710,7 +1710,7 @@ p{color:#5a5a5a;font-size:14px;line-height:1.6;margin-bottom:24px}
 .logo em{font-style:italic;color:#5b4cdb}
 .back-nav{width:100%;max-width:480px;margin-bottom:12px;}.back-link{display:inline-flex;align-items:center;gap:6px;color:#8a8a8a;text-decoration:none;font-size:13px;font-weight:500;transition:color .2s;}.back-link:hover{color:#5b4cdb}.back-link svg{flex-shrink:0}
 </style></head><body>
-<div class="back-nav"><a class="back-link" href="/"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>Back to Stickr</a></div>
+
 <div class="card">
 <div class="logo">St<em>i</em>ckr</div>
 <h1>${expired ? 'File Expired' : 'File Not Found'}</h1>
@@ -1758,7 +1758,7 @@ h1{font-family:'Instrument Serif',Georgia,serif;font-size:${isImage ? '16px' : '
 .fullscreen-overlay img{max-width:95vw;max-height:95vh;object-fit:contain}
 .back-nav{width:100%;max-width:480px;margin-bottom:12px;}.back-link{display:inline-flex;align-items:center;gap:6px;color:#8a8a8a;text-decoration:none;font-size:13px;font-weight:500;transition:color .2s;}.back-link:hover{color:#5b4cdb}.back-link svg{flex-shrink:0}
 </style></head><body>
-<div class="back-nav"><a class="back-link" href="/"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>Back to Stickr</a></div>
+
 <div class="card">
 ${isImage ? `
 <div class="img-wrap">
@@ -1981,7 +1981,7 @@ h1{font-family:'Instrument Serif',Georgia,serif;font-weight:400}
   .few-grid{gap:6px}
 }
 </style></head><body>
-<div class="back-nav"><a class="back-link" href="/"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>Back to Stickr</a></div>
+
 ${bodyHtml}
 
 ${imgCount > 0 ? `
