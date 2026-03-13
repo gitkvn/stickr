@@ -873,7 +873,10 @@ body.in-room .nav-links { display: none; }
             </div>
           </div>
           <div class="profile-menu-divider"></div>
-          <button class="profile-menu-btn" onclick="logout()">Sign out</button>
+          <div style="display:flex;gap:12px;align-items:center;">
+            <button class="profile-menu-btn" style="flex:1;" onclick="closeProfileMenu();openFeedback();">Feedback</button>
+            <button class="profile-menu-btn" style="flex:1;" onclick="logout()">Sign out</button>
+          </div>
         </div>
       </div>
       <button class="btn-sign-in" id="btn-sign-in" onclick="signIn()" style="display:none">Sign in</button>
