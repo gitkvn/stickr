@@ -643,22 +643,23 @@ app.post('/api/checkout/pro', async (req, res) => {
 
   try {
     const baseUrl = getBaseUrl(req);
-    const response = await fetch(`${DODO_API_BASE}/subscriptions`, {
+    const response = await fetch(`${DODO_API_BASE}/checkouts`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${DODO_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        payment_link: true,
+        product_cart: [
+          { product_id: DODO_PRO_PRODUCT_ID, quantity: 1 },
+        ],
         customer: {
           email: user.email,
           name: user.name || user.username,
         },
-        product_id: DODO_PRO_PRODUCT_ID,
         return_url: `${baseUrl}/?upgrade=success`,
         metadata: {
-          user_id: user.id,
+          user_id: String(user.id),
         },
       }),
     });
@@ -670,11 +671,11 @@ app.post('/api/checkout/pro', async (req, res) => {
     }
 
     // Store Dodo customer ID if provided
-    if (data.customer && data.customer.customer_id) {
-      stmts.updateUserPlan.run(user.plan || 'free', null, data.customer.customer_id, null, user.id);
+    if (data.customer_id) {
+      stmts.updateUserPlan.run(user.plan || 'free', null, data.customer_id, null, user.id);
     }
 
-    res.json({ url: data.payment_link });
+    res.json({ url: data.checkout_url });
   } catch (err) {
     console.error('Dodo checkout error:', err);
     res.status(500).json({ error: 'Payment service unavailable' });
@@ -692,24 +693,23 @@ app.post('/api/checkout/topup', async (req, res) => {
 
   try {
     const baseUrl = getBaseUrl(req);
-    const response = await fetch(`${DODO_API_BASE}/payments`, {
+    const response = await fetch(`${DODO_API_BASE}/checkouts`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${DODO_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        payment_link: true,
+        product_cart: [
+          { product_id: DODO_TOPUP_PRODUCT_ID, quantity: 1 },
+        ],
         customer: {
           email: user.email,
           name: user.name || user.username,
         },
-        product_cart: [
-          { product_id: DODO_TOPUP_PRODUCT_ID, quantity: 1 },
-        ],
         return_url: `${baseUrl}/?topup=success`,
         metadata: {
-          user_id: user.id,
+          user_id: String(user.id),
           type: 'topup',
         },
       }),
@@ -721,7 +721,7 @@ app.post('/api/checkout/topup', async (req, res) => {
       return res.status(500).json({ error: 'Failed to create checkout' });
     }
 
-    res.json({ url: data.payment_link });
+    res.json({ url: data.checkout_url });
   } catch (err) {
     console.error('Dodo topup checkout error:', err);
     res.status(500).json({ error: 'Payment service unavailable' });
