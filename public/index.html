@@ -350,35 +350,11 @@ header {
 /* ═══ Room View ═══ */
 .room-view { flex: 1; flex-direction: column; height: 100vh; height: 100dvh; overflow: hidden; }
 .room-view.active { display: flex; }
-.room-layout { display: grid; grid-template-columns: 1fr 320px; flex: 1; min-height: 0; overflow: hidden; }
-
-/* Room info bar */
-.room-bar { display: flex; align-items: center; justify-content: space-between; padding: 10px 20px; border-bottom: 1px solid var(--border); background: var(--bg-primary); flex-shrink: 0; }
-.room-bar-left { display: flex; align-items: center; gap: 8px; }
-.room-bar-status { font-size: 12px; color: var(--text-muted); }
-.room-bar-code { font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary); cursor: pointer; padding: 2px 8px; background: var(--bg-tertiary); border-radius: 4px; }
-.room-bar-code:hover { color: var(--accent); }
-.room-bar-right { display: flex; align-items: center; gap: 6px; }
-.room-bar-btn { background: none; border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; cursor: pointer; color: var(--text-secondary); display: flex; align-items: center; justify-content: center; transition: all 0.2s; font-size: 14px; }
-.room-bar-btn:hover { border-color: var(--accent); color: var(--accent); }
-
-/* Collapsible QR panel */
-.room-qr-panel { display: none; border-bottom: 1px solid var(--border); background: var(--bg-secondary); text-align: center; padding: 16px; flex-shrink: 0; }
-.room-qr-panel.show { display: block; }
-.room-qr-inner { max-width: 300px; margin: 0 auto; }
-
-/* Room hint */
-.room-hint { font-size: 13px; color: var(--text-muted); text-align: center; padding: 12px 16px; line-height: 1.5; display: none; flex-shrink: 0; }
-.room-hint.show { display: block; }
-.room-hint strong { color: var(--text-secondary); font-weight: 600; }
-
-/* File panel — desktop sidebar */
-.file-panel { display: flex; flex-direction: column; border-left: 1px solid var(--border); overflow: hidden; order: 2; }
+.room-layout { display: grid; grid-template-columns: 1fr 380px; flex: 1; min-height: 0; overflow: hidden; }
 
 /* ─── File Panel ─── */
 .file-panel { display: flex; flex-direction: column; border-right: 1px solid var(--border); overflow: hidden; }
-.panel-header { padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
-.panel-title { font-family: var(--font-display); font-size: 16px; font-weight: 400; }
+.panel-header { padding: 16px 24px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
 .panel-title { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
 .room-code { font-family: var(--font-mono); font-size: 13px; background: var(--bg-tertiary); border: 1px solid var(--border); padding: 6px 14px; border-radius: 8px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 8px; color: var(--accent); flex-shrink: 0; }
 .room-code:hover { border-color: var(--accent); background: var(--accent-glow); }
@@ -407,11 +383,14 @@ header {
 .drop-zone h3 { font-size: 18px; font-weight: 600; margin-bottom: 6px; }
 .drop-zone p { font-size: 13px; color: var(--text-secondary); }
 .file-input { display: none; }
+.mobile-file-btn { display: none; width: 100%; padding: 14px; margin-top: 12px; font-family: var(--font-body); font-size: 15px; font-weight: 600; background: var(--gradient-1); color: white; border: none; border-radius: var(--radius); cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; }
+.mobile-file-btn:hover { transform: scale(1.02); box-shadow: 0 4px 16px rgba(91,76,219,0.2); }
 
 @media (max-width: 860px) {
   .user-name { display: none; }
   .user-logout { display: none; }
   .user-avatar { width: 32px; height: 32px; }
+  .mobile-file-btn { display: flex; align-items: center; justify-content: center; gap: 8px; }
   .drop-zone { padding: 20px 16px; min-height: 120px; }
   .drop-zone-icon { margin-bottom: 4px; }
   .drop-zone-icon svg { width: 32px; height: 32px; }
@@ -446,7 +425,7 @@ header {
 .file-save-btn.saved { background: var(--text-muted); cursor: default; }
 
 /* ═══ Chat Panel ═══ */
-.chat-panel { display: flex; flex-direction: column; background: var(--bg-secondary); overflow: hidden; min-height: 0; order: 1; }
+.chat-panel { display: flex; flex-direction: column; background: var(--bg-secondary); overflow: hidden; min-height: 0; }
 .chat-messages { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; -webkit-overflow-scrolling: touch; padding: 20px; display: flex; flex-direction: column; gap: 10px; }
 .chat-messages::-webkit-scrollbar { width: 4px; }
 .chat-messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
@@ -466,10 +445,7 @@ header {
 .empty-chat { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--text-muted); gap: 8px; }
 .empty-chat .empty-icon { font-size: 36px; opacity: 0.5; }
 .empty-chat p { font-size: 13px; }
-.chat-input-area { padding: 12px 20px; padding-bottom: max(12px, env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--border); display: flex; gap: 8px; flex-shrink: 0; background: var(--bg-secondary); align-items: center; }
-.chat-attach { background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 6px; border-radius: 8px; display: flex; align-items: center; justify-content: center; transition: all 0.2s; flex-shrink: 0; }
-.chat-attach:hover { color: var(--accent); background: var(--accent-glow); }
-.chat-attach:disabled { opacity: 0.3; cursor: not-allowed; }
+.chat-input-area { padding: 12px 20px; padding-bottom: max(12px, env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--border); display: flex; gap: 10px; flex-shrink: 0; background: var(--bg-secondary); }
 .chat-input { flex: 1; font-family: var(--font-body); font-size: 14px; background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 24px; padding: 12px 18px; outline: none; transition: border-color 0.2s; }
 .chat-input:focus { border-color: var(--accent); }
 .chat-input::placeholder { color: var(--text-muted); }
@@ -479,9 +455,16 @@ header {
 .chat-send:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
 
 /* ─── Share Link Bar ─── */
+.share-bar { padding: 14px 24px; border-top: 1px solid var(--border); background: var(--bg-secondary); display: flex; align-items: center; gap: 12px; }
+.share-bar .share-label { font-size: 12px; color: var(--text-secondary); font-weight: 600; text-transform: uppercase; letter-spacing: 1px; flex-shrink: 0; }
 .share-link-input { flex: 1; font-family: var(--font-mono); font-size: 13px; background: var(--bg-primary); color: var(--accent); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; outline: none; cursor: pointer; }
+.btn-copy { font-family: var(--font-body); font-size: 13px; font-weight: 600; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; padding: 10px 18px; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
+.btn-copy:hover { border-color: var(--accent); }
+.btn-copy.copied { background: var(--success); border-color: var(--success); color: #fff; }
 
 /* ─── QR ─── */
+.qr-inline { display: flex; justify-content: center; padding: 16px 24px 20px; border-top: 1px solid var(--border); background: var(--bg-secondary); }
+.qr-inline-wrap { text-align: center; }
 .qr-inline-label { font-family: var(--font-mono); font-size: 12px; color: var(--text-muted); margin-top: 10px; letter-spacing: 0.5px; }
 .qr-inline-label span { color: var(--accent); letter-spacing: 2px; margin-left: 6px; font-weight: 600; }
 
@@ -525,6 +508,8 @@ header {
 .notif-btn-dismiss:hover { border-color: var(--accent); }
 
 /* ─── End Session ─── */
+.btn-end-session { width: 28px; height: 28px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-tertiary); color: var(--text-muted); font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; flex-shrink: 0; line-height: 1; }
+.btn-end-session:hover { border-color: var(--danger); color: var(--danger); background: rgba(232,96,76,0.06); }
 .mobile-exit-btn { font-family: var(--font-body); font-size: 11px; font-weight: 600; color: var(--text-muted); background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; cursor: pointer; margin-left: 4px; transition: all 0.2s; }
 .mobile-exit-btn:active { color: var(--danger); border-color: var(--danger); }
 
@@ -551,24 +536,30 @@ header {
 .site-footer a { color: var(--text-secondary); text-decoration: none; transition: color 0.2s; }
 .site-footer a:hover { color: var(--accent); }
 
-/* ─── Mobile ─── */
+/* ─── Mobile Tabs ─── */
+.mobile-tabs { display: none; border-bottom: 1px solid var(--border); background: var(--bg-secondary); align-items: center; padding-top: env(safe-area-inset-top, 0px); position: sticky; top: 0; z-index: 10; }
+.mobile-tabs button { flex: 1; font-family: var(--font-body); font-size: 14px; font-weight: 600; padding: 12px 0; background: none; border: none; border-bottom: 2px solid transparent; color: var(--text-muted); cursor: pointer; transition: all 0.2s; }
+.mobile-tabs button.active { color: var(--accent); border-bottom-color: var(--accent); }
 .mobile-status { display: flex; align-items: center; gap: 6px; padding-right: 12px; flex-shrink: 0; }
 .room-code-mini { font-family: var(--font-mono); font-size: 11px; color: var(--accent); cursor: pointer; }
 
 @media (max-width: 860px) {
+  .mobile-tabs { display: flex; position: relative; z-index: 10; padding-top: env(safe-area-inset-top, 0px); flex-shrink: 0; }
   body.in-room header { display: none; }
-  .room-layout { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; }
-  .file-panel { display: none; }
-  .chat-panel { display: flex; flex: 1; min-height: 0; }
+  .room-layout { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; position: relative; }
+  .file-panel { display: none; border-right: none; }
+  .chat-panel { display: none; }
+  .file-panel.mobile-active { display: flex; flex: 1; min-height: 0; }
+  .chat-panel.mobile-active { display: flex; flex: 1; min-height: 0; }
   .panel-header { display: none !important; }
   .chat-messages { padding: 16px; }
   .chat-input-area { padding: 10px 16px; padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px)); }
   .chat-msg { max-width: 80%; }
-  .room-bar { padding: 8px 16px; padding-top: max(8px, env(safe-area-inset-top, 0px)); }
 }
 @media (max-width: 600px) {
   header { padding: 14px 16px; }
   .features { grid-template-columns: 1fr; }
+  .share-bar { flex-wrap: wrap; }
   .panel-header { padding: 12px 16px; }
   .drop-zone-container { padding: 0; }
   .drop-zone-top { padding: 12px 12px 8px; }
@@ -580,6 +571,9 @@ header {
   .file-item.compact { display: none; }
   .file-summary { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px; background: var(--bg-tertiary); border-radius: var(--radius); font-size: 13px; color: var(--text-secondary); font-weight: 500; margin-top: 8px; }
   .file-summary .summary-check { color: var(--success); }
+  .share-bar { padding: 10px 12px; }
+  .share-bar .share-label { display: none; }
+  #qr-inline { max-height: 200px; overflow: hidden; }
   .chat-input-area { padding: 8px 12px; padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)); gap: 8px; }
   .chat-input { padding: 10px 14px; font-size: 16px; }
   .chat-send { width: 40px; height: 40px; min-width: 40px; font-size: 16px; }
@@ -1201,59 +1195,69 @@ body.in-room .nav-links { display: none; }
   </div>
 
   <div id="room-view" class="view room-view">
-    <!-- Room info bar (mobile + desktop) -->
-    <div class="room-bar" id="room-bar">
-      <div class="room-bar-left">
-        <div class="status-dot" id="status-dot"></div>
-        <span id="status-text" class="room-bar-status">Waiting...</span>
-        <span class="room-bar-code" id="mobile-room-code" onclick="copyRoomCode()"></span>
-      </div>
-      <div class="room-bar-right">
-        <button class="room-bar-btn" onclick="toggleRoomQR()" id="qr-toggle-btn" title="Show QR">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="3" height="3"/><line x1="20" y1="14" x2="20" y2="20"/><line x1="14" y1="20" x2="20" y2="20"/></svg>
-        </button>
-        <button class="room-bar-btn" onclick="copyLink()" id="copy-btn" title="Copy link">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-        </button>
-        <button class="room-bar-btn" onclick="endSession()" id="end-session-btn" title="Exit">✕</button>
+    <div class="mobile-tabs" id="mobile-tabs">
+      <button class="active" onclick="switchMobileTab('files')">📁 Files</button>
+      <button onclick="switchMobileTab('chat')">💬 Chat</button>
+      <div class="mobile-status" id="mobile-status">
+        <div class="status-dot" id="mobile-status-dot"></div>
+        <span class="room-code-mini" id="mobile-room-code" onclick="copyRoomCode()"></span>
+        <button class="mobile-exit-btn" onclick="endSession()">Exit</button>
       </div>
     </div>
-
-    <!-- Collapsible QR + share link -->
-    <div class="room-qr-panel" id="room-qr-panel">
-      <div class="room-qr-inner">
-        <input class="share-link-input" id="share-link" readonly onclick="this.select()" style="font-size:12px;margin-bottom:10px;">
-        <div id="qr-container" style="display:inline-block; border-radius:10px; overflow:hidden; background:#fff; padding:10px;"></div>
-        <div class="qr-inline-label">Scan to join<span id="qr-room-code"></span></div>
-      </div>
-    </div>
-
-    <!-- Room hint -->
-    <div class="room-hint" id="room-hint"></div>
-
     <div class="room-layout">
-      <!-- File Panel (desktop only — compact sidebar) -->
+      <!-- File Panel -->
       <div class="file-panel">
         <div class="panel-header">
-          <div class="panel-title">Transfers</div>
+          <div class="panel-title">Files</div>
+          <div style="display:flex; align-items:center; gap:12px;">
+            <div class="connection-status">
+              <div class="status-dot" id="status-dot"></div>
+              <span id="status-text">Waiting...</span>
+            </div>
+            <button class="btn-end-session" id="end-session-btn" onclick="endSession()" title="End Session">✕</button>
+          </div>
         </div>
         <div class="drop-zone-container">
           <div class="drop-zone-top">
+            <div class="room-hint" id="room-hint"></div>
             <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
               <input type="file" id="file-input" class="file-input" multiple>
-              <div class="drop-zone-icon"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 16l-4-4-4 4"/><path d="M12 12v9"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/><polyline points="16 16 12 12 8 16"/></svg></div>
+              <div class="drop-zone-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 16l-4-4-4 4"/><path d="M12 12v9"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/><polyline points="16 16 12 12 8 16"/></svg></div>
               <h3>Drop files here</h3>
               <p>or click to browse</p>
+              <p style="font-size:11px;color:var(--text-muted);margin-top:8px;opacity:0.7;">Up to 50 MB per file · Larger files auto-shared as a link</p>
             </div>
+            <button class="mobile-file-btn" onclick="document.getElementById('file-input').click()">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+              Select Files
+            </button>
           </div>
           <div class="file-list-scroll">
             <div class="file-list" id="file-list"></div>
           </div>
         </div>
+        <div class="share-bar" id="share-bar" style="display:none">
+          <span class="share-label">Share Link</span>
+          <input class="share-link-input" id="share-link" readonly onclick="this.select()">
+          <button class="btn-copy" id="copy-btn" onclick="copyLink()">Copy</button>
+        </div>
+        <div class="qr-inline" id="qr-inline" style="display:none">
+          <div class="qr-inline-wrap">
+            <div id="qr-container" style="display:inline-block; border-radius:10px; overflow:hidden; background:#fff; padding:10px;"></div>
+            <div class="qr-inline-label">Scan to join<span id="qr-room-code"></span></div>
+          </div>
+        </div>
       </div>
 
-      <!-- Chat Panel (primary) -->
+      <!-- Chat Panel -->
       <div class="chat-panel">
+        <div class="panel-header">
+          <div class="panel-title">💬 Chat</div>
+          <div class="room-code" id="room-code-display" onclick="copyRoomCode()" style="display:none">
+            <span id="room-code-text"></span>
+            <span style="font-size:12px">📋</span>
+          </div>
+        </div>
         <div class="chat-messages" id="chat-messages">
           <div class="empty-chat">
             <div class="empty-icon">💬</div>
@@ -1262,9 +1266,6 @@ body.in-room .nav-links { display: none; }
           </div>
         </div>
         <div class="chat-input-area">
-          <button class="chat-attach" id="chat-attach" onclick="document.getElementById('file-input').click()" title="Attach files" disabled>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
-          </button>
           <input type="text" class="chat-input" id="chat-input" placeholder="Type a message..." enterkeyhint="send" autocomplete="off" disabled>
           <button class="chat-send" id="chat-send" onclick="sendChatMessage()" disabled>➤</button>
         </div>
@@ -2466,11 +2467,7 @@ function sendChatMessage() {
 function enableChat() {
   document.getElementById('chat-input').disabled = false;
   document.getElementById('chat-send').disabled = false;
-  document.getElementById('chat-attach').disabled = false;
   document.getElementById('chat-input').placeholder = 'Type a message...';
-
-  // Collapse QR panel when connected
-  document.getElementById('room-qr-panel').classList.remove('show');
 
   // Clear empty state
   const msgs = document.getElementById('chat-messages');
@@ -2481,7 +2478,6 @@ function enableChat() {
 function disableChat() {
   document.getElementById('chat-input').disabled = true;
   document.getElementById('chat-send').disabled = true;
-  document.getElementById('chat-attach').disabled = false; // keep attach enabled for browsing transfers
   document.getElementById('chat-input').placeholder = 'Peer disconnected';
 }
 
@@ -2513,6 +2509,16 @@ function addChatMessage(text, type, time, msgId) {
 
   if (isNearBottom || type === 'sent') {
     container.scrollTop = container.scrollHeight;
+  }
+
+  // Flash chat tab on mobile if not viewing chat
+  const chatPanel = document.querySelector('.chat-panel');
+  if (!chatPanel.classList.contains('mobile-active') && window.innerWidth <= 860) {
+    const chatTab = document.querySelectorAll('#mobile-tabs button')[1];
+    if (chatTab && !chatTab.classList.contains('active')) {
+      chatTab.style.color = 'var(--success)';
+      chatTab.textContent = '💬 Chat •';
+    }
   }
 }
 
@@ -2667,22 +2673,28 @@ function updateFileStatus(id, status, pct, url) {
 function updateStatus(state) {
   const dot = document.getElementById('status-dot');
   const text = document.getElementById('status-text');
+  const mobileDot = document.getElementById('mobile-status-dot');
   dot.className = 'status-dot';
+  if (mobileDot) mobileDot.className = 'status-dot';
 
   const states = {
-    'connecting':    { dot: 'waiting', text: 'Connecting...' },
-    'waiting':       { dot: 'waiting', text: 'Waiting...' },
-    'peer-found':    { dot: 'waiting', text: 'Peer found...' },
-    'negotiating':   { dot: 'waiting', text: 'Setting up...' },
+    'connecting':    { dot: 'waiting', text: 'Connecting to server...' },
+    'waiting':       { dot: 'waiting', text: 'Waiting for peer...' },
+    'peer-found':    { dot: 'waiting', text: 'Peer found — establishing link...' },
+    'negotiating':   { dot: 'waiting', text: 'Setting up secure connection...' },
     'connected':     { dot: 'connected', text: 'Connected' },
     'disconnected':  { dot: '', text: 'Disconnected' },
-    'retrying':      { dot: 'waiting', text: 'Retrying...' },
+    'retrying':      { dot: 'waiting', text: 'Retrying connection...' },
   };
 
   const s = states[state] || states['disconnected'];
-  if (s.dot) dot.classList.add(s.dot);
+  if (s.dot) {
+    dot.classList.add(s.dot);
+    if (mobileDot) mobileDot.classList.add(s.dot);
+  }
   text.textContent = s.text;
 
+  // Update contextual room hint
   updateRoomHint(state);
 }
 
@@ -2694,7 +2706,7 @@ function updateRoomHint(state) {
 
   if (state === 'waiting' || state === 'connecting') {
     if (isHost) {
-      hint.innerHTML = '<strong>Share the link or QR code</strong> to invite someone. Use 📎 to send files once connected.';
+      hint.innerHTML = '<strong>Share the link or QR code</strong> below so someone can join. Once connected, drop files here to send.';
     } else {
       hint.innerHTML = 'Connecting to the room...';
     }
@@ -2703,8 +2715,13 @@ function updateRoomHint(state) {
     hint.innerHTML = 'Almost there — setting up a secure connection...';
     hint.classList.add('show');
   } else if (state === 'connected') {
-    hint.innerHTML = 'Connected! Tap 📎 to send files or type a message.';
+    if (isHost) {
+      hint.innerHTML = 'Connected! <strong>Drop files here</strong> to send, or wait to receive files.';
+    } else {
+      hint.innerHTML = 'Connected! <strong>Drop files here</strong> to send, or wait to receive files.';
+    }
     hint.classList.add('show');
+    // Auto-dismiss hint after 8 seconds once connected
     setTimeout(() => {
       if (!roomHintDismissed) dismissRoomHint();
     }, 8000);
@@ -2734,28 +2751,51 @@ function showRoomView() {
   // Update share link
   const link = `${location.origin}/#${roomId}`;
   document.getElementById('share-link').value = link;
+  document.getElementById('share-bar').style.display = 'flex';
+  // On mobile, change Copy button to Share since it opens the native share sheet
+  if (isMobile && navigator.share) {
+    document.getElementById('copy-btn').textContent = 'Share';
+  }
   generateInlineQR();
 
-  // Room code in bar
+  // Room code display
+  document.getElementById('room-code-display').style.display = 'flex';
+  document.getElementById('room-code-text').textContent = roomId;
+
+  // Mobile room code
   const mobileCode = document.getElementById('mobile-room-code');
   if (mobileCode) mobileCode.textContent = roomId;
-  const qrCode = document.getElementById('qr-room-code');
-  if (qrCode) qrCode.textContent = ' · ' + roomId;
 
   // Push hash
   if (!location.hash) {
     history.pushState(null, '', `#${roomId}`);
   }
 
-  // Show QR panel by default when host is waiting for peer
-  if (isHost) {
-    document.getElementById('room-qr-panel').classList.add('show');
-  }
+  // Initialize mobile tabs — show files by default
+  switchMobileTab('files');
 }
 
-function toggleRoomQR() {
-  const panel = document.getElementById('room-qr-panel');
-  panel.classList.toggle('show');
+function switchMobileTab(tab) {
+  const filePanel = document.querySelector('.file-panel');
+  const chatPanel = document.querySelector('.chat-panel');
+  const tabs = document.querySelectorAll('#mobile-tabs button');
+
+  filePanel.classList.remove('mobile-active');
+  chatPanel.classList.remove('mobile-active');
+  tabs.forEach(t => t.classList.remove('active'));
+
+  if (tab === 'files') {
+    filePanel.classList.add('mobile-active');
+    tabs[0].classList.add('active');
+  } else {
+    chatPanel.classList.add('mobile-active');
+    tabs[1].classList.add('active');
+    // Clear notification and scroll chat to bottom
+    tabs[1].style.color = '';
+    tabs[1].textContent = '💬 Chat';
+    const msgs = document.getElementById('chat-messages');
+    msgs.scrollTop = msgs.scrollHeight;
+  }
 }
 
 // ─── Swipe Gesture for Mobile Tabs ───
@@ -2764,6 +2804,37 @@ function toggleRoomQR() {
   let touchStartY = 0;
   let swiping = false;
 
+  const roomLayout = document.querySelector('.room-layout');
+
+  roomLayout.addEventListener('touchstart', (e) => {
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+    swiping = true;
+  }, { passive: true });
+
+  roomLayout.addEventListener('touchend', (e) => {
+    if (!swiping) return;
+    swiping = false;
+
+    const dx = e.changedTouches[0].clientX - touchStartX;
+    const dy = e.changedTouches[0].clientY - touchStartY;
+
+    // Only trigger if horizontal swipe is dominant and long enough
+    if (Math.abs(dx) < 60 || Math.abs(dy) > Math.abs(dx) * 0.7) return;
+    // Only on mobile
+    if (window.innerWidth > 860) return;
+
+    const filePanel = document.querySelector('.file-panel');
+    const chatPanel = document.querySelector('.chat-panel');
+
+    if (dx < 0 && filePanel.classList.contains('mobile-active')) {
+      // Swipe left on Files → switch to Chat
+      switchMobileTab('chat');
+    } else if (dx > 0 && chatPanel.classList.contains('mobile-active')) {
+      // Swipe right on Chat → switch to Files
+      switchMobileTab('files');
+    }
+  }, { passive: true });
 })();
 
 // ═══════════════════════════════════════════
@@ -2956,8 +3027,9 @@ function resetSessionState() {
   `;
   document.getElementById('chat-input').disabled = true;
   document.getElementById('chat-send').disabled = true;
-  document.getElementById('chat-attach').disabled = true;
-  document.getElementById('room-qr-panel').classList.remove('show');
+  document.getElementById('share-bar').style.display = 'none';
+  document.getElementById('qr-inline').style.display = 'none';
+  document.getElementById('room-code-display').style.display = 'none';
   roomHintDismissed = false;
 }
 
@@ -3055,12 +3127,17 @@ async function joinRoom() {
 
 function copyLink() {
   const link = document.getElementById('share-link').value;
+  // On mobile, open native share sheet (has its own copy option)
   if (isMobile && navigator.share) {
     navigator.share({ title: 'Join my Stickr room', url: link }).catch(() => {});
     return;
   }
+  // Desktop: copy to clipboard
   navigator.clipboard.writeText(link).then(() => {
-    showToastSuccess('Link copied!');
+    const btn = document.getElementById('copy-btn');
+    btn.textContent = 'Copied!';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
   });
 }
 
@@ -4141,10 +4218,15 @@ if (hasRoomHash) {
   
   // Update share link and room code displays
   document.getElementById('share-link').value = location.origin + '/#' + hash;
+  document.getElementById('share-bar').style.display = 'flex';
+  if (isMobile && navigator.share) {
+    document.getElementById('copy-btn').textContent = 'Share';
+  }
+  document.getElementById('room-code-display').style.display = 'flex';
+  document.getElementById('room-code-text').textContent = hash;
   const mobileCode = document.getElementById('mobile-room-code');
   if (mobileCode) mobileCode.textContent = hash;
-  const qrCode = document.getElementById('qr-room-code');
-  if (qrCode) qrCode.textContent = ' · ' + hash;
+  switchMobileTab('files');
 
   // Connect after a brief delay to let page settle
   setTimeout(() => {
@@ -4193,7 +4275,8 @@ function generateInlineQR() {
     correctLevel: QRCode.CorrectLevel.M,
   });
 
-  if (codeDisplay) codeDisplay.textContent = ' · ' + roomId;
+  codeDisplay.textContent = roomId;
+  document.getElementById('qr-inline').style.display = 'flex';
 }
 </script>
 </body>
