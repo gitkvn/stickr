@@ -4126,8 +4126,8 @@ async function checkAuth() {
       checkInboxCount();
       // Poll inbox count every 30s as fallback
       setInterval(() => { if (currentUser) checkInboxCount(); }, 30000);
-      // Auto-connect WebSocket for inbox notifications
-      if (!ws || ws.readyState !== WebSocket.OPEN) {
+      // Auto-connect WebSocket for inbox notifications (skip if joining room — room WS handles it)
+      if (!hasRoomHash && (!ws || ws.readyState !== WebSocket.OPEN)) {
         connectWS();
       }
     } else {
