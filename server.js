@@ -1834,6 +1834,11 @@ function getBatchDownloadPage(batch, files) {
     dl: '/api/download/' + f.token
   }));
 
+  const allFilesData = files.map(f => ({
+    name: f.filename,
+    dl: '/api/download/' + f.token
+  }));
+
   const dlSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
   const dlSvg16 = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
   const shareSvg = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>';
@@ -1844,6 +1849,7 @@ function getBatchDownloadPage(batch, files) {
   const actionsHtml = files.length > 1 ? `
   <div class="album-actions">
     <button class="btn-primary" onclick="downloadAll()">${dlSvg16} Download all</button>
+    <button class="btn-outline" id="zip-btn" onclick="downloadZip()">${dlSvg16} Zip</button>
     <button class="btn-outline" onclick="shareBatch()">${shareSvg} Share</button>
   </div>` : '';
 
@@ -1992,8 +1998,10 @@ ${imgCount > 0 ? `
   <button class="gnav next" onclick="gNav(1)">›</button>
 </div>` : ''}
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script>
 var images=${JSON.stringify(galleryData)};
+var allFiles=${JSON.stringify(allFilesData)};
 var gIdx=0,tx=0;
 function openGallery(i){gIdx=i;renderG();document.getElementById('gallery').classList.add('active');document.body.style.overflow='hidden'}
 function closeGallery(){document.getElementById('gallery').classList.remove('active');document.body.style.overflow=''}
@@ -2002,6 +2010,7 @@ function renderG(){var p=images[gIdx];document.getElementById('gimg').src=p.src;
 document.addEventListener('keydown',function(e){if(!document.getElementById('gallery'))return;if(!document.getElementById('gallery').classList.contains('active'))return;if(e.key==='ArrowLeft')gNav(-1);else if(e.key==='ArrowRight')gNav(1);else if(e.key==='Escape')closeGallery()});
 ${imgCount > 0 ? `var g=document.getElementById('gallery');g.addEventListener('touchstart',function(e){tx=e.touches[0].clientX},{passive:true});g.addEventListener('touchend',function(e){var dx=e.changedTouches[0].clientX-tx;if(Math.abs(dx)>50){if(dx<0)gNav(1);else gNav(-1)}},{passive:true});g.addEventListener('click',function(e){if(e.target===g)closeGallery()});` : ''}
 function downloadAll(){var links=document.querySelectorAll('.album-dl, .file-row-btn');links.forEach(function(a,i){setTimeout(function(){var el=document.createElement('a');el.href=a.href;el.download='';el.style.display='none';document.body.appendChild(el);el.click();document.body.removeChild(el)},i*800)})}
+async function downloadZip(){var btn=document.getElementById('zip-btn');if(!btn)return;btn.disabled=true;btn.innerHTML='Preparing...';try{var zip=new JSZip();for(var i=0;i<allFiles.length;i++){btn.innerHTML=(i+1)+'/'+allFiles.length+'...';var resp=await fetch(allFiles[i].dl);var blob=await resp.blob();zip.file(allFiles[i].name,blob)}btn.innerHTML='Zipping...';var content=await zip.generateAsync({type:'blob'});var a=document.createElement('a');a.href=URL.createObjectURL(content);a.download='stickr-files.zip';a.click();URL.revokeObjectURL(a.href);btn.innerHTML='${dlSvg16} Zip';btn.disabled=false}catch(e){btn.innerHTML='Failed';btn.disabled=false;setTimeout(function(){btn.innerHTML='${dlSvg16} Zip'},2000)}}
 function shareBatch(){if(navigator.share){navigator.share({title:'Stickr album',url:location.href}).catch(function(){})}else{navigator.clipboard.writeText(location.href).then(function(){alert('Link copied!')})}}
 </script>
 </body></html>`;
