@@ -1737,6 +1737,11 @@ h1{font-family:'Instrument Serif',Georgia,serif;font-size:${isImage ? '16px' : '
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:14px 32px;border-radius:12px;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:600;text-decoration:none;background:#5b4cdb;color:white;transition:all 0.2s;margin-bottom:16px;border:none;cursor:pointer}
 .btn:hover{transform:translateY(-1px);box-shadow:0 4px 20px rgba(91,76,219,0.2)}
 .btn svg{flex-shrink:0}
+.btn-row{display:flex;gap:10px;margin-bottom:12px}
+.btn-row .btn{margin-bottom:0;flex:1}
+.btn-share{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:14px 20px;border-radius:12px;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:600;background:#f5f3ee;color:#1a1a1a;border:1px solid #e0ddd4;cursor:pointer;transition:all 0.2s}
+.btn-share:hover{border-color:#5b4cdb;color:#5b4cdb}
+.link-active{color:#8a8a8a;font-size:11px;text-align:center;margin-bottom:16px}
 .logo{font-family:'Instrument Serif',Georgia,serif;font-size:28px;font-weight:400;margin-bottom:${isImage ? '0' : '24px'};color:#1a1a1a}
 .logo em{font-style:italic;color:#5b4cdb}
 .expiry{color:#8a8a8a;font-size:11px;margin-bottom:20px}
@@ -1763,11 +1768,17 @@ ${showBranding ? '<div class="logo">St<em>i</em>ckr</div>' : ''}
 <div class="card-body">
 <h1>${escapeHtml(file.filename)}</h1>
 <p class="meta">${sizeFormatted}</p>
-<p class="expiry">Expires in ${expiresIn}</p>
+<div class="btn-row">
 <a class="btn" href="/api/download/${file.token}">
 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-Download original
+Download
 </a>
+<button class="btn-share" onclick="if(navigator.share){navigator.share({title:'${escapeHtml(file.filename)}',url:location.href}).catch(function(){})}else{navigator.clipboard.writeText(location.href).then(function(){this.textContent='Copied!'})}">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+Share
+</button>
+</div>
+<div class="link-active">Link active for ${expiresIn}</div>
 ${showBranding ? '<div class="promo"><p>Want to share files too?</p><a href="/">Start free on Stickr</a></div>' : ''}
 </div>
 <div class="fullscreen-overlay" id="fs" onclick="this.classList.remove('active')">
@@ -1779,11 +1790,17 @@ ${showBranding ? '<div class="logo">St<em>i</em>ckr</div>' : ''}
 <div class="file-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#5b4cdb" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><polyline points="9 15 12 18 15 15"/></svg></div>
 <h1>${escapeHtml(file.filename)}</h1>
 <p class="meta">${sizeFormatted}</p>
-<p class="expiry">Expires in ${expiresIn}</p>
+<div class="btn-row">
 <a class="btn" href="/api/download/${file.token}">
 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
 Download
 </a>
+<button class="btn-share" onclick="if(navigator.share){navigator.share({title:'${escapeHtml(file.filename)}',url:location.href}).catch(function(){})}else{navigator.clipboard.writeText(location.href).then(function(){this.textContent='Copied!'})}">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+Share
+</button>
+</div>
+<div class="link-active">Link active for ${expiresIn}</div>
 ${showBranding ? '<div class="promo"><p>Want to share files too?</p><a href="/">Start free on Stickr</a></div>' : ''}
 </div>
 `}
@@ -1861,12 +1878,12 @@ function getBatchDownloadPage(batch, files) {
     <div class="album-header">
       ${showBranding ? '<div class="logo">St<em>i</em>ckr</div>' : ''}
       <h1>${fileLabel}</h1>
-      <p class="meta">${formatBytes(totalSize)} · Expires in ${expiresIn}</p>
+      <p class="meta">${formatBytes(totalSize)}</p>
     </div>
     ${singleFileAction}
     ${imgCount > 0 ? `<div class="photo-grid ${gridCols}">${gridHtml}</div>` : ''}
     ${otherFilesHtml}
-    <div class="expiry-footer"><span>Expires in ${expiresIn}</span></div>
+    <div class="expiry-footer"><span>Link active for ${expiresIn}</span></div>
     ${showBranding ? '<div class="promo"><p>Want to share files too?</p><a href="/">Try Stickr — it\'s free →</a></div>' : ''}
   </div>`;
 
