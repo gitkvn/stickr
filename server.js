@@ -621,10 +621,11 @@ app.get('/auth/logout', (req, res) => {
 // ═══════════════════════════════════════════
 // PAYMENTS (Dodo)
 // ═══════════════════════════════════════════
-const DODO_API_KEY = process.env.DODO_PAYMENTS_API_KEY || '';
-const DODO_WEBHOOK_SECRET = process.env.DODO_PAYMENTS_WEBHOOK_SECRET || '';
-const DODO_PRODUCT_ID = process.env.DODO_PRO_PRODUCT_ID || ''; // Pro subscription product ID
-const DODO_ENV = process.env.DODO_PAYMENTS_ENVIRONMENT || 'test_mode';
+const DODO_API_KEY = process.env.DODO_API_KEY || '';
+const DODO_WEBHOOK_SECRET = process.env.DODO_WEBHOOK_SECRET || '';
+const DODO_TOPUP_PRODUCT_ID = process.env.DODO_TOPUP_PRODUCT_ID || '';
+const DODO_PRO_PRODUCT_ID = process.env.DODO_PRO_PRODUCT_ID || '';
+const DODO_ENV = process.env.DODO_ENV || 'test_mode';
 const DODO_API_BASE = DODO_ENV === 'live_mode' ? 'https://api.dodopayments.com' : 'https://test.dodopayments.com';
 
 // Create checkout session for Pro subscription
@@ -636,7 +637,7 @@ app.post('/api/checkout/pro', async (req, res) => {
     return res.status(400).json({ error: 'Already on Pro' });
   }
 
-  if (!DODO_API_KEY || !DODO_PRODUCT_ID) {
+  if (!DODO_API_KEY || !DODO_PRO_PRODUCT_ID) {
     return res.status(503).json({ error: 'Payments not configured yet' });
   }
 
@@ -654,7 +655,7 @@ app.post('/api/checkout/pro', async (req, res) => {
           email: user.email,
           name: user.name || user.username,
         },
-        product_id: DODO_PRODUCT_ID,
+        product_id: DODO_PRO_PRODUCT_ID,
         return_url: `${baseUrl}/?upgrade=success`,
         metadata: {
           user_id: user.id,
@@ -676,6 +677,53 @@ app.post('/api/checkout/pro', async (req, res) => {
     res.json({ url: data.payment_link });
   } catch (err) {
     console.error('Dodo checkout error:', err);
+    res.status(500).json({ error: 'Payment service unavailable' });
+  }
+});
+
+// Create checkout session for 10 GB top-up (one-time payment)
+app.post('/api/checkout/topup', async (req, res) => {
+  const user = getUserFromCookie(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+
+  if (!DODO_API_KEY || !DODO_TOPUP_PRODUCT_ID) {
+    return res.status(503).json({ error: 'Payments not configured yet' });
+  }
+
+  try {
+    const baseUrl = getBaseUrl(req);
+    const response = await fetch(`${DODO_API_BASE}/payments`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${DODO_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        payment_link: true,
+        customer: {
+          email: user.email,
+          name: user.name || user.username,
+        },
+        product_cart: [
+          { product_id: DODO_TOPUP_PRODUCT_ID, quantity: 1 },
+        ],
+        return_url: `${baseUrl}/?topup=success`,
+        metadata: {
+          user_id: user.id,
+          type: 'topup',
+        },
+      }),
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      console.error('Dodo topup checkout error:', data);
+      return res.status(500).json({ error: 'Failed to create checkout' });
+    }
+
+    res.json({ url: data.payment_link });
+  } catch (err) {
+    console.error('Dodo topup checkout error:', err);
     res.status(500).json({ error: 'Payment service unavailable' });
   }
 });
