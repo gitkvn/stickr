@@ -1,3 +1,10 @@
+// ⚠️ DUPLICATION RISK: This test runs against a duplicated mini-server that
+// mirrors the signaling logic in server.js, NOT the production server itself.
+// If server.js signaling behavior changes, this harness must be updated manually.
+// TODO: Extract signaling into a shared module (signaling.js) imported by both
+// server.js and this test, eliminating the drift risk.
+// Last aligned: 2026-03-13 (commit aeed598 baseline)
+
 const http = require('http');
 const express = require('express');
 const WebSocket = require('ws');
