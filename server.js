@@ -409,7 +409,7 @@ app.post('/api/webhook/dodo', express.raw({ type: 'application/json' }), (req, r
     return res.status(400).send('Invalid JSON');
   }
 
-  console.log('Dodo webhook verified:', payload.type, JSON.stringify(payload).slice(0, 200));
+  console.log('Dodo webhook verified:', payload.type, JSON.stringify(payload).slice(0, 500));
 
   const eventType = payload.type || payload.event_type;
 
@@ -457,13 +457,32 @@ app.post('/api/webhook/dodo', express.raw({ type: 'application/json' }), (req, r
 
     case 'payment.succeeded':
     case 'payment.completed': {
-      // One-time top-up payment
       const payment = payload.data || payload;
       const userId = payment.metadata && payment.metadata.user_id;
-      if (userId) {
+      const paymentType = payment.metadata && payment.metadata.type;
+      const productId = payment.product_id || (payment.product_cart && payment.product_cart[0] && payment.product_cart[0].product_id);
+
+      console.log('Payment webhook detail — userId:', userId, 'type:', paymentType, 'productId:', productId);
+
+      if (!userId) {
+        console.log('Payment webhook: no user_id in metadata, skipping');
+        break;
+      }
+
+      // Check if this is a topup payment (by metadata type or product ID)
+      if (paymentType === 'topup' || productId === DODO_TOPUP_PRODUCT_ID) {
         const topupBytes = 10 * 1024 * 1024 * 1024; // 10GB
         db.prepare('UPDATE users SET transfer_balance = transfer_balance + ?, has_purchased = 1 WHERE id = ?').run(topupBytes, userId);
         console.log(`Top-up: added 10GB to user ${userId}`);
+      } else if (productId === DODO_PRO_PRODUCT_ID) {
+        // Pro subscription initial payment
+        const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+        const customerId = payment.customer_id || (payment.customer && payment.customer.customer_id) || null;
+        stmts.updateUserPlan.run('pro', expiresAt, customerId, null, userId);
+        stmts.markPurchased.run(userId);
+        console.log(`Pro activated for user ${userId} via payment.succeeded`);
+      } else {
+        console.log('Payment webhook: unknown product, logging only — productId:', productId);
       }
       break;
     }
