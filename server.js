@@ -1313,10 +1313,10 @@ ${canUpload ? `<div class="drop-target" id="drop-target">
     <p>Drop here or click to browse · up to ${maxRecvLabel} · zip folders before uploading</p>
   </div>` : ''}
   ${pinsHtml}
-  <div class="footer">
+  ${!isProUser(user.id) ? `<div class="footer">
     <div class="footer-logo">St<em>i</em>ckr</div>
     <p>One link. Share everything. <a href="/">Get yours</a></p>
-  </div>
+  </div>` : ''}
 </div>
 ${canUpload ? `<script>
 const LINK_ID='${validKey}';
@@ -1721,6 +1721,7 @@ p{color:#5a5a5a;font-size:14px;line-height:1.6;margin-bottom:24px}
 
   const RAW_EXTENSIONS = /\.(arw|cr2|cr3|nef|dng|raf|orf|rw2|pef|srw|x3f)$/i;
   const isImage = file.mime_type && file.mime_type.startsWith('image/') && !RAW_EXTENSIONS.test(file.filename);
+  const showBranding = !isProUser(file.user_id);
 
   return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Stickr — ${isImage ? '' : 'Download '}${escapeHtml(file.filename)}</title>
@@ -1756,7 +1757,7 @@ h1{font-family:'Instrument Serif',Georgia,serif;font-size:${isImage ? '16px' : '
 <div class="card">
 ${isImage ? `
 <div class="img-wrap">
-<div class="logo">St<em>i</em>ckr</div>
+${showBranding ? '<div class="logo">St<em>i</em>ckr</div>' : ''}
 <img class="img-preview" src="/api/preview/${file.token}" alt="${escapeHtml(file.filename)}" onclick="document.getElementById('fs').classList.add('active')" loading="lazy">
 </div>
 <div class="card-body">
@@ -1767,17 +1768,14 @@ ${isImage ? `
 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
 Download original
 </a>
-<div class="promo">
-<p>Want to share files too?</p>
-<a href="/">Start free on Stickr</a>
-</div>
+${showBranding ? '<div class="promo"><p>Want to share files too?</p><a href="/">Start free on Stickr</a></div>' : ''}
 </div>
 <div class="fullscreen-overlay" id="fs" onclick="this.classList.remove('active')">
 <img src="/api/preview/${file.token}" alt="${escapeHtml(file.filename)}">
 </div>
 ` : `
 <div class="card-body">
-<div class="logo">St<em>i</em>ckr</div>
+${showBranding ? '<div class="logo">St<em>i</em>ckr</div>' : ''}
 <div class="file-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#5b4cdb" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><polyline points="9 15 12 18 15 15"/></svg></div>
 <h1>${escapeHtml(file.filename)}</h1>
 <p class="meta">${sizeFormatted}</p>
@@ -1786,10 +1784,7 @@ Download original
 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
 Download
 </a>
-<div class="promo">
-<p>Want to share files too?</p>
-<a href="/">Start free on Stickr</a>
-</div>
+${showBranding ? '<div class="promo"><p>Want to share files too?</p><a href="/">Start free on Stickr</a></div>' : ''}
 </div>
 `}
 </div></body></html>`;
@@ -1799,8 +1794,10 @@ Download
 function getTimeRemaining(expiresAt) {
   const diff = new Date(expiresAt) - new Date();
   if (diff <= 0) return 'expired';
-  const hours = Math.floor(diff / (1000 * 60 * 60));
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+  const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
   const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+  if (days > 0) return days + 'd ' + hours + 'h';
   if (hours > 0) return hours + 'h ' + minutes + 'm';
   return minutes + 'm';
 }
@@ -1812,6 +1809,7 @@ function getBatchDownloadPage(batch, files) {
   const imageFiles = files.filter(f => f.mime_type && f.mime_type.startsWith('image/') && !RAW_EXT.test(f.filename));
   const otherFiles = files.filter(f => !f.mime_type || !f.mime_type.startsWith('image/') || RAW_EXT.test(f.filename));
   const imgCount = imageFiles.length;
+  const showBranding = !isProUser(batch.user_id);
 
   const galleryData = imageFiles.map(f => ({
     src: '/api/preview/' + f.token,
@@ -1837,106 +1835,40 @@ function getBatchDownloadPage(batch, files) {
   ${imgCount > 0 ? '<div class="other-files-label">Other files</div>' : ''}
   ${otherFiles.map(f => `<div class="file-row"><div class="file-row-info"><div class="file-row-name">${escapeHtml(f.filename)}</div><div class="file-row-size">${formatBytes(f.file_size)}</div></div><a href="/api/download/${f.token}" class="file-row-btn album-dl">Download</a></div>`).join('')}` : '';
 
-  // Build layout based on image count
-  let bodyHtml = '';
+  // Build layout — one unified design for any file count
+  const fileLabel = imgCount > 0
+    ? `${imgCount} photo${imgCount > 1 ? 's' : ''}${otherFiles.length > 0 ? ' + ' + otherFiles.length + ' file' + (otherFiles.length > 1 ? 's' : '') : ''}`
+    : `${files.length} file${files.length > 1 ? 's' : ''}`;
 
-  if (imgCount === 0) {
-    // No images — file list only
-    bodyHtml = `
-    <div class="page-center">
-      <div class="card">
-        <div class="logo">St<em>i</em>ckr</div>
-        <h1>${files.length} file${files.length > 1 ? 's' : ''}</h1>
-        <p class="meta">${formatBytes(totalSize)}</p>
-        <p class="expiry">Expires in ${expiresIn}</p>
-        ${actionsHtml}
-        <div class="files-list">${otherFilesHtml}</div>
-        <div class="promo"><p>Want to share files too?</p><a href="/">Try Stickr — it's free →</a></div>
-      </div>
-    </div>`;
-  } else if (imgCount === 1) {
-    // Single image — hero card
-    const f = imageFiles[0];
-    bodyHtml = `
-    <div class="page-center single-photo">
-      <div class="card">
-        <div class="img-wrap">
-          <div class="logo-float">St<em>i</em>ckr</div>
-          <img class="hero-img" src="/api/preview/${f.token}" onclick="openGallery(0)" alt="${escapeHtml(f.filename)}">
-        </div>
-        <div class="card-body">
-          <h1>${escapeHtml(f.filename)}</h1>
-          <p class="meta">${formatBytes(f.file_size)}${otherFiles.length > 0 ? ' + ' + otherFiles.length + ' other file' + (otherFiles.length > 1 ? 's' : '') : ''} · Expires in ${expiresIn}</p>
-          <div class="album-actions" style="justify-content:center;">
-            <a class="btn-primary" href="/api/download/${f.token}" download>${dlSvg16} Download original</a>
-          </div>
-          ${otherFilesHtml}
-          <div class="promo"><p>Want to share files too?</p><a href="/">Try Stickr — it's free →</a></div>
-        </div>
-      </div>
-    </div>`;
-  } else if (imgCount <= 3) {
-    // 2-3 images — compact grid
-    const gridClass = imgCount === 3 ? 'few-grid three' : 'few-grid';
-    const gridHtml = imageFiles.map((f, i) => `
-      <div class="few-item" style="animation-delay:${0.05 + i * 0.05}s" onclick="openGallery(${i})">
-        <img src="/api/preview/${f.token}" alt="${escapeHtml(f.filename)}" loading="lazy">
-        <div class="photo-overlay">
-          <span class="photo-name">${escapeHtml(f.filename)}</span>
-          <a href="/api/download/${f.token}" class="photo-dl album-dl" onclick="event.stopPropagation()">${dlSvg}</a>
-        </div>
-      </div>`).join('');
+  const singleFileAction = files.length === 1 ? `
+    <div class="album-actions">
+      <a class="btn-primary" href="/api/download/${files[0].token}" download>${dlSvg16} Download</a>
+      <button class="btn-outline" onclick="shareBatch()">${shareSvg} Share</button>
+    </div>` : actionsHtml;
 
-    bodyHtml = `
-    <div class="page-few">
-      <div class="few-header">
-        <div class="logo">St<em>i</em>ckr</div>
-        <h1>${files.length} file${files.length > 1 ? 's' : ''}</h1>
-        <p class="meta">${formatBytes(totalSize)} · Expires in ${expiresIn}</p>
+  const gridCols = imgCount === 1 ? 'grid-1' : imgCount <= 3 ? 'grid-2' : 'grid-3';
+  const gridHtml = imageFiles.map((f, i) => `
+    <div class="grid-item" style="animation-delay:${0.05 + i * 0.05}s" onclick="openGallery(${i})">
+      <img src="/api/preview/${f.token}" alt="${escapeHtml(f.filename)}" loading="${i < 3 ? 'eager' : 'lazy'}">
+      <div class="photo-overlay">
+        <span class="photo-name">${escapeHtml(f.filename)}</span>
+        <a href="/api/download/${f.token}" class="photo-dl album-dl" onclick="event.stopPropagation()">${dlSvg}</a>
       </div>
-      ${actionsHtml}
-      <div class="${gridClass}">${gridHtml}</div>
-      ${otherFilesHtml}
-      <div class="expiry-footer"><span>Expires in ${expiresIn}</span></div>
-      <div class="promo"><p>Want to share files too?</p><a href="/">Try Stickr — it's free →</a></div>
-    </div>`;
-  } else {
-    // 4+ images — carousel hero + grid
-    const gridHtml = imageFiles.map((f, i) => `
-      <div class="grid-item" style="animation-delay:${0.05 + i * 0.05}s" onclick="openGallery(${i})">
-        <img src="/api/preview/${f.token}" alt="${escapeHtml(f.filename)}" loading="lazy">
-        <div class="photo-overlay">
-          <span class="photo-name">${escapeHtml(f.filename)}</span>
-          <a href="/api/download/${f.token}" class="photo-dl album-dl" onclick="event.stopPropagation()">${dlSvg}</a>
-        </div>
-      </div>`).join('');
+    </div>`).join('');
 
-    const carouselSlides = imageFiles.map((f, i) => `
-      <div class="car-slide" onclick="openGallery(${i})">
-        <img src="/api/preview/${f.token}" alt="${escapeHtml(f.filename)}" loading="${i < 2 ? 'eager' : 'lazy'}">
-      </div>`).join('');
-
-    const carouselDots = imageFiles.map((_, i) => `<div class="car-dot${i === 0 ? ' on' : ''}" onclick="carGo(${i})"></div>`).join('');
-
-    bodyHtml = `
-    <div class="page-album">
-      <div class="car-wrap">
-        <div class="car-track" id="car-track">${carouselSlides}</div>
-        ${imgCount > 1 ? `<button class="car-btn car-prev" onclick="event.stopPropagation();carSlide(-1)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg></button>
-        <button class="car-btn car-next" onclick="event.stopPropagation();carSlide(1)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 6 15 12 9 18"/></svg></button>` : ''}
-      </div>
-      ${imgCount > 1 ? `<div class="car-dots">${carouselDots}</div>` : ''}
-      <div class="album-info-bar">
-        <div><span class="album-count">${imgCount} photos${otherFiles.length > 0 ? ' + ' + otherFiles.length + ' file' + (otherFiles.length > 1 ? 's' : '') : ''}</span><span class="album-size">${formatBytes(totalSize)}</span></div>
-        <span class="album-expiry">Expires in ${expiresIn}</span>
-      </div>
-      ${actionsHtml}
-      <div class="photo-grid">${gridHtml}</div>
-      ${otherFiles.length > 0 ? '<div class="other-section">' + otherFilesHtml + '</div>' : ''}
-      <div class="expiry-footer"><span>Expires in ${expiresIn}</span></div>
-      <div class="promo"><p>Want to share files too?</p><a href="/">Try Stickr — it's free →</a></div>
-    </div>`;
-  }
+  const bodyHtml = `
+  <div class="page">
+    <div class="album-header">
+      ${showBranding ? '<div class="logo">St<em>i</em>ckr</div>' : ''}
+      <h1>${fileLabel}</h1>
+      <p class="meta">${formatBytes(totalSize)} · Expires in ${expiresIn}</p>
+    </div>
+    ${singleFileAction}
+    ${imgCount > 0 ? `<div class="photo-grid ${gridCols}">${gridHtml}</div>` : ''}
+    ${otherFilesHtml}
+    <div class="expiry-footer"><span>Expires in ${expiresIn}</span></div>
+    ${showBranding ? '<div class="promo"><p>Want to share files too?</p><a href="/">Try Stickr — it\'s free →</a></div>' : ''}
+  </div>`;
 
   return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Stickr — ${files.length} file${files.length > 1 ? 's' : ''}</title>
@@ -1949,79 +1881,40 @@ body{font-family:'DM Sans',-apple-system,sans-serif;background:#fff;color:#1a1a1
 .back-link{display:inline-flex;align-items:center;gap:6px;color:#8a8a8a;text-decoration:none;font-size:13px;font-weight:500;transition:color .2s}
 .back-link:hover{color:#5b4cdb}
 h1{font-family:'Instrument Serif',Georgia,serif;font-weight:400}
-.logo{font-family:'Instrument Serif',Georgia,serif;font-size:28px;font-weight:400;text-align:center;margin-bottom:8px;color:#1a1a1a}
-.logo em,.logo-float em,.album-cover-logo em{font-style:italic;color:#5b4cdb}
+.logo{font-family:'Instrument Serif',Georgia,serif;font-size:28px;font-weight:400;text-align:center;margin-bottom:4px;color:#1a1a1a}
+.logo em{font-style:italic;color:#5b4cdb}
 .meta{color:#8a8a8a;font-size:13px;text-align:center}
-.expiry{color:#8a8a8a;font-size:11px;text-align:center;margin-bottom:16px}
+
+/* Unified page layout */
+.page{max-width:720px;margin:0 auto;padding:0 24px 48px}
+.album-header{text-align:center;margin-bottom:20px}
+.album-header h1{font-size:24px;margin-bottom:4px}
 
 /* Buttons */
-.album-actions{display:flex;gap:10px;margin-bottom:24px;flex-wrap:wrap}
+.album-actions{display:flex;gap:10px;margin-bottom:24px;justify-content:center;flex-wrap:wrap}
 .btn-primary{display:flex;align-items:center;justify-content:center;gap:8px;padding:12px 28px;background:#5b4cdb;color:white;border:none;border-radius:12px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600;cursor:pointer;transition:all .2s;text-decoration:none}
 .btn-primary:hover{transform:translateY(-1px);box-shadow:0 4px 16px rgba(91,76,219,0.25)}
 .btn-outline{display:flex;align-items:center;justify-content:center;gap:8px;padding:12px 20px;background:#f5f3ee;color:#1a1a1a;border:1px solid #e0ddd4;border-radius:12px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600;cursor:pointer;transition:all .2s;text-decoration:none}
 .btn-outline:hover{border-color:#5b4cdb;color:#5b4cdb}
 
-/* ═══ No images — card ═══ */
-.page-center{display:flex;justify-content:center;padding:0 24px 48px}
-.page-center .card{background:#fafaf8;border:1px solid #e0ddd4;border-radius:16px;padding:36px;max-width:520px;width:100%}
-.page-center h1{font-size:22px;text-align:center;margin-bottom:4px}
-.page-center .album-actions{justify-content:center}
-.files-list{display:flex;flex-direction:column;gap:8px;margin-bottom:20px}
-
-/* ═══ 1 photo — hero card ═══ */
-.single-photo{max-width:520px;width:100%}
-.single-photo .card{background:#fafaf8;border:1px solid #e0ddd4;border-radius:16px;overflow:hidden}
-.img-wrap{position:relative;background:#f5f3ee;border-bottom:1px solid #e0ddd4}
-.logo-float{position:absolute;top:16px;left:20px;font-family:'Instrument Serif',Georgia,serif;font-size:20px;z-index:1;color:#1a1a1a}
-.hero-img{width:100%;max-height:70vh;object-fit:contain;display:block;background:#f5f3ee;cursor:pointer}
-.card-body{padding:20px 28px 28px;text-align:center}
-.card-body h1{font-size:18px;margin-bottom:4px;word-break:break-all}
-
-/* ═══ 2-3 photos — compact grid ═══ */
-.page-few{max-width:680px;margin:0 auto;padding:0 24px 48px}
-.few-header{text-align:center;margin-bottom:20px}
-.few-header h1{font-size:22px;margin-bottom:4px}
-.few-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:24px}
-.few-grid.three .few-item:last-child{grid-column:1/-1}
-.few-grid.three .few-item:last-child img{aspect-ratio:16/9}
-.few-item{position:relative;border-radius:12px;overflow:hidden;cursor:pointer;background:#f5f3ee;border:1px solid #e0ddd4;opacity:0;animation:fadeUp .4s ease forwards}
-.few-item img{width:100%;aspect-ratio:4/5;object-fit:cover;display:block;transition:transform .3s,opacity .2s}
-.few-item:hover img{transform:scale(1.03);opacity:.92}
-.few-item:hover .photo-overlay{opacity:1}
-
-/* ═══ 4+ photos — carousel album ═══ */
-.page-album{max-width:900px;margin:0 auto;padding:0 24px 48px}
-.car-wrap{position:relative;overflow:hidden;border-radius:20px;margin-bottom:4px;background:#0a0a0f}
-.car-track{display:flex;transition:transform .35s ease;height:400px}
-.car-slide{min-width:100%;height:100%;display:flex;align-items:center;justify-content:center;cursor:pointer}
-.car-slide img{max-width:100%;max-height:100%;object-fit:contain}
-.car-btn{position:absolute;top:50%;transform:translateY(-50%);background:rgba(255,255,255,0.85);border:none;width:36px;height:36px;border-radius:50%;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;z-index:2;color:#333;transition:all .2s}
-.car-btn:hover{background:#fff;transform:translateY(-50%) scale(1.05)}
-.car-prev{left:12px}
-.car-next{right:12px}
-.car-dots{display:flex;justify-content:center;gap:6px;padding:10px 0}
-.car-dot{width:6px;height:6px;border-radius:50%;background:#d0d0d0;cursor:pointer;transition:all .2s}
-.car-dot.on{background:#5b4cdb;width:20px;border-radius:3px}
-.album-info-bar{display:flex;align-items:center;justify-content:space-between;padding:12px 0 16px}
-.album-count{font-family:'Instrument Serif',Georgia,serif;font-size:22px;margin-right:12px}
-.album-size{font-size:13px;color:#8a8a8a}
-.album-expiry{font-size:12px;color:#8a8a8a}
-
-.photo-grid{column-count:3;column-gap:10px}
-.grid-item{break-inside:avoid;margin-bottom:10px;position:relative;border-radius:12px;overflow:hidden;cursor:pointer;opacity:0;animation:fadeUp .4s ease forwards}
+/* Photo grid — responsive columns */
+.photo-grid{column-gap:8px;margin-bottom:24px}
+.grid-1{column-count:1;max-width:480px;margin-left:auto;margin-right:auto}
+.grid-2{column-count:2}
+.grid-3{column-count:3}
+.grid-item{break-inside:avoid;margin-bottom:8px;position:relative;border-radius:12px;overflow:hidden;cursor:pointer;opacity:0;animation:fadeUp .4s ease forwards}
 .grid-item img{width:100%;display:block;transition:transform .3s,opacity .2s}
 .grid-item:hover img{transform:scale(1.03);opacity:.92}
 .grid-item:hover .photo-overlay{opacity:1}
 
-/* Shared photo overlay */
+/* Photo overlay */
 .photo-overlay{position:absolute;bottom:0;left:0;right:0;padding:10px 12px;background:linear-gradient(transparent,rgba(0,0,0,0.5));opacity:0;transition:opacity .2s;display:flex;align-items:center;justify-content:space-between}
 .photo-name{font-size:11px;color:rgba(255,255,255,0.85);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .photo-dl{color:white;padding:4px;border-radius:6px;display:flex;text-decoration:none;transition:background .2s}
 .photo-dl:hover{background:rgba(255,255,255,0.2)}
 
 /* Other files */
-.other-section{margin-top:24px}
-.other-files-label{font-size:12px;font-weight:600;color:#8a8a8a;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px}
+.other-files-label{font-size:12px;font-weight:600;color:#8a8a8a;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;margin-top:8px}
 .file-row{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;background:#fafaf8;border:1px solid #e0ddd4;border-radius:10px;margin-bottom:8px}
 .file-row-info{min-width:0;flex:1}
 .file-row-name{font-size:14px;font-weight:600;word-break:break-all}
@@ -2054,17 +1947,14 @@ h1{font-family:'Instrument Serif',Georgia,serif;font-weight:400}
 @keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
 
 @media(max-width:640px){
-  .photo-grid{column-count:2;column-gap:6px}
+  .photo-grid.grid-3{column-count:2;column-gap:6px}
   .grid-item{margin-bottom:6px;border-radius:8px}
-  .grid-item .photo-overlay,.few-item .photo-overlay{opacity:1}
-  .car-track{height:280px}
-  .car-wrap{border-radius:14px}
-  .car-btn{width:30px;height:30px}
-  .album-count{font-size:20px}
-  .page-album,.page-few{padding:0 16px 36px}
+  .grid-item .photo-overlay{opacity:1}
+  .page{padding:0 16px 36px}
   .gnav{display:none}
   .album-actions{flex-direction:column}
   .btn-primary,.btn-outline{width:100%;justify-content:center}
+}
   .few-grid{gap:6px}
 }
 </style></head><body>
@@ -2096,10 +1986,6 @@ document.addEventListener('keydown',function(e){if(!document.getElementById('gal
 ${imgCount > 0 ? `var g=document.getElementById('gallery');g.addEventListener('touchstart',function(e){tx=e.touches[0].clientX},{passive:true});g.addEventListener('touchend',function(e){var dx=e.changedTouches[0].clientX-tx;if(Math.abs(dx)>50){if(dx<0)gNav(1);else gNav(-1)}},{passive:true});g.addEventListener('click',function(e){if(e.target===g)closeGallery()});` : ''}
 function downloadAll(){var links=document.querySelectorAll('.album-dl, .file-row-btn');links.forEach(function(a,i){setTimeout(function(){var el=document.createElement('a');el.href=a.href;el.download='';el.style.display='none';document.body.appendChild(el);el.click();document.body.removeChild(el)},i*800)})}
 function shareBatch(){if(navigator.share){navigator.share({title:'Stickr album',url:location.href}).catch(function(){})}else{navigator.clipboard.writeText(location.href).then(function(){alert('Link copied!')})}}
-var carIdx=0,carTotal=${imgCount};
-function carSlide(d){carGo((carIdx+d+carTotal)%carTotal)}
-function carGo(i){carIdx=i;var t=document.getElementById('car-track');if(t)t.style.transform='translateX(-'+carIdx*100+'%)';var dots=document.querySelectorAll('.car-dot');dots.forEach(function(d,j){d.className='car-dot'+(j===carIdx?' on':'')})}
-${imgCount > 1 ? `(function(){var cw=document.querySelector('.car-wrap');if(!cw)return;var sx=0;cw.addEventListener('touchstart',function(e){sx=e.touches[0].clientX},{passive:true});cw.addEventListener('touchend',function(e){var dx=e.changedTouches[0].clientX-sx;if(Math.abs(dx)>40){dx<0?carSlide(1):carSlide(-1)}},{passive:true})})();` : ''}
 </script>
 </body></html>`;
 }
