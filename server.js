@@ -847,7 +847,8 @@ app.post('/api/receive/batch', rateLimit('receive-batch', 20, 60 * 1000), (req, 
   if (new Date(link.expires_at) < new Date()) return res.status(410).json({ error: 'Link expired' });
 
   const token = crypto.randomBytes(16).toString('hex');
-  const expiresAt = new Date(Date.now() + ASYNC_FILE_EXPIRY).toISOString();
+  const recipientLimits = getUserPlanLimits(link.user_id);
+  const expiresAt = new Date(Date.now() + recipientLimits.linkExpiry).toISOString();
   stmts.createBatch.run(token, link.user_id, expiresAt);
 
   res.json({ token });
@@ -878,7 +879,7 @@ app.post('/api/receive/upload', rateLimit('receive-upload', 10, 60 * 1000), asyn
 
   const token = crypto.randomBytes(16).toString('hex');
   const r2Key = `received/${link.user_id}/${token}/${sanitizeFilename(filename)}`;
-  const expiresAt = new Date(Date.now() + ASYNC_FILE_EXPIRY).toISOString(); // 24hr expiry
+  const expiresAt = new Date(Date.now() + recipientLimits.linkExpiry).toISOString();
 
   let bytesReceived = 0;
   const passthrough = new PassThrough();
@@ -1453,7 +1454,8 @@ app.post('/api/batch/create', rateLimit('batch', 20, 60 * 1000), (req, res) => {
   if (!user) return res.status(401).json({ error: 'Not authenticated' });
 
   const token = crypto.randomBytes(16).toString('hex');
-  const expiresAt = new Date(Date.now() + ASYNC_FILE_EXPIRY).toISOString();
+  const planLimits = getUserPlanLimits(user.id);
+  const expiresAt = new Date(Date.now() + planLimits.linkExpiry).toISOString();
   stmts.createBatch.run(token, user.id, expiresAt);
 
   const host = req.headers.host;
