@@ -831,7 +831,7 @@ body.in-room .nav-links { display: none; }
                 <input type="text" id="upload-link-value" readonly style="flex:1;font-size:12px;font-family:var(--font-mono);background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text-primary);outline:none;min-width:0;">
                 <button class="profile-menu-small-btn" onclick="event.stopPropagation();copyUploadLink();" id="upload-link-copy">Copy</button>
               </div>
-              <p style="font-size:11px;color:var(--text-muted);margin-top:4px;">Share this link so people can send you files · expires in 24h</p>
+              <p style="font-size:11px;color:var(--text-muted);margin-top:4px;">Share this link so people can send you files</p>
             </div>
           </div>
           <div class="profile-menu-divider"></div>
@@ -1188,7 +1188,7 @@ body.in-room .nav-links { display: none; }
         <input type="file" id="link-file-input" class="file-input" multiple>
         <div class="drop-zone-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 16l-4-4-4 4"/><path d="M12 12v9"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/><polyline points="16 16 12 12 8 16"/></svg></div>
         <h3>Drop files here or click to browse</h3>
-        <p>Upload any file and get a shareable link — expires in 24 hours</p>
+        <p>Upload any file and get a shareable link</p>
       </div>
       <div class="link-file-list" id="link-file-list"></div>
     </div>
@@ -3774,7 +3774,8 @@ async function generateUploadLink() {
     document.getElementById('upload-link-value').value = data.url;
     document.getElementById('upload-link-display').style.display = 'block';
     document.getElementById('upload-link-btn').textContent = 'New link';
-    showToastSuccess('Upload link generated — expires in 24h');
+    const expiryText = currentUser && currentUser.plan === 'pro' ? '7 days' : '24h';
+    showToastSuccess('Upload link generated — expires in ' + expiryText);
   } catch { showToastError('Failed to generate link'); }
 }
 
