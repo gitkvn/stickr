@@ -437,6 +437,11 @@ header {
 .chat-link { color: var(--accent); text-decoration: underline; word-break: break-all; }
 .chat-msg.system { align-self: center; background: transparent; color: var(--text-muted); font-size: 12px; font-family: var(--font-mono); padding: 4px 12px; }
 .chat-msg .msg-time { font-size: 10px; opacity: 0.6; margin-top: 4px; display: block; }
+.chat-reactions { display: flex; gap: 4px; margin-top: 4px; }
+.chat-reactions button { background: var(--bg-card); border: 1px solid var(--border); border-radius: 20px; padding: 2px 7px; font-size: 13px; cursor: pointer; transition: all 0.15s; line-height: 1; }
+.chat-reactions button:hover { border-color: var(--accent); transform: scale(1.1); }
+.chat-reactions button:active { transform: scale(0.95); }
+.chat-reaction-received { font-size: 12px; margin-top: 2px; opacity: 0.7; }
 .empty-chat { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--text-muted); gap: 8px; }
 .empty-chat .empty-icon { font-size: 36px; opacity: 0.5; }
 .empty-chat p { font-size: 13px; }
@@ -2386,13 +2391,26 @@ function setupChatChannel(channel) {
     try {
       const msg = JSON.parse(e.data);
       if (msg.type === 'chat') {
-        addChatMessage(msg.text, 'received', msg.time);
+        addChatMessage(msg.text, 'received', msg.time, msg.msgId);
         playChime('chat');
         sendNotification('New message', msg.text);
         sessionStats.messages++;
+      } else if (msg.type === 'reaction') {
+        // Show reaction on our sent message
+        const msgEl = document.getElementById(msg.msgId);
+        if (msgEl) {
+          let existing = msgEl.querySelector('.chat-reaction-received');
+          if (existing) {
+            existing.textContent = msg.emoji;
+          } else {
+            const badge = document.createElement('div');
+            badge.className = 'chat-reaction-received';
+            badge.textContent = msg.emoji;
+            msgEl.appendChild(badge);
+          }
+        }
       } else if (msg.type === 'session-ended') {
         console.log('[session] received session-ended via CHAT channel');
-        // Peer explicitly ended the session — show immediately, no grace period
         showSessionEnded('Peer ended the session');
       }
     } catch {}
@@ -2401,10 +2419,21 @@ function setupChatChannel(channel) {
   channel.onopen = () => enableChat();
 
   channel.onclose = () => {
-    // Chat channel closed — if we haven't already shown session ended,
-    // disable chat and let the connection state handler deal with the rest
     disableChat();
   };
+}
+
+function sendReaction(msgId, emoji, btn) {
+  // Replace reaction buttons with the selected emoji
+  const reactionsDiv = btn.parentElement;
+  reactionsDiv.innerHTML = '<span style="font-size:12px;color:var(--text-muted);">' + emoji + '</span>';
+
+  // Send reaction to peer via chat channel
+  for (const [, peer] of peers) {
+    if (peer.chatChannel && peer.chatChannel.readyState === 'open') {
+      peer.chatChannel.send(JSON.stringify({ type: 'reaction', msgId, emoji }));
+    }
+  }
 }
 
 function sendChatMessage() {
@@ -2413,7 +2442,8 @@ function sendChatMessage() {
   if (!text) return;
 
   const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  const msg = JSON.stringify({ type: 'chat', text, time });
+  const msgId = 'msg-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4);
+  const msg = JSON.stringify({ type: 'chat', text, time, msgId });
 
   for (const [, peer] of peers) {
     if (peer.chatChannel && peer.chatChannel.readyState === 'open') {
@@ -2421,7 +2451,7 @@ function sendChatMessage() {
     }
   }
 
-  addChatMessage(text, 'sent', time);
+  addChatMessage(text, 'sent', time, msgId);
   sessionStats.messages++;
   input.value = '';
   if (isMobile) {
@@ -2454,20 +2484,29 @@ function disableChat() {
 // ═══════════════════════════════════════════
 // UI HELPERS
 // ═══════════════════════════════════════════
-function addChatMessage(text, type, time) {
+function addChatMessage(text, type, time, msgId) {
   const container = document.getElementById('chat-messages');
   const empty = container.querySelector('.empty-chat');
   if (empty) empty.remove();
 
-  // Check if user is near the bottom before adding message
   const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 60;
 
+  const id = msgId || ('msg-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4));
   const div = document.createElement('div');
   div.className = `chat-msg ${type}`;
+  div.id = id;
   div.innerHTML = `${linkifyText(escapeHtml(text))}<span class="msg-time">${time || ''}</span>`;
+
+  // Add reaction buttons to received messages
+  if (type === 'received') {
+    const reactions = document.createElement('div');
+    reactions.className = 'chat-reactions';
+    reactions.innerHTML = `<button onclick="sendReaction('${id}','👍',this)">👍</button><button onclick="sendReaction('${id}','😊',this)">😊</button><button onclick="sendReaction('${id}','❤️',this)">❤️</button>`;
+    div.appendChild(reactions);
+  }
+
   container.appendChild(div);
 
-  // Only auto-scroll if user was already near the bottom, or if it's our own message
   if (isNearBottom || type === 'sent') {
     container.scrollTop = container.scrollHeight;
   }
