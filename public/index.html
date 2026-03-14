@@ -3601,6 +3601,7 @@ function showInbox() {
   closeProfileMenu();
   document.getElementById('home-view').classList.remove('active');
   document.getElementById('link-view').classList.remove('active');
+  document.getElementById('contacts-view').classList.remove('active');
   document.getElementById('inbox-view').classList.add('active');
   // Clear badge and mark as seen
   document.getElementById('inbox-badge').style.display = 'none';
@@ -3902,6 +3903,7 @@ function showContactsView() {
   document.getElementById('home-view').classList.remove('active');
   document.getElementById('link-view').classList.remove('active');
   document.getElementById('inbox-view').classList.remove('active');
+  document.getElementById('room-view').classList.remove('active');
   document.getElementById('contacts-view').classList.add('active');
   renderContactsList();
 }

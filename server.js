@@ -1887,12 +1887,28 @@ app.post('/api/upload', rateLimit('upload', 20, 60 * 1000), async (req, res) => 
     // If sending to a contact (X-Recipient header), put in their inbox
     const recipientId = req.headers['x-recipient'];
     if (recipientId) {
-      const contact = stmts.getContact.get(user.id, recipientId);
-      if (contact) {
-        // Create a separate inbox entry for the recipient pointing to same R2 file
-        const recvToken = crypto.randomBytes(16).toString('hex');
-        stmts.createReceivedFile.run(recvToken, recipientId, filename, fileSize, mimeType, r2Key, expiresAt, 'contact:' + user.id);
-        notifyInbox(recipientId);
+      // Check sender is a contact of the recipient
+      const senderContact = stmts.getContact.get(user.id, recipientId);
+      // Check recipient's access setting for the sender
+      const recipientContact = stmts.getContact.get(recipientId, user.id);
+      if (senderContact && recipientContact && recipientContact.access !== 'off') {
+        if (recipientContact.access === 'always') {
+          // Auto-deliver to inbox
+          const recvToken = crypto.randomBytes(16).toString('hex');
+          stmts.createReceivedFile.run(recvToken, recipientId, filename, fileSize, mimeType, r2Key, expiresAt, 'contact:' + user.id);
+          notifyInbox(recipientId);
+        } else {
+          // access === 'ask' — send a notification, recipient must accept
+          notifyUser(recipientId, {
+            type: 'file-request',
+            requestId: null,
+            from: user.username,
+            fromName: user.name,
+            fromPicture: user.picture,
+            note: filename + ' (' + formatBytes(fileSize) + ')',
+            fileToken: token,
+          });
+        }
       }
     }
 
