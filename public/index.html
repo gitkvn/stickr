@@ -3370,6 +3370,11 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
+function proBadge(isPro) {
+  if (!isPro) return '';
+  return ' <svg width="12" height="12" viewBox="0 0 24 24" fill="#5b4cdb" style="vertical-align:-1px;"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>';
+}
+
 // ═══════════════════════════════════════════
 // FEEDBACK
 // ═══════════════════════════════════════════
@@ -3763,7 +3768,7 @@ function searchHandle(val) {
         <div style="display:flex;align-items:center;gap:12px;padding:10px 16px;cursor:pointer;border-radius:10px;transition:background 0.15s;" onmouseover="this.style.background='var(--bg-tertiary)'" onmouseout="this.style.background=''" onclick="document.getElementById('handle-search-input').value='${escapeHtml(c.username)}';selectSearchUser('${c.contact_id}','${escapeHtml(c.name || c.username)}',true)">
           <img src="${c.picture || ''}" style="width:32px;height:32px;border-radius:50%;${c.picture ? '' : 'display:none;'}">
           <div style="flex:1;min-width:0;">
-            <div style="font-size:13px;font-weight:600;">${escapeHtml(c.name || c.username)}</div>
+            <div style="font-size:13px;font-weight:600;">${escapeHtml(c.name || c.username)}${proBadge(c.isPro)}</div>
             <div style="font-size:11px;color:var(--text-muted);">@${escapeHtml(c.username)}</div>
           </div>
           <span style="font-size:10px;color:var(--success);background:rgba(45,159,111,0.08);padding:2px 8px;border-radius:4px;">Contact</span>
@@ -3786,7 +3791,7 @@ function searchHandle(val) {
               <div style="display:flex;align-items:center;gap:12px;padding:10px 16px;cursor:pointer;border-radius:10px;transition:background 0.15s;" onmouseover="this.style.background='var(--bg-tertiary)'" onmouseout="this.style.background=''" onclick="document.getElementById('handle-search-input').value='${escapeHtml(u.username)}';selectSearchUser('${u.id}','${escapeHtml(u.name || u.username)}',false)">
                 <img src="${u.picture || ''}" style="width:32px;height:32px;border-radius:50%;${u.picture ? '' : 'display:none;'}">
                 <div style="flex:1;min-width:0;">
-                  <div style="font-size:13px;font-weight:600;">${escapeHtml(u.name || u.username)}</div>
+                  <div style="font-size:13px;font-weight:600;">${escapeHtml(u.name || u.username)}${proBadge(u.isPro)}</div>
                   <div style="font-size:11px;color:var(--text-muted);">@${escapeHtml(u.username)}</div>
                 </div>
               </div>`).join('');
@@ -3926,7 +3931,7 @@ async function renderContactsList() {
         ${c.picture ? `<img src="${c.picture}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">` : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;color:var(--text-muted);">${(c.name || c.username || '?')[0].toUpperCase()}</div>`}
       </div>
       <div class="inbox-file-details" style="flex:1;min-width:0;">
-        <div class="inbox-file-name">${escapeHtml(c.name || c.username)}</div>
+        <div class="inbox-file-name">${escapeHtml(c.name || c.username)}${proBadge(c.isPro)}</div>
         <div class="inbox-file-meta">@${escapeHtml(c.username)}</div>
       </div>
       <div style="display:flex;gap:6px;">

@@ -262,7 +262,7 @@ const stmts = {
   usersNearLimit: db.prepare('SELECT email, name, transfer_balance FROM users WHERE transfer_balance < 52428800 ORDER BY transfer_balance ASC LIMIT 10'),
   // Contacts queries
   addContact: db.prepare('INSERT OR IGNORE INTO contacts (user_id, contact_id) VALUES (?, ?)'),
-  getContacts: db.prepare(`SELECT c.*, u.name, u.username, u.picture FROM contacts c JOIN users u ON c.contact_id = u.id WHERE c.user_id = ? ORDER BY c.created_at DESC`),
+  getContacts: db.prepare(`SELECT c.*, u.name, u.username, u.picture, u.plan, u.plan_expires_at FROM contacts c JOIN users u ON c.contact_id = u.id WHERE c.user_id = ? ORDER BY c.created_at DESC`),
   getContact: db.prepare('SELECT * FROM contacts WHERE user_id = ? AND contact_id = ?'),
   updateContactAccess: db.prepare('UPDATE contacts SET access = ? WHERE user_id = ? AND contact_id = ?'),
   deleteContact: db.prepare('DELETE FROM contacts WHERE user_id = ? AND contact_id = ?'),
@@ -1243,7 +1243,6 @@ app.get('/api/users/search', (req, res) => {
   const results = db.prepare(
     `SELECT id, name, username, picture FROM users WHERE username LIKE ? AND id != ? LIMIT 5`
   ).all(q + '%', user.id);
-  // Mark which are contacts
   const contacts = stmts.getContacts.all(user.id);
   const contactIds = new Set(contacts.map(c => c.contact_id));
   res.json(results.map(r => ({
@@ -1252,6 +1251,7 @@ app.get('/api/users/search', (req, res) => {
     username: r.username,
     picture: r.picture,
     isContact: contactIds.has(r.id),
+    isPro: isProUser(r.id),
   })));
 });
 
@@ -1276,6 +1276,7 @@ app.get('/api/user/:handle', (req, res) => {
     isContact: !!contact,
     contactAccess: contact ? contact.access : null,
     requestPref: target.request_pref || 'everyone',
+    isPro: isProUser(target.id),
   });
 });
 
@@ -1373,7 +1374,10 @@ app.get('/api/contacts', (req, res) => {
   const user = getUserFromCookie(req);
   if (!user) return res.status(401).json({ error: 'Not authenticated' });
   const contacts = stmts.getContacts.all(user.id);
-  res.json(contacts);
+  res.json(contacts.map(c => ({
+    ...c,
+    isPro: c.plan === 'pro' && (!c.plan_expires_at || new Date(c.plan_expires_at) > new Date()),
+  })));
 });
 
 // Update contact access level
@@ -1628,7 +1632,7 @@ ${canUpload ? `<div class="drop-target" id="drop-target">
 <div class="page">
   <div class="profile">
     <div class="avatar-ring">${user.picture ? `<img class="avatar" src="${escapeHtml(user.picture)}" alt="">` : '<div class="avatar"></div>'}</div>
-    <div class="name">${userName}</div>
+    <div class="name">${userName}${isProUser(user.id) ? ' <svg width="14" height="14" viewBox="0 0 24 24" fill="#5b4cdb" style="vertical-align:-1px;"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>' : ''}</div>
     <div class="handle">@${escapeHtml(user.username)}</div>
     ${bioHtml}
     ${linksHtml}
