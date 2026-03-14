@@ -3223,6 +3223,7 @@ function showToast(msg) {
   const toast = document.getElementById('toast');
   toast.textContent = msg;
   toast.style.background = '#1a1a2e';
+  toast.style.color = '#fff';
   toast.style.borderColor = 'var(--border)';
   toast.classList.add('show');
   setTimeout(() => toast.classList.remove('show'), 3000);
@@ -3231,7 +3232,8 @@ function showToast(msg) {
 function showToastError(msg) {
   const toast = document.getElementById('toast');
   toast.textContent = msg;
-  toast.style.background = 'var(--danger)';
+  toast.style.background = '#1a1a2e';
+  toast.style.color = '#ff6b6b';
   toast.style.borderColor = 'var(--danger)';
   toast.classList.add('show');
   setTimeout(() => toast.classList.remove('show'), 3000);
@@ -3240,10 +3242,11 @@ function showToastError(msg) {
 function showToastSuccess(msg) {
   const toast = document.getElementById('toast');
   toast.textContent = msg;
-  toast.style.background = 'rgba(0, 210, 160, 0.15)';
-  toast.style.borderColor = 'rgba(0, 210, 160, 0.3)';
+  toast.style.background = '#1a1a2e';
+  toast.style.color = '#5be8b4';
+  toast.style.borderColor = 'var(--success)';
   toast.classList.add('show');
-  setTimeout(() => toast.classList.remove('show'), 2000);
+  setTimeout(() => toast.classList.remove('show'), 2500);
 }
 
 async function showUsageToast() {
@@ -3974,6 +3977,9 @@ async function saveProfile() {
       if (ures.ok) {
         const udata = await ures.json();
         currentUser.username = udata.username;
+        // Update profile link on home screen
+        const profileUrl = document.getElementById('home-profile-url');
+        if (profileUrl) profileUrl.textContent = 'getstickr.in/' + udata.username;
       } else {
         const err = await ures.json();
         showToast(err.error || 'Could not update username');
