@@ -106,7 +106,7 @@ header {
   display: flex; align-items: center; justify-content: space-between;
   border-bottom: 1px solid var(--border);
   backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
-  background: rgba(255,255,255,0.85);
+  background: var(--bg-primary);
   position: sticky; top: 0; z-index: 100;
 }
 
@@ -665,7 +665,7 @@ body.in-room .nav-links { display: none; }
 .hp-4 { width: 150px; height: 190px; bottom: 20px; right: 50px; transform: rotate(-2deg); animation: scaleIn .6s ease .65s both; }
 @keyframes scaleIn { from { opacity: 0; transform: scale(0.92); } to { opacity: 1; transform: none; } }
 
-.transfer-pill { position: absolute; z-index: 20; background: rgba(255,255,255,0.95); backdrop-filter: blur(12px); border-radius: 12px; padding: 10px 14px; box-shadow: 0 4px 20px rgba(0,0,0,0.06); display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 500; animation: float 3s ease infinite; }
+.transfer-pill { position: absolute; z-index: 20; background: var(--bg-primary); backdrop-filter: blur(12px); border-radius: 12px; padding: 10px 14px; box-shadow: var(--shadow); border: 1px solid var(--border); display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 500; animation: float 3s ease infinite; }
 .tp-top { top: 15px; right: 60px; animation-delay: 0.5s; }
 .tp-bottom { bottom: 100px; left: 0; animation-delay: 1s; }
 .tp-dot { width: 7px; height: 7px; border-radius: 50%; }
