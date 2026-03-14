@@ -3729,11 +3729,19 @@ async function checkInboxCount() {
 let handleSearchTimer = null;
 let pendingRequestId = null;
 
+let cachedContacts = null;
+async function getCachedContacts() {
+  if (!cachedContacts) cachedContacts = await loadContacts();
+  return cachedContacts;
+}
+// Invalidate cache when contacts change
+function invalidateContactsCache() { cachedContacts = null; }
+
 function searchHandle(val) {
   const clean = val.toLowerCase().replace(/[^a-z0-9_]/g, '');
   if (clean !== val) document.getElementById('handle-search-input').value = clean;
   const result = document.getElementById('handle-search-result');
-  if (!clean || clean.length < 3) {
+  if (!clean || clean.length < 2) {
     result.style.display = 'none';
     return;
   }
@@ -3743,31 +3751,78 @@ function searchHandle(val) {
   }
   clearTimeout(handleSearchTimer);
   handleSearchTimer = setTimeout(async () => {
-    try {
-      const res = await fetch('/api/user/' + encodeURIComponent(clean));
-      if (!res.ok) { result.style.display = 'none'; return; }
-      const user = await res.json();
-      result.style.display = 'block';
-      let actionBtn;
-      if (user.isContact) {
-        actionBtn = `<button onclick="sendFilesToUser('${user.id}','${escapeHtml(user.name || user.username)}')" style="padding:8px 16px;border-radius:8px;border:none;background:var(--accent);color:#fff;font-family:var(--font-body);font-size:13px;font-weight:600;cursor:pointer;">Send files</button>`;
-      } else if (user.requestPref === 'nobody') {
-        actionBtn = `<span style="font-size:12px;color:var(--text-muted);">Not accepting requests</span>`;
-      } else {
-        actionBtn = `<button onclick="sendRequest('${escapeHtml(user.username)}')" style="padding:8px 16px;border-radius:8px;border:none;background:var(--accent);color:#fff;font-family:var(--font-body);font-size:13px;font-weight:600;cursor:pointer;">Connect</button>`;
-      }
-      const contactBadge = user.isContact ? `<span style="font-size:11px;color:var(--success);background:rgba(45,159,111,0.08);padding:2px 8px;border-radius:4px;">Contact</span>` : '';
-      result.innerHTML = `
-        <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--bg-card);border:1px solid var(--border);border-radius:12px;">
-          <img src="${user.picture || ''}" style="width:40px;height:40px;border-radius:50%;${user.picture ? '' : 'display:none;'}">
+    const contacts = await getCachedContacts();
+    const contactMatches = contacts.filter(c => c.username && c.username.startsWith(clean) || (c.name && c.name.toLowerCase().includes(clean)));
+
+    let html = '';
+
+    // Show matching contacts first
+    if (contactMatches.length > 0) {
+      html += contactMatches.map(c => `
+        <div style="display:flex;align-items:center;gap:12px;padding:10px 16px;cursor:pointer;border-radius:10px;transition:background 0.15s;" onmouseover="this.style.background='var(--bg-tertiary)'" onmouseout="this.style.background=''" onclick="document.getElementById('handle-search-input').value='${escapeHtml(c.username)}';selectSearchUser('${c.contact_id}','${escapeHtml(c.name || c.username)}',true)">
+          <img src="${c.picture || ''}" style="width:32px;height:32px;border-radius:50%;${c.picture ? '' : 'display:none;'}">
           <div style="flex:1;min-width:0;">
-            <div style="font-size:14px;font-weight:600;">${escapeHtml(user.name || user.username)} ${contactBadge}</div>
-            <div style="font-size:12px;color:var(--text-muted);">@${escapeHtml(user.username)}</div>
+            <div style="font-size:13px;font-weight:600;">${escapeHtml(c.name || c.username)}</div>
+            <div style="font-size:11px;color:var(--text-muted);">@${escapeHtml(c.username)}</div>
           </div>
-          ${actionBtn}
-        </div>`;
-    } catch { result.style.display = 'none'; }
-  }, 400);
+          <span style="font-size:10px;color:var(--success);background:rgba(45,159,111,0.08);padding:2px 8px;border-radius:4px;">Contact</span>
+        </div>`).join('');
+    }
+
+    // Search all users if 3+ chars
+    if (clean.length >= 3) {
+      try {
+        const res = await fetch('/api/users/search?q=' + encodeURIComponent(clean));
+        if (res.ok) {
+          const users = await res.json();
+          const contactIds = new Set(contactMatches.map(c => c.contact_id));
+          const nonContactUsers = users.filter(u => !contactIds.has(u.id));
+          if (nonContactUsers.length > 0) {
+            if (contactMatches.length > 0) {
+              html += '<div style="height:1px;background:var(--border);margin:4px 16px;"></div>';
+            }
+            html += nonContactUsers.map(u => `
+              <div style="display:flex;align-items:center;gap:12px;padding:10px 16px;cursor:pointer;border-radius:10px;transition:background 0.15s;" onmouseover="this.style.background='var(--bg-tertiary)'" onmouseout="this.style.background=''" onclick="document.getElementById('handle-search-input').value='${escapeHtml(u.username)}';selectSearchUser('${u.id}','${escapeHtml(u.name || u.username)}',false)">
+                <img src="${u.picture || ''}" style="width:32px;height:32px;border-radius:50%;${u.picture ? '' : 'display:none;'}">
+                <div style="flex:1;min-width:0;">
+                  <div style="font-size:13px;font-weight:600;">${escapeHtml(u.name || u.username)}</div>
+                  <div style="font-size:11px;color:var(--text-muted);">@${escapeHtml(u.username)}</div>
+                </div>
+              </div>`).join('');
+          }
+        }
+      } catch {}
+    }
+
+    if (html) {
+      result.style.display = 'block';
+      result.innerHTML = `<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;overflow:hidden;padding:4px 0;">${html}</div>`;
+    } else if (clean.length >= 3) {
+      result.style.display = 'block';
+      result.innerHTML = `<div style="padding:12px 16px;font-size:13px;color:var(--text-muted);text-align:center;">No users found</div>`;
+    } else {
+      result.style.display = 'none';
+    }
+  }, 300);
+}
+
+function selectSearchUser(userId, userName, isContact) {
+  const result = document.getElementById('handle-search-result');
+  if (isContact) {
+    result.style.display = 'block';
+    result.innerHTML = `
+      <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--bg-card);border:1px solid var(--border);border-radius:12px;">
+        <div style="flex:1;font-size:14px;font-weight:600;">${userName}</div>
+        <button onclick="sendFilesToUser('${userId}','${userName}')" style="padding:8px 16px;border-radius:8px;border:none;background:var(--accent);color:#fff;font-family:var(--font-body);font-size:13px;font-weight:600;cursor:pointer;">Send files</button>
+      </div>`;
+  } else {
+    result.style.display = 'block';
+    result.innerHTML = `
+      <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--bg-card);border:1px solid var(--border);border-radius:12px;">
+        <div style="flex:1;font-size:14px;font-weight:600;">${userName}</div>
+        <button onclick="sendRequest('${document.getElementById('handle-search-input').value.trim()}')" style="padding:8px 16px;border-radius:8px;border:none;background:var(--accent);color:#fff;font-family:var(--font-body);font-size:13px;font-weight:600;cursor:pointer;">Connect</button>
+      </div>`;
+  }
 }
 
 async function sendRequest(username) {
@@ -3781,6 +3836,7 @@ async function sendRequest(username) {
     if (res.ok) {
       if (data.autoAccepted) {
         showToastSuccess('Request auto-accepted — you\'re connected!');
+        invalidateContactsCache();
       } else {
         showToastSuccess('Request sent to @' + username);
       }
@@ -3816,6 +3872,7 @@ async function acceptRequest() {
     const res = await fetch('/api/request/' + pendingRequestId + '/accept', { method: 'POST' });
     if (res.ok) {
       showToastSuccess('Connected! You can now share files.');
+      invalidateContactsCache();
     } else {
       showToast('Failed to accept');
     }
@@ -3862,7 +3919,7 @@ async function renderContactsList() {
     return;
   }
   list.innerHTML = contacts.map(c => `
-    <div class="inbox-file-item" style="cursor:default;">
+    <div class="inbox-file-item" style="cursor:default;" id="contact-${c.contact_id}">
       <div class="inbox-file-icon" style="padding:0;overflow:hidden;width:40px;height:40px;border-radius:50%;background:var(--bg-tertiary);">
         ${c.picture ? `<img src="${c.picture}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">` : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;color:var(--text-muted);">${(c.name || c.username || '?')[0].toUpperCase()}</div>`}
       </div>
@@ -3874,7 +3931,12 @@ async function renderContactsList() {
           <option value="off"${c.access === 'off' ? ' selected' : ''}>Off</option>
         </select></div>
       </div>
-      <button onclick="sendFilesToUser('${c.contact_id}','${escapeHtml(c.name || c.username)}')" style="padding:6px 14px;border-radius:8px;border:none;background:var(--accent);color:#fff;font-family:var(--font-body);font-size:12px;font-weight:600;cursor:pointer;">Send</button>
+      <div style="display:flex;gap:6px;">
+        <button onclick="sendFilesToUser('${c.contact_id}','${escapeHtml(c.name || c.username)}')" style="padding:6px 14px;border-radius:8px;border:none;background:var(--accent);color:#fff;font-family:var(--font-body);font-size:12px;font-weight:600;cursor:pointer;">Send</button>
+        <button onclick="confirmRemoveContact('${c.contact_id}','${escapeHtml(c.name || c.username)}')" style="padding:6px 8px;border-radius:8px;border:1px solid var(--border);background:none;color:var(--text-muted);cursor:pointer;display:flex;align-items:center;" title="Remove contact">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+        </button>
+      </div>
     </div>
   `).join('');
 }
@@ -3925,6 +3987,42 @@ async function updateContactAccess(contactId, access) {
     });
     showToastSuccess('Updated');
   } catch { showToast('Failed to update'); }
+}
+
+function confirmRemoveContact(contactId, name) {
+  const existing = document.getElementById('remove-contact-modal');
+  if (existing) existing.remove();
+  const modal = document.createElement('div');
+  modal.id = 'remove-contact-modal';
+  modal.style.cssText = 'position:fixed;inset:0;z-index:500;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;';
+  modal.innerHTML = `
+    <div style="background:var(--bg-primary);border:1px solid var(--border);border-radius:16px;padding:28px;max-width:340px;width:90%;text-align:center;">
+      <h3 style="font-size:16px;font-weight:600;margin-bottom:8px;">Remove ${name}?</h3>
+      <p style="font-size:13px;color:var(--text-secondary);margin-bottom:20px;">This is permanent. ${name} will no longer be able to send you files.</p>
+      <div style="display:flex;gap:10px;">
+        <button onclick="document.getElementById('remove-contact-modal').remove()" style="flex:1;padding:12px;border-radius:10px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-family:var(--font-body);font-size:14px;font-weight:600;cursor:pointer;">Cancel</button>
+        <button onclick="removeContact('${contactId}')" style="flex:1;padding:12px;border-radius:10px;border:none;background:var(--danger);color:#fff;font-family:var(--font-body);font-size:14px;font-weight:600;cursor:pointer;">Remove</button>
+      </div>
+    </div>`;
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
+}
+
+async function removeContact(contactId) {
+  const modal = document.getElementById('remove-contact-modal');
+  if (modal) modal.remove();
+  try {
+    const res = await fetch('/api/contacts/' + contactId, { method: 'DELETE' });
+    if (res.ok) {
+      const el = document.getElementById('contact-' + contactId);
+      if (el) { el.style.opacity = '0'; el.style.transition = 'opacity 0.2s'; setTimeout(() => { el.remove(); }, 200); }
+      showToastSuccess('Contact removed');
+      invalidateContactsCache();
+      setTimeout(() => renderContactsList(), 300);
+    } else {
+      showToast('Failed to remove');
+    }
+  } catch { showToast('Failed to remove'); }
 }
 
 function showInstallGuide() {

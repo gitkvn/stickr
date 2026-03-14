@@ -1226,6 +1226,27 @@ app.get('/api/username/check', (req, res) => {
   return res.json({ available: true });
 });
 
+// Search users by partial username (min 3 chars, max 5 results)
+app.get('/api/users/search', (req, res) => {
+  const user = getUserFromCookie(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  const q = (req.query.q || '').toLowerCase().replace(/[^a-z0-9_]/g, '');
+  if (q.length < 3) return res.json([]);
+  const results = db.prepare(
+    `SELECT id, name, username, picture FROM users WHERE username LIKE ? AND id != ? LIMIT 5`
+  ).all(q + '%', user.id);
+  // Mark which are contacts
+  const contacts = stmts.getContacts.all(user.id);
+  const contactIds = new Set(contacts.map(c => c.contact_id));
+  res.json(results.map(r => ({
+    id: r.id,
+    name: r.name,
+    username: r.username,
+    picture: r.picture,
+    isContact: contactIds.has(r.id),
+  })));
+});
+
 // ═══════════════════════════════════════════
 // CONTACTS & FILE REQUESTS
 // ═══════════════════════════════════════════
@@ -1355,7 +1376,9 @@ app.post('/api/contacts/:contactId/access', (req, res) => {
 app.delete('/api/contacts/:contactId', (req, res) => {
   const user = getUserFromCookie(req);
   if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  // Remove both directions
   stmts.deleteContact.run(user.id, req.params.contactId);
+  stmts.deleteContact.run(req.params.contactId, user.id);
   res.json({ status: 'removed' });
 });
 
