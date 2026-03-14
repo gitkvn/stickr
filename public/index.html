@@ -3946,7 +3946,18 @@ function sendFilesToUser(userId, userName) {
   input.onchange = async () => {
     if (!input.files || input.files.length === 0) return;
     const files = Array.from(input.files);
-    showToastInfo('Uploading ' + files.length + ' file' + (files.length > 1 ? 's' : '') + ' to ' + userName + '...');
+
+    // Check file size limits client-side before uploading
+    const maxSize = currentUser && currentUser.planLimits ? currentUser.planLimits.maxFileSize : (100 * 1024 * 1024);
+    for (const file of files) {
+      if (file.size > maxSize) {
+        showToast(file.name + ' is too large — max ' + formatSize(maxSize) + ' on your plan');
+        showUpgradePrompt();
+        return;
+      }
+    }
+
+    showToastInfo('Sending ' + files.length + ' file' + (files.length > 1 ? 's' : '') + ' to ' + userName + '...');
 
     for (const file of files) {
       try {
@@ -3963,8 +3974,8 @@ function sendFilesToUser(userId, userName) {
           let err = {};
           try { err = await res.json(); } catch {}
           if (res.status === 413 || err.error === 'file_too_large') {
-            const maxSize = err.maxSize ? formatSize(err.maxSize) : '100 MB';
-            showToast(file.name + ' is too large — max ' + maxSize + ' on your plan');
+            const limit = err.maxSize ? formatSize(err.maxSize) : formatSize(maxSize);
+            showToast(file.name + ' is too large — max ' + limit + ' on your plan');
             showUpgradePrompt();
           } else if (err.error === 'quota_exceeded') {
             showToast('Transfer balance used up');
@@ -3976,7 +3987,8 @@ function sendFilesToUser(userId, userName) {
           }
           return;
         }
-      } catch {
+      } catch (e) {
+        console.error('Upload error:', e);
         showToast('Upload failed — check your connection');
         return;
       }
