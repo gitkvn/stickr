@@ -147,6 +147,29 @@ db.exec(`CREATE TABLE IF NOT EXISTS checkout_sessions (
   created_at TEXT DEFAULT (datetime('now'))
 )`);
 
+// Contacts — connections between users
+db.exec(`CREATE TABLE IF NOT EXISTS contacts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL,
+  contact_id TEXT NOT NULL,
+  access TEXT DEFAULT 'ask',
+  created_at TEXT DEFAULT (datetime('now')),
+  UNIQUE(user_id, contact_id)
+)`);
+
+// File requests — incoming transfer requests
+db.exec(`CREATE TABLE IF NOT EXISTS file_requests (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  from_user_id TEXT NOT NULL,
+  to_user_id TEXT NOT NULL,
+  note TEXT,
+  status TEXT DEFAULT 'pending',
+  created_at TEXT DEFAULT (datetime('now'))
+)`);
+
+// User settings — request preferences
+try { db.exec('ALTER TABLE users ADD COLUMN request_pref TEXT DEFAULT \'everyone\''); } catch (e) { /* already exists */ };
+
 // Verify username column exists
 const testRow = db.prepare('PRAGMA table_info(users)').all();
 const hasUsername = testRow.some(col => col.name === 'username');
@@ -229,6 +252,21 @@ const stmts = {
     FROM users u LEFT JOIN pending_transfers pt ON u.id = pt.user_id 
     GROUP BY u.id ORDER BY bytes_sent DESC LIMIT 10`),
   usersNearLimit: db.prepare('SELECT email, name, transfer_balance FROM users WHERE transfer_balance < 52428800 ORDER BY transfer_balance ASC LIMIT 10'),
+  // Contacts queries
+  addContact: db.prepare('INSERT OR IGNORE INTO contacts (user_id, contact_id) VALUES (?, ?)'),
+  getContacts: db.prepare(`SELECT c.*, u.name, u.username, u.picture FROM contacts c JOIN users u ON c.contact_id = u.id WHERE c.user_id = ? ORDER BY c.created_at DESC`),
+  getContact: db.prepare('SELECT * FROM contacts WHERE user_id = ? AND contact_id = ?'),
+  updateContactAccess: db.prepare('UPDATE contacts SET access = ? WHERE user_id = ? AND contact_id = ?'),
+  deleteContact: db.prepare('DELETE FROM contacts WHERE user_id = ? AND contact_id = ?'),
+  // File request queries
+  createFileRequest: db.prepare('INSERT INTO file_requests (from_user_id, to_user_id, note) VALUES (?, ?, ?)'),
+  getPendingRequests: db.prepare(`SELECT fr.*, u.name as from_name, u.username as from_username, u.picture as from_picture FROM file_requests fr JOIN users u ON fr.from_user_id = u.id WHERE fr.to_user_id = ? AND fr.status = 'pending' ORDER BY fr.created_at DESC`),
+  getRequestById: db.prepare('SELECT * FROM file_requests WHERE id = ?'),
+  updateRequestStatus: db.prepare('UPDATE contacts SET access = ? WHERE user_id = ? AND contact_id = ?'),
+  setRequestStatus: db.prepare('UPDATE file_requests SET status = ? WHERE id = ?'),
+  // User request preference
+  getRequestPref: db.prepare('SELECT request_pref FROM users WHERE id = ?'),
+  setRequestPref: db.prepare('UPDATE users SET request_pref = ? WHERE id = ?'),
 };
 
 // Generate username from email (must be after stmts)
@@ -1186,6 +1224,156 @@ app.get('/api/username/check', (req, res) => {
   const existing = stmts.findUserByUsername.get(name);
   if (existing) return res.json({ available: false, reason: 'Taken' });
   return res.json({ available: true });
+});
+
+// ═══════════════════════════════════════════
+// CONTACTS & FILE REQUESTS
+// ═══════════════════════════════════════════
+
+// Look up a user by handle
+app.get('/api/user/:handle', (req, res) => {
+  const user = getUserFromCookie(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  const handle = req.params.handle.toLowerCase();
+  const target = stmts.findUserByUsername.get(handle);
+  if (!target) return res.status(404).json({ error: 'User not found' });
+  if (target.id === user.id) return res.status(400).json({ error: 'That\'s you!' });
+  const contact = stmts.getContact.get(user.id, target.id);
+  res.json({
+    id: target.id,
+    name: target.name,
+    username: target.username,
+    picture: target.picture,
+    isContact: !!contact,
+    contactAccess: contact ? contact.access : null,
+    requestPref: target.request_pref || 'everyone',
+  });
+});
+
+// Send a file request (or connection request)
+app.post('/api/request', (req, res) => {
+  const user = getUserFromCookie(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  const { to, note } = req.body;
+  if (!to) return res.status(400).json({ error: 'Recipient required' });
+
+  // Look up by username or user ID
+  const target = stmts.findUserByUsername.get(to) || stmts.findUserById.get(to);
+  if (!target) return res.status(404).json({ error: 'User not found' });
+  if (target.id === user.id) return res.status(400).json({ error: 'Cannot send to yourself' });
+
+  // Check recipient's request preference
+  const pref = target.request_pref || 'everyone';
+  if (pref === 'nobody') {
+    return res.status(403).json({ error: 'This user is not accepting requests' });
+  }
+  if (pref === 'contacts') {
+    const contact = stmts.getContact.get(target.id, user.id);
+    if (!contact) {
+      return res.status(403).json({ error: 'This user only accepts requests from contacts' });
+    }
+  }
+
+  // Check if already a contact with "always" access — auto-accept
+  const existingContact = stmts.getContact.get(target.id, user.id);
+  if (existingContact && existingContact.access === 'always') {
+    // Auto-accepted — add reverse contact too if not exists
+    stmts.addContact.run(user.id, target.id);
+    const reqId = stmts.createFileRequest.run(user.id, target.id, note || null).lastInsertRowid;
+    stmts.setRequestStatus.run('accepted', reqId);
+    // Notify via WebSocket
+    notifyUser(target.id, { type: 'file-request', requestId: reqId, from: user.username, fromName: user.name, fromPicture: user.picture, note, autoAccepted: true });
+    return res.json({ id: reqId, status: 'accepted', autoAccepted: true });
+  }
+
+  // Create pending request
+  const reqId = stmts.createFileRequest.run(user.id, target.id, note || null).lastInsertRowid;
+  // Notify via WebSocket
+  notifyUser(target.id, { type: 'file-request', requestId: reqId, from: user.username, fromName: user.name, fromPicture: user.picture, note });
+  res.json({ id: reqId, status: 'pending' });
+});
+
+// Get incoming requests
+app.get('/api/requests', (req, res) => {
+  const user = getUserFromCookie(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  const requests = stmts.getPendingRequests.all(user.id);
+  res.json(requests);
+});
+
+// Accept a request
+app.post('/api/request/:id/accept', (req, res) => {
+  const user = getUserFromCookie(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  const request = stmts.getRequestById.get(req.params.id);
+  if (!request || request.to_user_id !== user.id) return res.status(404).json({ error: 'Request not found' });
+  if (request.status !== 'pending') return res.status(400).json({ error: 'Request already handled' });
+
+  stmts.setRequestStatus.run('accepted', request.id);
+
+  // Add both users as contacts (mutual)
+  stmts.addContact.run(user.id, request.from_user_id);
+  stmts.addContact.run(request.from_user_id, user.id);
+
+  // Notify the requester
+  notifyUser(request.from_user_id, { type: 'request-accepted', requestId: request.id, by: user.username, byName: user.name, byPicture: user.picture });
+  res.json({ status: 'accepted' });
+});
+
+// Decline a request
+app.post('/api/request/:id/decline', (req, res) => {
+  const user = getUserFromCookie(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  const request = stmts.getRequestById.get(req.params.id);
+  if (!request || request.to_user_id !== user.id) return res.status(404).json({ error: 'Request not found' });
+  if (request.status !== 'pending') return res.status(400).json({ error: 'Request already handled' });
+
+  stmts.setRequestStatus.run('declined', request.id);
+  notifyUser(request.from_user_id, { type: 'request-declined', requestId: request.id });
+  res.json({ status: 'declined' });
+});
+
+// Get contacts
+app.get('/api/contacts', (req, res) => {
+  const user = getUserFromCookie(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  const contacts = stmts.getContacts.all(user.id);
+  res.json(contacts);
+});
+
+// Update contact access level
+app.post('/api/contacts/:contactId/access', (req, res) => {
+  const user = getUserFromCookie(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  const { access } = req.body;
+  if (!['always', 'ask', 'off'].includes(access)) return res.status(400).json({ error: 'Invalid access level' });
+  stmts.updateContactAccess.run(access, user.id, req.params.contactId);
+  res.json({ status: 'updated' });
+});
+
+// Remove a contact
+app.delete('/api/contacts/:contactId', (req, res) => {
+  const user = getUserFromCookie(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  stmts.deleteContact.run(user.id, req.params.contactId);
+  res.json({ status: 'removed' });
+});
+
+// Get request preference
+app.get('/api/settings/requests', (req, res) => {
+  const user = getUserFromCookie(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  res.json({ pref: user.request_pref || 'everyone' });
+});
+
+// Update request preference
+app.post('/api/settings/requests', (req, res) => {
+  const user = getUserFromCookie(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  const { pref } = req.body;
+  if (!['everyone', 'contacts', 'nobody'].includes(pref)) return res.status(400).json({ error: 'Invalid preference' });
+  stmts.setRequestPref.run(pref, user.id);
+  res.json({ pref });
 });
 
 // Download pinned file
@@ -2537,6 +2725,15 @@ function notifyInbox(userId) {
     }
   });
   console.log(`Inbox notify: userId=${userId}, count=${count}, wsClients=${wss.clients.size}, withUser=${withUser}, notified=${notified}`);
+}
+
+// Send a WebSocket message to all connections for a specific user
+function notifyUser(userId, msg) {
+  wss.clients.forEach((ws) => {
+    if (ws.user && ws.user.id === userId && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(msg));
+    }
+  });
 }
 
 // ═══════════════════════════════════════════

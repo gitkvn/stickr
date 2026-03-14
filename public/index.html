@@ -911,6 +911,7 @@ body.in-room .nav-links { display: none; }
           </div>
           <div class="profile-menu-divider"></div>
           <div style="display:flex;gap:12px;align-items:center;">
+            <button class="profile-menu-btn" style="flex:1;" onclick="closeProfileMenu();showContacts();">Contacts</button>
             <button class="profile-menu-btn" style="flex:1;" onclick="closeProfileMenu();openFeedback();">Feedback</button>
             <button class="profile-menu-btn" style="flex:1;" onclick="logout()">Sign out</button>
           </div>
@@ -927,6 +928,15 @@ body.in-room .nav-links { display: none; }
       <div class="greeting">
         <h1>Hi, <span id="greeting-name"></span></h1>
         <p>What would you like to do?</p>
+      </div>
+
+      <!-- Handle search -->
+      <div class="handle-search" style="margin-bottom:16px;">
+        <div style="display:flex;align-items:center;gap:8px;padding:10px 16px;background:var(--bg-card);border:1px solid var(--border);border-radius:12px;transition:border-color 0.2s;" id="handle-search-box">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" id="handle-search-input" placeholder="Send to a handle (e.g. kavan)" style="flex:1;border:none;background:none;font-family:var(--font-body);font-size:14px;color:var(--text-primary);outline:none;" oninput="searchHandle(this.value)" autocomplete="off" autocapitalize="off">
+        </div>
+        <div id="handle-search-result" style="display:none;margin-top:8px;"></div>
       </div>
 
       <div class="action-cards">
@@ -1346,6 +1356,19 @@ body.in-room .nav-links { display: none; }
 
 <!-- Toast -->
 <div class="toast" id="toast"></div>
+
+<!-- Incoming file request modal -->
+<div id="request-modal" style="display:none;position:fixed;inset:0;z-index:500;background:rgba(0,0,0,0.5);align-items:center;justify-content:center;">
+  <div style="background:var(--bg-primary);border:1px solid var(--border);border-radius:16px;padding:28px;max-width:360px;width:90%;text-align:center;">
+    <img id="request-modal-pic" src="" alt="" style="width:48px;height:48px;border-radius:50%;margin-bottom:12px;display:none;">
+    <h3 id="request-modal-title" style="font-size:16px;font-weight:600;margin-bottom:4px;"></h3>
+    <p id="request-modal-note" style="font-size:13px;color:var(--text-secondary);margin-bottom:20px;"></p>
+    <div style="display:flex;gap:10px;">
+      <button onclick="declineRequest()" style="flex:1;padding:12px;border-radius:10px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-family:var(--font-body);font-size:14px;font-weight:600;cursor:pointer;">Decline</button>
+      <button onclick="acceptRequest()" style="flex:1;padding:12px;border-radius:10px;border:none;background:var(--accent);color:#fff;font-family:var(--font-body);font-size:14px;font-weight:600;cursor:pointer;">Accept</button>
+    </div>
+  </div>
+</div>
 <div class="feedback-overlay" id="feedback-overlay" onclick="closeFeedback()"></div>
 <div class="feedback-card" id="feedback-card">
   <div class="feedback-header">
@@ -1719,6 +1742,19 @@ function handleSignalingMessage(msg) {
       } else {
         showToast(msg.message);
       }
+      break;
+
+    // ═══ File requests & contacts ═══
+    case 'file-request':
+      handleIncomingRequest(msg);
+      break;
+
+    case 'request-accepted':
+      showToastSuccess((msg.byName || msg.by) + ' accepted your request');
+      break;
+
+    case 'request-declined':
+      showToast('Your request was declined');
       break;
   }
 }
@@ -3666,6 +3702,176 @@ async function checkInboxCount() {
       if (el) el.textContent = files.length;
     }
   } catch {}
+}
+
+// ═══════════════════════════════════════════
+// HANDLE SEARCH & FILE REQUESTS
+// ═══════════════════════════════════════════
+let handleSearchTimer = null;
+let pendingRequestId = null;
+
+function searchHandle(val) {
+  const clean = val.toLowerCase().replace(/[^a-z0-9_]/g, '');
+  if (clean !== val) document.getElementById('handle-search-input').value = clean;
+  const result = document.getElementById('handle-search-result');
+  if (!clean || clean.length < 3) {
+    result.style.display = 'none';
+    return;
+  }
+  if (currentUser && clean === currentUser.username) {
+    result.style.display = 'none';
+    return;
+  }
+  clearTimeout(handleSearchTimer);
+  handleSearchTimer = setTimeout(async () => {
+    try {
+      const res = await fetch('/api/user/' + encodeURIComponent(clean));
+      if (!res.ok) { result.style.display = 'none'; return; }
+      const user = await res.json();
+      result.style.display = 'block';
+      const contactInfo = user.isContact
+        ? `<span style="font-size:11px;color:var(--success);">Contact</span>`
+        : '';
+      const actionBtn = user.requestPref === 'nobody'
+        ? `<span style="font-size:12px;color:var(--text-muted);">Not accepting requests</span>`
+        : `<button onclick="sendRequest('${escapeHtml(user.username)}')" style="padding:8px 16px;border-radius:8px;border:none;background:var(--accent);color:#fff;font-family:var(--font-body);font-size:13px;font-weight:600;cursor:pointer;">Send request</button>`;
+      result.innerHTML = `
+        <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--bg-card);border:1px solid var(--border);border-radius:12px;">
+          <img src="${user.picture || ''}" style="width:40px;height:40px;border-radius:50%;${user.picture ? '' : 'display:none;'}">
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:14px;font-weight:600;">${escapeHtml(user.name || user.username)}</div>
+            <div style="font-size:12px;color:var(--text-muted);">@${escapeHtml(user.username)} ${contactInfo}</div>
+          </div>
+          ${actionBtn}
+        </div>`;
+    } catch { result.style.display = 'none'; }
+  }, 400);
+}
+
+async function sendRequest(username) {
+  try {
+    const res = await fetch('/api/request', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to: username }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      if (data.autoAccepted) {
+        showToastSuccess('Request auto-accepted — you\'re connected!');
+      } else {
+        showToastSuccess('Request sent to @' + username);
+      }
+      document.getElementById('handle-search-input').value = '';
+      document.getElementById('handle-search-result').style.display = 'none';
+    } else {
+      showToast(data.error || 'Could not send request');
+    }
+  } catch {
+    showToast('Failed to send request');
+  }
+}
+
+function handleIncomingRequest(msg) {
+  pendingRequestId = msg.requestId;
+  if (msg.autoAccepted) {
+    showToastSuccess((msg.fromName || msg.from) + ' sent you files');
+    return;
+  }
+  const modal = document.getElementById('request-modal');
+  const pic = document.getElementById('request-modal-pic');
+  if (msg.fromPicture) { pic.src = msg.fromPicture; pic.style.display = ''; }
+  else { pic.style.display = 'none'; }
+  document.getElementById('request-modal-title').textContent = (msg.fromName || msg.from) + ' wants to connect';
+  document.getElementById('request-modal-note').textContent = msg.note || 'Accept to allow file sharing between you.';
+  modal.style.display = 'flex';
+}
+
+async function acceptRequest() {
+  if (!pendingRequestId) return;
+  document.getElementById('request-modal').style.display = 'none';
+  try {
+    const res = await fetch('/api/request/' + pendingRequestId + '/accept', { method: 'POST' });
+    if (res.ok) {
+      showToastSuccess('Connected! You can now share files.');
+    } else {
+      showToast('Failed to accept');
+    }
+  } catch { showToast('Failed to accept'); }
+  pendingRequestId = null;
+}
+
+async function declineRequest() {
+  if (!pendingRequestId) return;
+  document.getElementById('request-modal').style.display = 'none';
+  try {
+    await fetch('/api/request/' + pendingRequestId + '/decline', { method: 'POST' });
+  } catch {}
+  pendingRequestId = null;
+}
+
+async function loadContacts() {
+  try {
+    const res = await fetch('/api/contacts');
+    if (!res.ok) return [];
+    return await res.json();
+  } catch { return []; }
+}
+
+async function showContacts() {
+  const contacts = await loadContacts();
+  const existing = document.getElementById('contacts-modal');
+  if (existing) existing.remove();
+
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay active';
+  modal.id = 'contacts-modal';
+
+  if (contacts.length === 0) {
+    modal.innerHTML = `
+      <div class="modal" style="text-align:center;max-width:380px;">
+        <h2 style="font-size:20px;margin-bottom:8px;">Contacts</h2>
+        <p style="color:var(--text-secondary);font-size:13px;margin-bottom:20px;">No contacts yet. Search for a handle on the home screen to connect with someone.</p>
+        <button onclick="document.getElementById('contacts-modal').remove()" style="padding:10px 24px;border-radius:10px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-family:var(--font-body);font-size:14px;font-weight:600;cursor:pointer;">Close</button>
+      </div>`;
+  } else {
+    const list = contacts.map(c => `
+      <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);">
+        <img src="${c.picture || ''}" style="width:36px;height:36px;border-radius:50%;${c.picture ? '' : 'display:none;'}">
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:14px;font-weight:600;">${escapeHtml(c.name || c.username)}</div>
+          <div style="font-size:12px;color:var(--text-muted);">@${escapeHtml(c.username)}</div>
+        </div>
+        <select onchange="updateContactAccess('${c.contact_id}',this.value)" style="font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-family:var(--font-body);">
+          <option value="ask"${c.access === 'ask' ? ' selected' : ''}>Ask each time</option>
+          <option value="always"${c.access === 'always' ? ' selected' : ''}>Always accept</option>
+          <option value="off"${c.access === 'off' ? ' selected' : ''}>Block</option>
+        </select>
+      </div>`).join('');
+
+    modal.innerHTML = `
+      <div class="modal" style="max-width:420px;">
+        <h2 style="font-size:20px;margin-bottom:16px;">Contacts</h2>
+        <div style="max-height:400px;overflow-y:auto;">${list}</div>
+        <div style="margin-top:16px;text-align:center;">
+          <button onclick="document.getElementById('contacts-modal').remove()" style="padding:10px 24px;border-radius:10px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-family:var(--font-body);font-size:14px;font-weight:600;cursor:pointer;">Close</button>
+        </div>
+      </div>`;
+  }
+
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
+}
+
+async function updateContactAccess(contactId, access) {
+  try {
+    await fetch('/api/contacts/' + contactId + '/access', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ access }),
+    });
+    showToastSuccess('Updated');
+  } catch { showToast('Failed to update'); }
 }
 
 function showInstallGuide() {
