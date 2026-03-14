@@ -3927,11 +3927,7 @@ async function renderContactsList() {
       </div>
       <div class="inbox-file-details" style="flex:1;min-width:0;">
         <div class="inbox-file-name">${escapeHtml(c.name || c.username)}</div>
-        <div class="inbox-file-meta">@${escapeHtml(c.username)} · <select onchange="updateContactAccess('${c.contact_id}',this.value)" style="font-size:11px;padding:1px 4px;border-radius:4px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-secondary);font-family:var(--font-body);cursor:pointer;">
-          <option value="ask"${c.access === 'ask' ? ' selected' : ''}>Ask</option>
-          <option value="always"${c.access === 'always' ? ' selected' : ''}>Always</option>
-          <option value="off"${c.access === 'off' ? ' selected' : ''}>Off</option>
-        </select></div>
+        <div class="inbox-file-meta">@${escapeHtml(c.username)}</div>
       </div>
       <div style="display:flex;gap:6px;">
         <button onclick="sendFilesToUser('${c.contact_id}','${escapeHtml(c.name || c.username)}')" style="padding:6px 14px;border-radius:8px;border:none;background:var(--accent);color:#fff;font-family:var(--font-body);font-size:12px;font-weight:600;cursor:pointer;">Send</button>
@@ -3978,17 +3974,6 @@ function sendFilesToUser(userId, userName) {
     document.getElementById('handle-search-result').style.display = 'none';
   };
   input.click();
-}
-
-async function updateContactAccess(contactId, access) {
-  try {
-    await fetch('/api/contacts/' + contactId + '/access', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ access }),
-    });
-    showToastSuccess('Updated');
-  } catch { showToast('Failed to update'); }
 }
 
 function confirmRemoveContact(contactId, name) {
