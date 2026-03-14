@@ -1173,7 +1173,7 @@ body.in-room .nav-links { display: none; }
       </button>
     </div>
     <div class="inbox-list" id="inbox-list">
-      <div class="inbox-empty">No files received yet. Share your profile link and passkey to receive files.</div>
+      <div class="inbox-empty">No files received yet. Share your upload link from your profile menu to receive files.</div>
     </div>
   </div>
 
@@ -3490,9 +3490,9 @@ function closeInbox() {
 function getEmptyInboxMessage() {
   const canReceive = currentUser && currentUser.planLimits && currentUser.planLimits.canReceiveLink;
   if (canReceive) {
-    return '<div class="inbox-empty">No files received yet. Share your profile link and passkey to receive files.</div>';
+    return '<div class="inbox-empty">No files received yet. Share your upload link from your profile menu to receive files.</div>';
   }
-  return '<div class="inbox-empty">No files received yet.<br><br>Upgrade to generate a passkey and receive files from anyone.<br><br><button class="btn btn-primary" style="margin-top:8px;font-size:13px;padding:8px 20px;" onclick="closeInbox();showUpgradePrompt();">Upgrade →</button></div>';
+  return '<div class="inbox-empty">No files received yet.<br><br>Upgrade to get an upload link and receive files from anyone.<br><br><button class="btn btn-primary" style="margin-top:8px;font-size:13px;padding:8px 20px;" onclick="closeInbox();showUpgradePrompt();">Upgrade →</button></div>';
 }
 
 async function loadInbox() {
