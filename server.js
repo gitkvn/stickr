@@ -168,7 +168,15 @@ db.exec(`CREATE TABLE IF NOT EXISTS file_requests (
 )`);
 
 // User settings — request preferences
-try { db.exec('ALTER TABLE users ADD COLUMN request_pref TEXT DEFAULT \'everyone\''); } catch (e) { /* already exists */ };
+try { db.exec('ALTER TABLE users ADD COLUMN request_pref TEXT DEFAULT \'everyone\''); } catch (e) { /* already exists */ }
+
+// Blocks — permanent block list
+db.exec(`CREATE TABLE IF NOT EXISTS blocks (
+  user_id TEXT NOT NULL,
+  blocked_id TEXT NOT NULL,
+  created_at TEXT DEFAULT (datetime('now')),
+  UNIQUE(user_id, blocked_id)
+)`);;
 
 // Verify username column exists
 const testRow = db.prepare('PRAGMA table_info(users)').all();
@@ -1283,6 +1291,12 @@ app.post('/api/request', (req, res) => {
   if (!target) return res.status(404).json({ error: 'User not found' });
   if (target.id === user.id) return res.status(400).json({ error: 'Cannot send to yourself' });
 
+  // Check if blocked — show generic message (don't reveal block)
+  const blocked = db.prepare('SELECT 1 FROM blocks WHERE user_id = ? AND blocked_id = ?').get(target.id, user.id);
+  if (blocked) {
+    return res.status(403).json({ error: 'Request could not be sent' });
+  }
+
   // Check recipient's request preference
   const pref = target.request_pref || 'everyone';
   if (pref === 'nobody') {
@@ -1380,6 +1394,18 @@ app.delete('/api/contacts/:contactId', (req, res) => {
   stmts.deleteContact.run(user.id, req.params.contactId);
   stmts.deleteContact.run(req.params.contactId, user.id);
   res.json({ status: 'removed' });
+});
+
+// Block a contact — removes contact + prevents future requests
+app.post('/api/contacts/:contactId/block', (req, res) => {
+  const user = getUserFromCookie(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  // Remove both directions
+  stmts.deleteContact.run(user.id, req.params.contactId);
+  stmts.deleteContact.run(req.params.contactId, user.id);
+  // Add to blocks
+  db.prepare('INSERT OR IGNORE INTO blocks (user_id, blocked_id) VALUES (?, ?)').run(user.id, req.params.contactId);
+  res.json({ status: 'blocked' });
 });
 
 // Get request preference
