@@ -1154,6 +1154,50 @@ app.post('/api/profile', (req, res) => {
   res.json(profileData);
 });
 
+// Update username
+app.post('/api/username', (req, res) => {
+  const user = getUserFromCookie(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+
+  const { username } = req.body;
+  if (!username || typeof username !== 'string') {
+    return res.status(400).json({ error: 'Username is required' });
+  }
+
+  const clean = username.toLowerCase().replace(/[^a-z0-9_]/g, '');
+  if (clean.length < 3) {
+    return res.status(400).json({ error: 'Username must be at least 3 characters' });
+  }
+  if (clean.length > 20) {
+    return res.status(400).json({ error: 'Username must be 20 characters or less' });
+  }
+  if (RESERVED_USERNAMES.has(clean)) {
+    return res.status(400).json({ error: 'This username is reserved' });
+  }
+  if (clean === user.username) {
+    return res.json({ username: clean });
+  }
+
+  const existing = stmts.findUserByUsername.get(clean);
+  if (existing) {
+    return res.status(409).json({ error: 'Username is already taken' });
+  }
+
+  stmts.setUsername.run(clean, user.id);
+  res.json({ username: clean });
+});
+
+// Check username availability
+app.get('/api/username/check', (req, res) => {
+  const name = (req.query.u || '').toLowerCase().replace(/[^a-z0-9_]/g, '');
+  if (name.length < 3) return res.json({ available: false, reason: 'Too short' });
+  if (name.length > 20) return res.json({ available: false, reason: 'Too long' });
+  if (RESERVED_USERNAMES.has(name)) return res.json({ available: false, reason: 'Reserved' });
+  const existing = stmts.findUserByUsername.get(name);
+  if (existing) return res.json({ available: false, reason: 'Taken' });
+  return res.json({ available: true });
+});
+
 // Download pinned file
 app.get('/api/pin/:id/download', async (req, res) => {
   if (!s3) return res.status(503).send('Storage not available');
@@ -2156,7 +2200,10 @@ const ICE_RATE_WINDOW = 60 * 1000;
 app.get('/api/ice-servers', async (req, res) => {
   const auth = req.headers.authorization;
   const token = auth && auth.startsWith('Bearer ') ? auth.slice(7) : null;
-  if (!token || !turnSessionTokens.has(token)) {
+  
+  // Allow access via TURN session token (rooms) OR cookie auth (Slip)
+  const cookieUser = getUserFromCookie(req);
+  if (!cookieUser && (!token || !turnSessionTokens.has(token))) {
     return res.status(403).json({ error: 'Invalid or missing session token' });
   }
 
@@ -2522,6 +2569,9 @@ wss.on('connection', (ws, req) => {
   // TURN token issued on room join/create, not on connection
   ws.turnSessionToken = null;
 
+  // Slip: broadcast devices for same-account users
+  if (ws.user) broadcastNearby(ws.user.id);
+
   ws.on('pong', () => { ws.isAlive = true; });
 
   ws.on('message', (data) => {
@@ -2626,6 +2676,51 @@ wss.on('connection', (ws, req) => {
         break;
       }
 
+      // ═══ Slip: nearby device transfers ═══
+      case 'slip-offer': {
+        // Forward file offer to a nearby peer by ws.id
+        if (!ws.user) return;
+        const target = findWsById(msg.to);
+        if (target && target.readyState === WebSocket.OPEN && target.user && target.user.id === ws.user.id) {
+          target.send(JSON.stringify({
+            type: 'slip-offer',
+            from: ws.id,
+            fromName: ws.user.name || ws.user.username,
+            fromPicture: ws.user.picture || '',
+            files: msg.files // [{name, size, type}]
+          }));
+        }
+        break;
+      }
+
+      case 'slip-accept': {
+        if (!ws.user) return;
+        const sender = findWsById(msg.to);
+        if (sender && sender.readyState === WebSocket.OPEN && sender.user && sender.user.id === ws.user.id) {
+          sender.send(JSON.stringify({ type: 'slip-accepted', from: ws.id }));
+        }
+        break;
+      }
+
+      case 'slip-decline': {
+        if (!ws.user) return;
+        const declineSender = findWsById(msg.to);
+        if (declineSender && declineSender.readyState === WebSocket.OPEN) {
+          declineSender.send(JSON.stringify({ type: 'slip-declined', from: ws.id }));
+        }
+        break;
+      }
+
+      case 'slip-signal': {
+        // WebRTC signaling for Slip transfers (offer/answer/ICE)
+        if (!ws.user) return;
+        const slipTarget = findWsById(msg.to);
+        if (slipTarget && slipTarget.readyState === WebSocket.OPEN && slipTarget.user && slipTarget.user.id === ws.user.id) {
+          slipTarget.send(JSON.stringify({ type: 'slip-signal', from: ws.id, signal: msg.signal }));
+        }
+        break;
+      }
+
       case 'signal': {
         const room = rooms.get(ws.roomId);
         if (!room) return;
@@ -2643,8 +2738,41 @@ wss.on('connection', (ws, req) => {
   ws.on('close', () => {
     if (ws.turnSessionToken) turnSessionTokens.delete(ws.turnSessionToken);
     cleanupExistingRoom(ws);
+    // Slip: broadcast updated nearby list when a peer disconnects
+    if (ws.user) broadcastNearby(ws.user.id);
   });
 });
+
+// Slip: find a WebSocket client by ID
+function findWsById(id) {
+  for (const client of wss.clients) {
+    if (client.id === id) return client;
+  }
+  return null;
+}
+
+// Slip: broadcast nearby device list to all signed-in users on the same IP
+function broadcastNearby(userId) {
+  if (!userId) return;
+  const nearby = [];
+  for (const client of wss.clients) {
+    if (client.user && client.user.id === userId && client.readyState === WebSocket.OPEN) {
+      nearby.push({
+        id: client.id,
+        name: client.user.name || client.user.username,
+        picture: client.user.picture || '',
+        ua: ''
+      });
+    }
+  }
+  console.log(`Slip broadcastNearby userId=${userId}, found ${nearby.length} devices`);
+  for (const client of wss.clients) {
+    if (client.user && client.user.id === userId && client.readyState === WebSocket.OPEN) {
+      const others = nearby.filter(d => d.id !== client.id);
+      client.send(JSON.stringify({ type: 'slip-nearby', devices: others }));
+    }
+  }
+}
 
 // Heartbeat
 setInterval(() => {
