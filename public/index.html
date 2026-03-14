@@ -807,6 +807,9 @@ body.in-room .nav-links { display: none; }
         <a href="#pricing-section" class="nav-link">Pricing</a>
       </div>
       <div class="user-menu" id="user-menu" style="display:none">
+        <button class="inbox-btn" id="contacts-btn" onclick="showContactsView()" title="Contacts" style="position:relative;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        </button>
         <button class="inbox-btn" id="inbox-btn" onclick="showInbox()" title="Inbox">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
           <span class="inbox-badge" id="inbox-badge" style="display:none">0</span>
@@ -911,7 +914,6 @@ body.in-room .nav-links { display: none; }
           </div>
           <div class="profile-menu-divider"></div>
           <div style="display:flex;gap:12px;align-items:center;">
-            <button class="profile-menu-btn" style="flex:1;" onclick="closeProfileMenu();showContacts();">Contacts</button>
             <button class="profile-menu-btn" style="flex:1;" onclick="closeProfileMenu();openFeedback();">Feedback</button>
             <button class="profile-menu-btn" style="flex:1;" onclick="logout()">Sign out</button>
           </div>
@@ -1208,6 +1210,22 @@ body.in-room .nav-links { display: none; }
   </div>
 
   <!-- ═══ INBOX VIEW ═══ -->
+  <!-- ═══ CONTACTS VIEW ═══ -->
+  <div id="contacts-view" class="view inbox-view">
+    <div class="link-view-header">
+      <div style="display:flex;align-items:center;gap:12px;">
+        <h2>Contacts</h2>
+      </div>
+      <button class="btn-back" onclick="closeContactsView()">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+        Back
+      </button>
+    </div>
+    <div id="contacts-list" class="inbox-list">
+      <div class="inbox-empty">No contacts yet. Search for a handle on the home screen to connect.</div>
+    </div>
+  </div>
+
   <div id="inbox-view" class="view inbox-view">
     <div class="link-view-header">
       <div style="display:flex;align-items:center;gap:12px;">
@@ -3155,6 +3173,7 @@ function goHome() {
   document.getElementById('room-view').classList.remove('active');
   document.getElementById('link-view').classList.remove('active');
   document.getElementById('inbox-view').classList.remove('active');
+  document.getElementById('contacts-view').classList.remove('active');
   document.getElementById('home-view').classList.add('active', 'ready');
   document.body.classList.remove('in-room');
   history.pushState(null, '', location.pathname);
@@ -3729,18 +3748,21 @@ function searchHandle(val) {
       if (!res.ok) { result.style.display = 'none'; return; }
       const user = await res.json();
       result.style.display = 'block';
-      const contactInfo = user.isContact
-        ? `<span style="font-size:11px;color:var(--success);">Contact</span>`
-        : '';
-      const actionBtn = user.requestPref === 'nobody'
-        ? `<span style="font-size:12px;color:var(--text-muted);">Not accepting requests</span>`
-        : `<button onclick="sendRequest('${escapeHtml(user.username)}')" style="padding:8px 16px;border-radius:8px;border:none;background:var(--accent);color:#fff;font-family:var(--font-body);font-size:13px;font-weight:600;cursor:pointer;">Send request</button>`;
+      let actionBtn;
+      if (user.isContact) {
+        actionBtn = `<button onclick="sendFilesToUser('${user.id}','${escapeHtml(user.name || user.username)}')" style="padding:8px 16px;border-radius:8px;border:none;background:var(--accent);color:#fff;font-family:var(--font-body);font-size:13px;font-weight:600;cursor:pointer;">Send files</button>`;
+      } else if (user.requestPref === 'nobody') {
+        actionBtn = `<span style="font-size:12px;color:var(--text-muted);">Not accepting requests</span>`;
+      } else {
+        actionBtn = `<button onclick="sendRequest('${escapeHtml(user.username)}')" style="padding:8px 16px;border-radius:8px;border:none;background:var(--accent);color:#fff;font-family:var(--font-body);font-size:13px;font-weight:600;cursor:pointer;">Connect</button>`;
+      }
+      const contactBadge = user.isContact ? `<span style="font-size:11px;color:var(--success);background:rgba(45,159,111,0.08);padding:2px 8px;border-radius:4px;">Contact</span>` : '';
       result.innerHTML = `
         <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--bg-card);border:1px solid var(--border);border-radius:12px;">
           <img src="${user.picture || ''}" style="width:40px;height:40px;border-radius:50%;${user.picture ? '' : 'display:none;'}">
           <div style="flex:1;min-width:0;">
-            <div style="font-size:14px;font-weight:600;">${escapeHtml(user.name || user.username)}</div>
-            <div style="font-size:12px;color:var(--text-muted);">@${escapeHtml(user.username)} ${contactInfo}</div>
+            <div style="font-size:14px;font-weight:600;">${escapeHtml(user.name || user.username)} ${contactBadge}</div>
+            <div style="font-size:12px;color:var(--text-muted);">@${escapeHtml(user.username)}</div>
           </div>
           ${actionBtn}
         </div>`;
@@ -3818,49 +3840,81 @@ async function loadContacts() {
   } catch { return []; }
 }
 
-async function showContacts() {
+function showContactsView() {
+  closeProfileMenu();
+  document.getElementById('home-view').classList.remove('active');
+  document.getElementById('link-view').classList.remove('active');
+  document.getElementById('inbox-view').classList.remove('active');
+  document.getElementById('contacts-view').classList.add('active');
+  renderContactsList();
+}
+
+function closeContactsView() {
+  document.getElementById('contacts-view').classList.remove('active');
+  document.getElementById('home-view').classList.add('active');
+}
+
+async function renderContactsList() {
+  const list = document.getElementById('contacts-list');
   const contacts = await loadContacts();
-  const existing = document.getElementById('contacts-modal');
-  if (existing) existing.remove();
-
-  const modal = document.createElement('div');
-  modal.className = 'modal-overlay active';
-  modal.id = 'contacts-modal';
-
   if (contacts.length === 0) {
-    modal.innerHTML = `
-      <div class="modal" style="text-align:center;max-width:380px;">
-        <h2 style="font-size:20px;margin-bottom:8px;">Contacts</h2>
-        <p style="color:var(--text-secondary);font-size:13px;margin-bottom:20px;">No contacts yet. Search for a handle on the home screen to connect with someone.</p>
-        <button onclick="document.getElementById('contacts-modal').remove()" style="padding:10px 24px;border-radius:10px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-family:var(--font-body);font-size:14px;font-weight:600;cursor:pointer;">Close</button>
-      </div>`;
-  } else {
-    const list = contacts.map(c => `
-      <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);">
-        <img src="${c.picture || ''}" style="width:36px;height:36px;border-radius:50%;${c.picture ? '' : 'display:none;'}">
-        <div style="flex:1;min-width:0;">
-          <div style="font-size:14px;font-weight:600;">${escapeHtml(c.name || c.username)}</div>
-          <div style="font-size:12px;color:var(--text-muted);">@${escapeHtml(c.username)}</div>
-        </div>
-        <select onchange="updateContactAccess('${c.contact_id}',this.value)" style="font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-family:var(--font-body);">
-          <option value="ask"${c.access === 'ask' ? ' selected' : ''}>Ask each time</option>
-          <option value="always"${c.access === 'always' ? ' selected' : ''}>Always accept</option>
-          <option value="off"${c.access === 'off' ? ' selected' : ''}>Block</option>
-        </select>
-      </div>`).join('');
-
-    modal.innerHTML = `
-      <div class="modal" style="max-width:420px;">
-        <h2 style="font-size:20px;margin-bottom:16px;">Contacts</h2>
-        <div style="max-height:400px;overflow-y:auto;">${list}</div>
-        <div style="margin-top:16px;text-align:center;">
-          <button onclick="document.getElementById('contacts-modal').remove()" style="padding:10px 24px;border-radius:10px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-family:var(--font-body);font-size:14px;font-weight:600;cursor:pointer;">Close</button>
-        </div>
-      </div>`;
+    list.innerHTML = '<div class="inbox-empty">No contacts yet. Search for a handle on the home screen to connect.</div>';
+    return;
   }
+  list.innerHTML = contacts.map(c => `
+    <div class="inbox-file-item" style="cursor:default;">
+      <div class="inbox-file-icon" style="padding:0;overflow:hidden;width:40px;height:40px;border-radius:50%;background:var(--bg-tertiary);">
+        ${c.picture ? `<img src="${c.picture}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">` : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;color:var(--text-muted);">${(c.name || c.username || '?')[0].toUpperCase()}</div>`}
+      </div>
+      <div class="inbox-file-details" style="flex:1;min-width:0;">
+        <div class="inbox-file-name">${escapeHtml(c.name || c.username)}</div>
+        <div class="inbox-file-meta">@${escapeHtml(c.username)} · <select onchange="updateContactAccess('${c.contact_id}',this.value)" style="font-size:11px;padding:1px 4px;border-radius:4px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-secondary);font-family:var(--font-body);cursor:pointer;">
+          <option value="ask"${c.access === 'ask' ? ' selected' : ''}>Ask</option>
+          <option value="always"${c.access === 'always' ? ' selected' : ''}>Always</option>
+          <option value="off"${c.access === 'off' ? ' selected' : ''}>Off</option>
+        </select></div>
+      </div>
+      <button onclick="sendFilesToUser('${c.contact_id}','${escapeHtml(c.name || c.username)}')" style="padding:6px 14px;border-radius:8px;border:none;background:var(--accent);color:#fff;font-family:var(--font-body);font-size:12px;font-weight:600;cursor:pointer;">Send</button>
+    </div>
+  `).join('');
+}
 
-  modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
-  document.body.appendChild(modal);
+function sendFilesToUser(userId, userName) {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.multiple = true;
+  input.onchange = async () => {
+    if (!input.files || input.files.length === 0) return;
+    const files = Array.from(input.files);
+    showToastInfo('Uploading ' + files.length + ' file' + (files.length > 1 ? 's' : '') + ' to ' + userName + '...');
+
+    for (const file of files) {
+      try {
+        const res = await fetch('/api/upload', {
+          method: 'POST',
+          headers: {
+            'X-Filename': encodeURIComponent(file.name),
+            'X-Mime-Type': file.type || 'application/octet-stream',
+            'Content-Length': file.size,
+            'X-Recipient': userId,
+          },
+          body: file,
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          showToast(err.error || 'Upload failed for ' + file.name);
+          return;
+        }
+      } catch {
+        showToast('Upload failed');
+        return;
+      }
+    }
+    showToastSuccess('Sent ' + files.length + ' file' + (files.length > 1 ? 's' : '') + ' to ' + userName);
+    document.getElementById('handle-search-input').value = '';
+    document.getElementById('handle-search-result').style.display = 'none';
+  };
+  input.click();
 }
 
 async function updateContactAccess(contactId, access) {
