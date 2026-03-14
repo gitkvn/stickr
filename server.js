@@ -1864,11 +1864,11 @@ app.post('/api/upload', rateLimit('upload', 20, 60 * 1000), async (req, res) => 
     // If sending to a contact (X-Recipient header), put in their inbox
     const recipientId = req.headers['x-recipient'];
     if (recipientId) {
-      // Verify they are a contact
       const contact = stmts.getContact.get(user.id, recipientId);
       if (contact) {
-        // Create a received file entry for the recipient
-        stmts.createReceivedFile.run(token, recipientId, filename, fileSize, mimeType, r2Key, expiresAt, 'contact:' + user.id);
+        // Create a separate inbox entry for the recipient pointing to same R2 file
+        const recvToken = crypto.randomBytes(16).toString('hex');
+        stmts.createReceivedFile.run(recvToken, recipientId, filename, fileSize, mimeType, r2Key, expiresAt, 'contact:' + user.id);
         notifyInbox(recipientId);
       }
     }

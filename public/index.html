@@ -3895,7 +3895,6 @@ function sendFilesToUser(userId, userName) {
           headers: {
             'X-Filename': encodeURIComponent(file.name),
             'X-Mime-Type': file.type || 'application/octet-stream',
-            'Content-Length': file.size,
             'X-Recipient': userId,
           },
           body: file,
