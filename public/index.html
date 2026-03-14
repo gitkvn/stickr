@@ -129,7 +129,6 @@ header {
 .inbox-btn { position: relative; background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 6px; border-radius: 8px; transition: all 0.2s; display: flex; align-items: center; }
 .inbox-btn:hover { color: var(--text-primary); background: var(--bg-tertiary); }
 .inbox-badge { position: absolute; top: 0; right: 0; background: var(--accent); color: white; font-size: 10px; font-weight: 700; min-width: 16px; height: 16px; border-radius: 8px; display: flex; align-items: center; justify-content: center; padding: 0 4px; }
-.slip-badge { position: absolute; top: 0; right: 0; background: var(--success); color: white; font-size: 10px; font-weight: 700; min-width: 16px; height: 16px; border-radius: 8px; display: flex; align-items: center; justify-content: center; padding: 0 4px; }
 .user-name { font-size: 13px; font-weight: 600; color: var(--text-primary); max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .user-logout { font-family: var(--font-body); font-size: 12px; color: var(--text-muted); background: none; border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; cursor: pointer; transition: all 0.2s; }
 .user-logout:hover { color: var(--text-primary); border-color: var(--text-secondary); }
@@ -808,10 +807,6 @@ body.in-room .nav-links { display: none; }
         <a href="#pricing-section" class="nav-link">Pricing</a>
       </div>
       <div class="user-menu" id="user-menu" style="display:none">
-        <button class="inbox-btn" id="slip-btn" onclick="toggleSlip()" title="Slip — share with nearby devices" style="position:relative;">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
-          <span class="slip-badge" id="slip-badge" style="display:none">0</span>
-        </button>
         <button class="inbox-btn" id="inbox-btn" onclick="showInbox()" title="Inbox">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
           <span class="inbox-badge" id="inbox-badge" style="display:none">0</span>
@@ -1203,43 +1198,6 @@ body.in-room .nav-links { display: none; }
   </div>
 
   <!-- ═══ INBOX VIEW ═══ -->
-  <!-- ═══ SLIP VIEW ═══ -->
-  <div id="slip-view" class="view inbox-view">
-    <div class="link-view-header">
-      <div style="display:flex;align-items:center;gap:12px;">
-        <h2>Slip</h2>
-        <span style="font-size:12px;color:var(--text-muted);">My devices</span>
-      </div>
-      <button class="btn-back" onclick="closeSlip()">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
-        Back
-      </button>
-    </div>
-    <div id="slip-devices" class="inbox-list">
-      <div class="inbox-empty" id="slip-empty">Looking for your other devices...</div>
-    </div>
-    <!-- Slip incoming offer modal -->
-    <div id="slip-incoming" style="display:none;position:fixed;inset:0;z-index:500;background:rgba(0,0,0,0.5);display:none;align-items:center;justify-content:center;">
-      <div style="background:var(--bg-primary);border:1px solid var(--border);border-radius:16px;padding:28px;max-width:340px;width:90%;text-align:center;">
-        <img id="slip-incoming-pic" src="" alt="" style="width:48px;height:48px;border-radius:50%;margin-bottom:12px;">
-        <h3 id="slip-incoming-name" style="font-size:16px;margin-bottom:4px;"></h3>
-        <p id="slip-incoming-files" style="font-size:13px;color:var(--text-secondary);margin-bottom:20px;"></p>
-        <div style="display:flex;gap:10px;">
-          <button onclick="slipDecline()" style="flex:1;padding:12px;border-radius:10px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-family:var(--font-body);font-size:14px;font-weight:600;cursor:pointer;">Decline</button>
-          <button onclick="slipAcceptIncoming()" style="flex:1;padding:12px;border-radius:10px;border:none;background:var(--accent);color:#fff;font-family:var(--font-body);font-size:14px;font-weight:600;cursor:pointer;">Accept</button>
-        </div>
-      </div>
-    </div>
-    <!-- Slip transfer progress -->
-    <div id="slip-progress" style="display:none;padding:20px;text-align:center;">
-      <p id="slip-progress-text" style="font-size:14px;font-weight:600;margin-bottom:12px;">Transferring...</p>
-      <div style="height:6px;background:var(--bg-tertiary);border-radius:3px;overflow:hidden;margin-bottom:8px;">
-        <div id="slip-progress-bar" style="height:100%;background:var(--accent);border-radius:3px;width:0%;transition:width 0.3s;"></div>
-      </div>
-      <p id="slip-progress-detail" style="font-size:12px;color:var(--text-muted);"></p>
-    </div>
-  </div>
-
   <div id="inbox-view" class="view inbox-view">
     <div class="link-view-header">
       <div style="display:flex;align-items:center;gap:12px;">
@@ -1761,27 +1719,6 @@ function handleSignalingMessage(msg) {
       } else {
         showToast(msg.message);
       }
-      break;
-
-    // ═══ Slip: nearby device sharing ═══
-    case 'slip-nearby':
-      handleSlipNearby(msg.devices);
-      break;
-
-    case 'slip-offer':
-      handleSlipOffer(msg);
-      break;
-
-    case 'slip-accepted':
-      handleSlipAccepted(msg.from);
-      break;
-
-    case 'slip-declined':
-      handleSlipDeclined();
-      break;
-
-    case 'slip-signal':
-      handleSlipRTCSignal(msg.from, msg.signal);
       break;
   }
 }
@@ -3182,7 +3119,6 @@ function goHome() {
   document.getElementById('room-view').classList.remove('active');
   document.getElementById('link-view').classList.remove('active');
   document.getElementById('inbox-view').classList.remove('active');
-  document.getElementById('slip-view').classList.remove('active');
   document.getElementById('home-view').classList.add('active', 'ready');
   document.body.classList.remove('in-room');
   history.pushState(null, '', location.pathname);
@@ -3729,293 +3665,6 @@ async function checkInboxCount() {
   } catch {}
 }
 
-// ═══════════════════════════════════════════
-// SLIP — NEARBY DEVICE SHARING
-// ═══════════════════════════════════════════
-let slipDevices = [];
-let slipPendingOffer = null; // incoming offer awaiting accept
-let slipPc = null; // WebRTC peer connection for slip
-let slipDataChannel = null;
-let slipTargetId = null; // ws.id of the peer we're sending to
-let slipFiles = []; // files to send
-let slipReceiveBuffer = [];
-let slipReceiveFile = null;
-let slipReceiveOffset = 0;
-
-function toggleSlip() {
-  const view = document.getElementById('slip-view');
-  if (view.classList.contains('active')) { closeSlip(); return; }
-  closeProfileMenu();
-  document.getElementById('home-view').classList.remove('active');
-  document.getElementById('link-view').classList.remove('active');
-  document.getElementById('inbox-view').classList.remove('active');
-  view.classList.add('active');
-}
-
-function closeSlip() {
-  document.getElementById('slip-view').classList.remove('active');
-  document.getElementById('home-view').classList.add('active');
-}
-
-function handleSlipNearby(devices) {
-  slipDevices = devices;
-  const badge = document.getElementById('slip-badge');
-  if (devices.length > 0) { badge.textContent = devices.length; badge.style.display = ''; }
-  else { badge.style.display = 'none'; }
-  renderSlipDevices();
-}
-
-function renderSlipDevices() {
-  const container = document.getElementById('slip-devices');
-  if (slipDevices.length === 0) {
-    container.innerHTML = '<div class="inbox-empty">No other devices found. Open Stickr on another device and sign in.</div>';
-    return;
-  }
-  container.innerHTML = slipDevices.map(d => `
-    <div class="inbox-file-item" style="cursor:pointer;" onclick="slipSendTo('${d.id}','${escapeHtml(d.name)}')">
-      <div class="inbox-file-icon" style="background:rgba(45,159,111,0.08);color:var(--success);padding:0;overflow:hidden;width:40px;height:40px;border-radius:50%;">
-        ${d.picture ? `<img src="${d.picture}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">` : `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>`}
-      </div>
-      <div class="inbox-file-details">
-        <div class="inbox-file-name">${escapeHtml(d.name)}</div>
-        <div class="inbox-file-meta">Tap to send files</div>
-      </div>
-      <div style="color:var(--accent);"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></div>
-    </div>
-  `).join('');
-}
-
-function slipSendTo(deviceId, deviceName) {
-  slipTargetId = deviceId;
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.multiple = true;
-  input.onchange = () => {
-    if (!input.files || input.files.length === 0) return;
-    slipFiles = Array.from(input.files);
-    const fileMeta = slipFiles.map(f => ({ name: f.name, size: f.size, type: f.type }));
-    ws.send(JSON.stringify({ type: 'slip-offer', to: slipTargetId, files: fileMeta }));
-    showToastInfo('Waiting for ' + deviceName + ' to accept...');
-    // Show progress area
-    document.getElementById('slip-progress').style.display = 'block';
-    document.getElementById('slip-progress-text').textContent = 'Waiting for acceptance...';
-    document.getElementById('slip-progress-bar').style.width = '0%';
-    document.getElementById('slip-progress-detail').textContent = slipFiles.length + ' file' + (slipFiles.length > 1 ? 's' : '') + ' · ' + formatSize(slipFiles.reduce((s, f) => s + f.size, 0));
-  };
-  input.click();
-}
-
-function handleSlipOffer(msg) {
-  slipPendingOffer = msg;
-  const total = msg.files.reduce((s, f) => s + f.size, 0);
-  document.getElementById('slip-incoming-pic').src = msg.fromPicture || '';
-  document.getElementById('slip-incoming-pic').style.display = msg.fromPicture ? '' : 'none';
-  document.getElementById('slip-incoming-name').textContent = msg.fromName + ' wants to send you files';
-  document.getElementById('slip-incoming-files').textContent = msg.files.length + ' file' + (msg.files.length > 1 ? 's' : '') + ' · ' + formatSize(total);
-  document.getElementById('slip-incoming').style.display = 'flex';
-}
-
-function slipDecline() {
-  if (slipPendingOffer) {
-    ws.send(JSON.stringify({ type: 'slip-decline', to: slipPendingOffer.from }));
-  }
-  document.getElementById('slip-incoming').style.display = 'none';
-  slipPendingOffer = null;
-}
-
-async function slipAcceptIncoming() {
-  if (!slipPendingOffer) return;
-  ws.send(JSON.stringify({ type: 'slip-accept', to: slipPendingOffer.from }));
-  document.getElementById('slip-incoming').style.display = 'none';
-  slipTargetId = slipPendingOffer.from;
-  // Receiver creates the peer connection, waits for offer
-  await slipCreatePc(false);
-  // Show slip view with progress
-  toggleSlip();
-  document.getElementById('slip-progress').style.display = 'block';
-  document.getElementById('slip-progress-text').textContent = 'Connecting...';
-  document.getElementById('slip-progress-bar').style.width = '0%';
-  document.getElementById('slip-progress-detail').textContent = '';
-  slipPendingOffer = null;
-}
-
-async function handleSlipAccepted(fromId) {
-  slipTargetId = fromId;
-  // Sender creates the peer connection and initiates
-  await slipCreatePc(true);
-}
-
-function handleSlipDeclined() {
-  showToast('Transfer declined');
-  document.getElementById('slip-progress').style.display = 'none';
-  slipFiles = [];
-  slipTargetId = null;
-}
-
-async function slipCreatePc(initiator) {
-  // Fetch TURN credentials for Slip
-  try {
-    const res = await fetch('/api/ice-servers');
-    const data = await res.json();
-    if (data.iceServers && data.iceServers.length > 0) {
-      ICE_SERVERS = data.iceServers;
-    }
-  } catch (e) { console.warn('Slip: could not fetch TURN, using STUN:', e.message); }
-
-  if (slipPc) { try { slipPc.close(); } catch {} }
-  slipPc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
-
-  slipPc.onicecandidate = (e) => {
-    if (e.candidate) {
-      ws.send(JSON.stringify({ type: 'slip-signal', to: slipTargetId, signal: { candidate: e.candidate } }));
-    }
-  };
-
-  if (initiator) {
-    slipDataChannel = slipPc.createDataChannel('slip-files', { ordered: true });
-    slipDataChannel.binaryType = 'arraybuffer';
-    slipDataChannel.onopen = () => slipStartSending();
-    slipDataChannel.onerror = (e) => { console.error('Slip DC error:', e); showToast('Transfer failed'); };
-
-    slipPc.createOffer().then(offer => {
-      slipPc.setLocalDescription(offer);
-      ws.send(JSON.stringify({ type: 'slip-signal', to: slipTargetId, signal: { sdp: offer } }));
-    });
-  } else {
-    slipPc.ondatachannel = (e) => {
-      slipDataChannel = e.channel;
-      slipDataChannel.binaryType = 'arraybuffer';
-      slipDataChannel.onmessage = slipOnReceiveMessage;
-      slipDataChannel.onerror = (e) => { console.error('Slip DC error:', e); showToast('Transfer failed'); };
-    };
-  }
-}
-
-async function handleSlipRTCSignal(from, signal) {
-  if (!slipPc) return;
-  try {
-    if (signal.sdp) {
-      await slipPc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
-      if (signal.sdp.type === 'offer') {
-        const answer = await slipPc.createAnswer();
-        await slipPc.setLocalDescription(answer);
-        ws.send(JSON.stringify({ type: 'slip-signal', to: from, signal: { sdp: answer } }));
-      }
-    } else if (signal.candidate) {
-      await slipPc.addIceCandidate(new RTCIceCandidate(signal.candidate));
-    }
-  } catch (e) { console.error('Slip RTC signal error:', e); }
-}
-
-async function slipStartSending() {
-  document.getElementById('slip-progress-text').textContent = 'Sending...';
-  const totalSize = slipFiles.reduce((s, f) => s + f.size, 0);
-  let sentTotal = 0;
-
-  for (let i = 0; i < slipFiles.length; i++) {
-    const file = slipFiles[i];
-    // Send file metadata
-    slipDataChannel.send(JSON.stringify({ type: 'file-start', name: file.name, size: file.size, mime: file.type, index: i, total: slipFiles.length }));
-
-    // Send file data in chunks
-    const CHUNK = 64 * 1024;
-    let offset = 0;
-    const reader = file.stream().getReader();
-    let leftover = new Uint8Array(0);
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      // Combine leftover with new data
-      const combined = new Uint8Array(leftover.length + value.length);
-      combined.set(leftover);
-      combined.set(value, leftover.length);
-      leftover = new Uint8Array(0);
-
-      let pos = 0;
-      while (pos + CHUNK <= combined.length) {
-        // Wait for buffer to drain
-        while (slipDataChannel.bufferedAmount > 1024 * 1024) {
-          await new Promise(r => setTimeout(r, 20));
-        }
-        slipDataChannel.send(combined.slice(pos, pos + CHUNK));
-        pos += CHUNK;
-        sentTotal += CHUNK;
-        const pct = Math.min(100, Math.round(sentTotal / totalSize * 100));
-        document.getElementById('slip-progress-bar').style.width = pct + '%';
-        document.getElementById('slip-progress-detail').textContent = (i + 1) + '/' + slipFiles.length + ' · ' + formatSize(sentTotal) + ' / ' + formatSize(totalSize);
-      }
-      if (pos < combined.length) {
-        leftover = combined.slice(pos);
-      }
-    }
-    // Send remaining
-    if (leftover.length > 0) {
-      slipDataChannel.send(leftover);
-      sentTotal += leftover.length;
-    }
-
-    slipDataChannel.send(JSON.stringify({ type: 'file-end', index: i }));
-  }
-
-  slipDataChannel.send(JSON.stringify({ type: 'slip-complete' }));
-  document.getElementById('slip-progress-text').textContent = 'Sent!';
-  document.getElementById('slip-progress-bar').style.width = '100%';
-  showToastSuccess('Files sent successfully');
-  setTimeout(() => { slipCleanup(); }, 3000);
-}
-
-function slipOnReceiveMessage(e) {
-  if (typeof e.data === 'string') {
-    const msg = JSON.parse(e.data);
-    if (msg.type === 'file-start') {
-      slipReceiveFile = { name: msg.name, size: msg.size, mime: msg.mime, index: msg.index, total: msg.total };
-      slipReceiveBuffer = [];
-      slipReceiveOffset = 0;
-      document.getElementById('slip-progress-text').textContent = 'Receiving ' + (msg.index + 1) + '/' + msg.total + '...';
-    } else if (msg.type === 'file-end') {
-      // Save the received file
-      const blob = new Blob(slipReceiveBuffer, { type: slipReceiveFile.mime || 'application/octet-stream' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = slipReceiveFile.name;
-      a.click();
-      URL.revokeObjectURL(a.href);
-      slipReceiveBuffer = [];
-    } else if (msg.type === 'slip-complete') {
-      document.getElementById('slip-progress-text').textContent = 'Received!';
-      document.getElementById('slip-progress-bar').style.width = '100%';
-      showToastSuccess('Files received');
-      setTimeout(() => { slipCleanup(); }, 3000);
-    }
-  } else {
-    // Binary data — file chunk
-    slipReceiveBuffer.push(e.data);
-    slipReceiveOffset += e.data.byteLength;
-    if (slipReceiveFile) {
-      const pct = Math.min(100, Math.round(slipReceiveOffset / slipReceiveFile.size * 100));
-      document.getElementById('slip-progress-bar').style.width = pct + '%';
-      document.getElementById('slip-progress-detail').textContent = formatSize(slipReceiveOffset) + ' / ' + formatSize(slipReceiveFile.size);
-    }
-  }
-}
-
-function slipCleanup() {
-  if (slipPc) { try { slipPc.close(); } catch {} slipPc = null; }
-  slipDataChannel = null;
-  slipFiles = [];
-  slipTargetId = null;
-  slipPendingOffer = null;
-  slipReceiveBuffer = [];
-  slipReceiveFile = null;
-  slipReceiveOffset = 0;
-  document.getElementById('slip-progress').style.display = 'none';
-}
-
-// ═══════════════════════════════════════════
-// INSTALL GUIDE
-// ═══════════════════════════════════════════
 function showInstallGuide() {
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
   const isAndroid = /Android/.test(navigator.userAgent);
@@ -4254,7 +3903,6 @@ function toggleEditProfile() {
   if (form.style.display === 'none') {
     form.style.display = 'block';
     btn.textContent = 'Cancel';
-    // Populate from current data
     document.getElementById('edit-username').value = currentUser ? (currentUser.username || '') : '';
     document.getElementById('username-status').textContent = '';
     if (currentUser && currentUser.profile_data) {
@@ -4274,9 +3922,7 @@ let usernameCheckTimer = null;
 function checkUsername(val) {
   const status = document.getElementById('username-status');
   const clean = val.toLowerCase().replace(/[^a-z0-9_]/g, '');
-  if (clean !== val) {
-    document.getElementById('edit-username').value = clean;
-  }
+  if (clean !== val) document.getElementById('edit-username').value = clean;
   if (!clean || clean.length < 3) {
     status.textContent = clean.length > 0 ? 'At least 3 characters' : '';
     status.style.color = 'var(--text-muted)';
@@ -4301,9 +3947,7 @@ function checkUsername(val) {
         status.textContent = data.reason || 'Not available';
         status.style.color = 'var(--danger)';
       }
-    } catch {
-      status.textContent = '';
-    }
+    } catch { status.textContent = ''; }
   }, 400);
 }
 
@@ -4330,9 +3974,6 @@ async function saveProfile() {
       if (ures.ok) {
         const udata = await ures.json();
         currentUser.username = udata.username;
-        // Update profile link display
-        const profileLink = document.getElementById('profile-link-display');
-        if (profileLink) profileLink.textContent = 'getstickr.in/' + udata.username;
       } else {
         const err = await ures.json();
         showToast(err.error || 'Could not update username');
