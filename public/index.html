@@ -177,7 +177,7 @@ header {
 @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
 /* ─── Home View ─── */
-.home-view { align-items: stretch; justify-content: flex-start; padding: 0; gap: 0; display: none !important; overflow-x: hidden; }
+.home-view { align-items: stretch; justify-content: flex-start; padding: 0; gap: 0; display: none !important; overflow-x: hidden; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 .home-view.active.ready { display: flex !important; }
 #landing-content { width: 100%; }
 .landing-hero-grid { width: 100%; }
@@ -936,7 +936,7 @@ body.in-room .nav-links { display: none; }
       <div class="handle-search" style="margin-bottom:16px;">
         <div style="display:flex;align-items:center;gap:8px;padding:10px 16px;background:var(--bg-card);border:1px solid var(--border);border-radius:12px;transition:border-color 0.2s;" id="handle-search-box">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          <input type="text" id="handle-search-input" placeholder="Send to a handle (e.g. kavan)" style="flex:1;border:none;background:none;font-family:var(--font-body);font-size:14px;color:var(--text-primary);outline:none;" oninput="searchHandle(this.value)" autocomplete="off" autocapitalize="off">
+          <input type="text" id="handle-search-input" placeholder="Send to a handle (e.g. kavan)" style="flex:1;border:none;background:none;font-family:var(--font-body);font-size:14px;color:var(--text-primary);outline:none;" oninput="searchHandle(this.value)" onfocus="setTimeout(()=>this.scrollIntoView({behavior:'smooth',block:'start'}),300)" autocomplete="off" autocapitalize="off">
         </div>
         <div id="handle-search-result" style="display:none;margin-top:8px;"></div>
       </div>
