@@ -1287,7 +1287,43 @@ body{font-family:'DM Sans',-apple-system,sans-serif;background:#fff;color:#1a1a1
 .profile{animation:fadeUp .5s ease both}
 .drop-hint{animation:fadeUp .5s ease .1s both}
 .pinned-list{animation:fadeUp .5s ease .2s both}
-</style></head><body>
+[data-theme="dark"] body{background:#0f0f12;color:#e8e6e1}
+[data-theme="dark"] .name{color:#e8e6e1}
+[data-theme="dark"] .handle{color:#6a6a72}
+[data-theme="dark"] .bio{color:#9a9a9e}
+[data-theme="dark"] .social-icon{background:#16161c;border-color:#2a2a34;color:#6a6a72}
+[data-theme="dark"] .social-icon:hover{border-color:#7c6fef;color:#7c6fef}
+[data-theme="dark"] .drop-hint{border-color:#2a2a34}
+[data-theme="dark"] .drop-hint:hover{border-color:#7c6fef;background:rgba(124,111,239,0.06)}
+[data-theme="dark"] .drop-hint h3{color:#e8e6e1}
+[data-theme="dark"] .drop-hint p{color:#6a6a72}
+[data-theme="dark"] .drop-hint-icon{color:#6a6a72}
+[data-theme="dark"] .pinned-item{background:#16161c;border-color:#2a2a34;color:#e8e6e1}
+[data-theme="dark"] .pinned-item:hover{border-color:rgba(124,111,239,0.3)}
+[data-theme="dark"] .pin-meta{color:#6a6a72}
+[data-theme="dark"] .section-label{color:#6a6a72}
+[data-theme="dark"] .footer{border-color:#2a2a34}
+[data-theme="dark"] .footer-logo{color:#e8e6e1}
+[data-theme="dark"] .footer-logo em{color:#7c6fef}
+[data-theme="dark"] .footer p{color:#6a6a72}
+[data-theme="dark"] .footer a{color:#7c6fef}
+[data-theme="dark"] .avatar{border-color:#0f0f12;background:#16161c}
+[data-theme="dark"] .upload-modal{background:rgba(15,15,18,0.85)}
+[data-theme="dark"] .upload-modal-inner{background:#16161c;border-color:#2a2a34}
+[data-theme="dark"] .upload-modal-inner h3{color:#e8e6e1}
+[data-theme="dark"] .send-another{border-color:#2a2a34;color:#9a9a9e}
+[data-theme="dark"] .send-another:hover{border-color:#7c6fef;color:#e8e6e1}
+[data-theme="dark"] .cancel-btn{color:#6a6a72}
+[data-theme="dark"] .cancel-btn:hover{color:#e8e6e1}
+[data-theme="dark"] .progress-bar-bg{background:#2a2a34}
+[data-theme="dark"] .upload-state p{color:#9a9a9e}
+[data-theme="dark"] .no-upload{color:#6a6a72}
+[data-theme="dark"] .drop-target{background:rgba(15,15,18,0.92)}
+[data-theme="dark"] .drop-target p{color:#6a6a72}
+[data-theme="dark"] .theme-toggle{background:none;border:1px solid #2a2a34;color:#6a6a72}
+[data-theme="dark"] .theme-toggle:hover{border-color:#7c6fef;color:#7c6fef}
+</style><script>try{if(localStorage.getItem('stickr-theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}</script></head><body>
+${DARK_MODE_TOGGLE_HTML}
 ${canUpload ? `<div class="drop-target" id="drop-target">
   <div class="drop-target-content">
     <div class="drop-target-icon"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
@@ -1465,6 +1501,7 @@ async function doUploadAll(){
 function resetUpload(){modal.classList.remove('active');pendingFile=null;uploadQueue=[];uploadIdx=0;currentBatchToken=null;document.getElementById('progress-fill').style.width='0%'}
 function fmtSize(b){if(b<1024)return b+' B';if(b<1048576)return(b/1024).toFixed(1)+' KB';return(b/1048576).toFixed(1)+' MB'}
 <\/script>` : ''}
+${DARK_MODE_JS}
 </body></html>`;
 }
 
@@ -1717,6 +1754,47 @@ app.get('/api/preview/:token', async (req, res) => {
     res.status(500).send('Preview failed');
   }
 });
+// Dark mode support for server-rendered download pages
+const DARK_MODE_CSS = `
+[data-theme="dark"] body{background:#0f0f12;color:#e8e6e1}
+[data-theme="dark"] .card{background:#16161c;border-color:#2a2a34}
+[data-theme="dark"] .card-body{color:#e8e6e1}
+[data-theme="dark"] h1{color:#e8e6e1}
+[data-theme="dark"] .meta{color:#6a6a72}
+[data-theme="dark"] .logo{color:#e8e6e1}
+[data-theme="dark"] .logo em{color:#7c6fef}
+[data-theme="dark"] .link-active{color:#6a6a72}
+[data-theme="dark"] .expiry{color:#6a6a72}
+[data-theme="dark"] .btn-outline{background:#1e1e26;color:#e8e6e1;border-color:#2a2a34}
+[data-theme="dark"] .btn-outline:hover{border-color:#7c6fef;color:#7c6fef}
+[data-theme="dark"] .btn-share{background:#1e1e26;color:#e8e6e1;border-color:#2a2a34}
+[data-theme="dark"] .btn-share:hover{border-color:#7c6fef;color:#7c6fef}
+[data-theme="dark"] .img-wrap{background:#16161c;border-color:#2a2a34}
+[data-theme="dark"] .promo{border-color:#2a2a34}
+[data-theme="dark"] .promo p{color:#6a6a72}
+[data-theme="dark"] .promo a{color:#7c6fef}
+[data-theme="dark"] .expiry-footer{border-color:#2a2a34}
+[data-theme="dark"] .expiry-footer span{color:#6a6a72}
+[data-theme="dark"] .file-row{background:#16161c;border-color:#2a2a34}
+[data-theme="dark"] .file-row-name{color:#e8e6e1}
+[data-theme="dark"] .file-row-size{color:#6a6a72}
+[data-theme="dark"] .other-files-label{color:#6a6a72}
+[data-theme="dark"] .fullscreen-overlay{background:rgba(0,0,0,0.95)}
+[data-theme="dark"] .theme-toggle{background:none;border:1px solid #2a2a34;color:#6a6a72}
+[data-theme="dark"] .theme-toggle:hover{border-color:#7c6fef;color:#7c6fef}
+`;
+
+const DARK_MODE_TOGGLE_HTML = `<button class="theme-toggle" onclick="toggleTheme()" title="Toggle dark mode" style="position:fixed;top:16px;right:16px;z-index:100;background:none;border:1px solid #e0ddd4;border-radius:8px;padding:5px 7px;cursor:pointer;color:#8a8a8a;display:flex;align-items:center;justify-content:center;transition:all 0.2s;">
+<svg id="ti-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+<svg id="ti-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+</button>`;
+
+const DARK_MODE_JS = `<script>
+function applyTheme(t){document.documentElement.setAttribute('data-theme',t);var s=document.getElementById('ti-sun'),m=document.getElementById('ti-moon');if(s&&m){s.style.display=t==='dark'?'':'none';m.style.display=t==='dark'?'none':''}var b=document.querySelector('.theme-toggle');if(b){b.style.borderColor=t==='dark'?'#2a2a34':'#e0ddd4';b.style.color=t==='dark'?'#6a6a72':'#8a8a8a'}}
+function toggleTheme(){var c=document.documentElement.getAttribute('data-theme')||'light';var n=c==='dark'?'light':'dark';applyTheme(n);try{localStorage.setItem('stickr-theme',n)}catch(e){}}
+try{var saved=localStorage.getItem('stickr-theme');if(saved==='dark')applyTheme('dark')}catch(e){}
+<\/script>`;
+
 function getDownloadPage(file, expired = false) {
   const sizeFormatted = file ? formatBytes(file.file_size) : '';
   const expiresIn = file ? getTimeRemaining(file.expires_at) : '';
@@ -1736,14 +1814,17 @@ p{color:#5a5a5a;font-size:14px;line-height:1.6;margin-bottom:24px}
 .logo{font-family:'Instrument Serif',Georgia,serif;font-size:28px;font-weight:400;margin-bottom:24px;color:#1a1a1a}
 .logo em{font-style:italic;color:#5b4cdb}
 .back-nav{width:100%;max-width:480px;margin-bottom:12px;}.back-link{display:inline-flex;align-items:center;gap:6px;color:#8a8a8a;text-decoration:none;font-size:13px;font-weight:500;transition:color .2s;}.back-link:hover{color:#5b4cdb}.back-link svg{flex-shrink:0}
-</style></head><body>
-
+${DARK_MODE_CSS}
+</style><script>try{if(localStorage.getItem('stickr-theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}</script></head><body>
+${DARK_MODE_TOGGLE_HTML}
 <div class="card">
 <div class="logo">St<em>i</em>ckr</div>
 <h1>${expired ? 'File Expired' : 'File Not Found'}</h1>
 <p>${expired ? 'This download link has expired. Ask the sender for a new link.' : 'This download link does not exist or has been removed.'}</p>
 <a class="btn" href="/">Share files with Stickr</a>
-</div></body></html>`;
+</div>
+${DARK_MODE_JS}
+</body></html>`;
   }
 
   const RAW_EXTENSIONS = /\.(arw|cr2|cr3|nef|dng|raf|orf|rw2|pef|srw|x3f)$/i;
@@ -1784,8 +1865,11 @@ h1{font-family:'Instrument Serif',Georgia,serif;font-size:${isImage ? '16px' : '
 .fullscreen-overlay.active{display:flex}
 .fullscreen-overlay img{max-width:95vw;max-height:95vh;object-fit:contain}
 .back-nav{width:100%;max-width:480px;margin-bottom:12px;}.back-link{display:inline-flex;align-items:center;gap:6px;color:#8a8a8a;text-decoration:none;font-size:13px;font-weight:500;transition:color .2s;}.back-link:hover{color:#5b4cdb}.back-link svg{flex-shrink:0}
-</style></head><body>
-
+[data-theme="dark"] .img-preview{background:#16161c}
+[data-theme="dark"] .img-wrap{background:#16161c;border-color:#2a2a34}
+${DARK_MODE_CSS}
+</style><script>try{if(localStorage.getItem('stickr-theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}</script></head><body>
+${DARK_MODE_TOGGLE_HTML}
 <div class="card">
 ${isImage ? `
 <div class="img-wrap">
@@ -1831,7 +1915,9 @@ Share
 ${showBranding ? '<div class="promo"><p>Want to share files too?</p><a href="/">Start free on Stickr</a></div>' : ''}
 </div>
 `}
-</div></body></html>`;
+</div>
+${DARK_MODE_JS}
+</body></html>`;
 }
 
 
@@ -2007,8 +2093,9 @@ h1{font-family:'Instrument Serif',Georgia,serif;font-weight:400}
 }
   .few-grid{gap:6px}
 }
-</style></head><body>
-
+${DARK_MODE_CSS}
+</style><script>try{if(localStorage.getItem('stickr-theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}</script></head><body>
+${DARK_MODE_TOGGLE_HTML}
 ${bodyHtml}
 
 ${imgCount > 0 ? `
@@ -2040,6 +2127,7 @@ function downloadAll(){var links=document.querySelectorAll('.album-dl, .file-row
 async function downloadZip(){var btn=document.getElementById('zip-btn');if(!btn)return;btn.disabled=true;btn.innerHTML='Preparing...';try{var zip=new JSZip();for(var i=0;i<allFiles.length;i++){btn.innerHTML=(i+1)+'/'+allFiles.length+'...';var resp=await fetch(allFiles[i].dl);var blob=await resp.blob();zip.file(allFiles[i].name,blob)}btn.innerHTML='Zipping...';var content=await zip.generateAsync({type:'blob'});var a=document.createElement('a');a.href=URL.createObjectURL(content);a.download='stickr-files.zip';a.click();URL.revokeObjectURL(a.href);btn.innerHTML='${dlSvg16} Zip';btn.disabled=false}catch(e){btn.innerHTML='Failed';btn.disabled=false;setTimeout(function(){btn.innerHTML='${dlSvg16} Zip'},2000)}}
 function shareBatch(){if(navigator.share){navigator.share({title:'Stickr album',url:location.href}).catch(function(){})}else{navigator.clipboard.writeText(location.href).then(function(){alert('Link copied!')})}}
 </script>
+${DARK_MODE_JS}
 </body></html>`;
 }
 
