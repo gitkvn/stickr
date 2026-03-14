@@ -47,7 +47,33 @@
   --shadow-glow: 0 0 30px rgba(91,76,219,0.1);
 }
 
+[data-theme="dark"] {
+  --bg-primary: #0f0f12;
+  --bg-secondary: #16161c;
+  --bg-tertiary: #1e1e26;
+  --bg-card: rgba(30,30,38,0.6);
+  --border: #2a2a34;
+  --border-glow: rgba(124,111,239,0.2);
+  --text-primary: #e8e6e1;
+  --text-secondary: #9a9a9e;
+  --text-muted: #6a6a72;
+  --accent: #7c6fef;
+  --accent-bright: #9488f5;
+  --accent-glow: rgba(124,111,239,0.12);
+  --success: #3dbf8a;
+  --success-glow: rgba(61,191,138,0.15);
+  --warning: #e8a430;
+  --danger: #e8604c;
+  --gradient-1: linear-gradient(135deg, #6b5ce0, #9488f5);
+  --gradient-2: linear-gradient(135deg, #3dbf8a, #4dd9a0);
+  --gradient-hero: none;
+  --shadow: 0 4px 24px rgba(0,0,0,0.2);
+  --shadow-glow: 0 0 30px rgba(124,111,239,0.15);
+}
+
 .header-right { display: flex; align-items: center; gap: 10px; }
+.theme-toggle { background: none; border: 1px solid var(--border); border-radius: 8px; padding: 5px 7px; cursor: pointer; color: var(--text-muted); display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
+.theme-toggle:hover { border-color: var(--accent); color: var(--accent); }
 html { scroll-behavior: smooth; }
 
 body {
@@ -771,6 +797,10 @@ body.in-room .nav-links { display: none; }
       <div class="logo-text">St<em>i</em>ckr</div>
     </div>
     <div class="header-right">
+      <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Toggle dark mode">
+        <svg id="theme-icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+        <svg id="theme-icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+      </button>
       <div class="nav-links" id="nav-links">
         <a href="#how" class="nav-link">How it works</a>
         <a href="#features" class="nav-link">Features</a>
@@ -1331,6 +1361,37 @@ body.in-room .nav-links { display: none; }
 </div>
 
 <script>
+// ═══════════════════════════════════════════
+// THEME
+// ═══════════════════════════════════════════
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  const sun = document.getElementById('theme-icon-sun');
+  const moon = document.getElementById('theme-icon-moon');
+  if (sun && moon) {
+    sun.style.display = theme === 'dark' ? '' : 'none';
+    moon.style.display = theme === 'dark' ? 'none' : '';
+  }
+  // Update theme-color meta tag
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.content = theme === 'dark' ? '#0f0f12' : '#ffffff';
+}
+
+function toggleTheme() {
+  const current = document.documentElement.getAttribute('data-theme') || 'light';
+  const next = current === 'dark' ? 'light' : 'dark';
+  applyTheme(next);
+  try { localStorage.setItem('stickr-theme', next); } catch {}
+}
+
+// Apply saved theme immediately
+(function() {
+  try {
+    const saved = localStorage.getItem('stickr-theme');
+    if (saved === 'dark') applyTheme('dark');
+  } catch {}
+})();
+
 // ═══════════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════════
